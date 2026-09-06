@@ -1,0 +1,351 @@
+@import "tailwindcss";
+
+/* Design tokens: components may only reference the variables here, no bare numbers.
+   Color roles prefer the host's --vscode-* values; with no host (LAB) they fall back to Dark / Light Modern values. */
+
+:root {
+  /* Three text levels: primary / secondary / faint */
+  --fg-1: var(--vscode-foreground, #ededed);
+  --fg-2: rgba(202, 202, 202, 0.7);
+  --fg-3: #767676;
+  --fg-strong: #f5f5f5;
+
+  /* Three surface levels: base / raised / overlay, plus the code background */
+  --bg-0: var(--vscode-sideBar-background, #181818);
+  --bg-1: #1f1f1f;
+  --bg-2: #262626;
+  --bg-code: #1f1f1f;
+
+  --line: rgba(255, 255, 255, 0.06);
+  --chip: rgba(255, 255, 255, 0.07);
+  --chip-hover: rgba(255, 255, 255, 0.1);
+  --cmp-bg: rgba(255, 255, 255, 0.04);
+  --cmp-bg-lift: rgba(255, 255, 255, 0.08);
+  --cmp-ring: inset 0 0 0 1px rgba(0, 0, 0, 0.04), inset 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  /* Inverted solid: the pair shared by the primary button and the send button's lit state; no colored buttons anywhere in the app */
+  --btn-1-bg: rgba(255, 255, 255, 0.95);
+  --btn-1-fg: #151515;
+  --send-bg: rgba(255, 255, 255, 0.04);
+  --send-ring: inset 0 0 0 1px rgba(255, 255, 255, 0.02), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  --send-ink: rgba(255, 255, 255, 0.5);
+  --send-bg-on: var(--btn-1-bg);
+  --send-ink-on: var(--btn-1-fg);
+  --line-strong: var(--vscode-widget-border, #3c3c3c);
+  --hover: rgba(255, 255, 255, 0.05);
+  --active: rgba(255, 255, 255, 0.08);
+  --focus: var(--vscode-focusBorder, #0078d4);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
+
+  --ok: #3fb950;
+  --warn: #d29922;
+  --danger: #f85149;
+  --diff-add: rgba(63, 185, 80, 0.13);
+  --diff-del: rgba(248, 81, 73, 0.13);
+
+  --brand: #e6a63e;
+  --brand-fg: #1b1300;
+  --agent-devin: #6ea8fe;
+  --agent-devin-fg: #0b1220;
+  --agent-grok: #e8e8e8;
+  --agent-grok-fg: #111111;
+
+  --tk-k: #7fb2e8;
+  --tk-f: #d8d2a6;
+  --tk-s: #ce9178;
+  --tk-t: #6fc9bd;
+  --tk-c: #6a8f5e;
+
+  /* Segment colors for the context breakdown bar: only for the usage panel's small charts; agent / tool / system reuse ok / warn / fg-3 */
+  --chart-user: #6ea8fe;
+  --chart-thought: #b08ae0;
+
+  /* Fonts */
+  --font: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--vscode-editor-font-family, "SF Mono", Menlo, Monaco, monospace);
+
+  /* Type scale: body 13/20 · line 13/18 · caption 12/16 · mono 12/18 */
+  --text-1: 13px;
+  --text-1-lh: 20px;
+  --text-2: 13px;
+  --text-2-lh: 18px;
+  --text-3: 12px;
+  --text-3-lh: 16px;
+  --text-mono: 12px;
+  --text-mono-lh: 18px;
+
+  /* Sizes: 4px grid. Row height = control height = 28; lead slot 20, icon in slot 14; icon in controls 16 */
+  --row: 28px;
+  --ctl: 28px;
+  --lead: 20px;
+  --icon: 14px;
+  --icon-ctl: 16px;
+  --pad: 14px;
+  --pad-y: 18px;
+  /* Page margin: content's distance from the shell edge (header / conversation flow / composer outline share one vertical line), larger than the card padding --pad */
+  --page: 20px;
+  --gap: 8px;
+  --msg-gap: 18px;
+  --hdr: 52px;
+
+  /* Three radius levels: inline (inline code / progress bar) / control (button / Chip / menu item / row hover) / container (composer / card / overlay / code block / bubble) */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  /* Gap between an overlay and its anchor */
+  --pop-gap: 4px;
+
+  /* Max lines shown in a terminal block's output area; beyond that it scrolls inside the block */
+  --term-lines: 12;
+  /* Max rows shown in a menu; beyond that it scrolls inside the menu (Devin's 210 models) */
+  --pop-rows: 10;
+
+  /* Motion */
+  --dur: 150ms;
+  --dur-open: 220ms;
+  --enter-dur: 300ms;
+  --enter-stagger: 40ms;
+  --enter-y: 4px;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --fg-1: var(--vscode-foreground, #0d0d0d);
+  --fg-2: #6c6c6c;
+  --fg-3: #767676;
+  --fg-strong: #000000;
+  --bg-0: var(--vscode-sideBar-background, #f8f8f8);
+  --bg-1: #ffffff;
+  --bg-2: #f1f1f1;
+  --bg-code: #efefef;
+  --line: rgba(0, 0, 0, 0.06);
+  --chip: #f4f4f4;
+  --chip-hover: #f1f1f1;
+  --cmp-bg: rgba(255, 255, 255, 0.04);
+  --cmp-bg-lift: rgba(255, 255, 255, 0.04);
+  --cmp-ring: inset 0 0 0 1px rgba(0, 0, 0, 0.06), inset 0 -1px 0 0 rgba(0, 0, 0, 0.06), 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+  --send-bg: rgba(0, 0, 0, 0.04);
+  --send-ring: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --send-ink: rgba(0, 0, 0, 0.5);
+  --btn-1-bg: #151515;
+  --btn-1-fg: #ffffff;
+  --line-strong: var(--vscode-widget-border, #cecece);
+  --hover: rgba(0, 0, 0, 0.04);
+  --active: rgba(0, 0, 0, 0.07);
+  --focus: var(--vscode-focusBorder, #005fb8);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+  --ok: #1f883d;
+  --warn: #9a6700;
+  --danger: #cf222e;
+  --diff-add: rgba(31, 136, 61, 0.12);
+  --diff-del: rgba(207, 34, 46, 0.1);
+  --brand: #b7791f;
+  --brand-fg: #ffffff;
+  --agent-devin: #2f6fe0;
+  --agent-devin-fg: #ffffff;
+  --agent-grok: #1a1a1a;
+  --agent-grok-fg: #ffffff;
+  --tk-k: #0f5aa8;
+  --tk-f: #795e26;
+  --tk-s: #a31515;
+  --tk-t: #267f99;
+  --tk-c: #6a8f5e;
+  --chart-user: #2f6fe0;
+  --chart-thought: #8250df;
+}
+
+/* Container the shell lives in: sidebar base #181818 / editor base #1f1f1f, each raised two levels */
+[data-surface-host="editor"] {
+  --bg-0: var(--vscode-editor-background, #1f1f1f);
+  --bg-1: #262626;
+  --bg-2: #2c2c2c;
+  --bg-code: #262626;
+}
+[data-theme="light"] [data-surface-host="editor"] {
+  --bg-0: var(--vscode-editor-background, #ffffff);
+  --bg-1: #f6f6f7;
+  --bg-2: #ececee;
+  --bg-code: #f3f3f3;
+}
+
+/* Appearance axes (acpilot.appearance.*): change tokens only, never structure */
+[data-density="compact"] { --row: 24px; --ctl: 24px; --pad: 12px; --pad-y: 12px; --page: 16px; --gap: 6px; --msg-gap: 12px; --hdr: 44px; --text-1-lh: 18px; }
+[data-density="airy"]    { --row: 32px; --ctl: 32px; --pad: 16px; --pad-y: 22px; --page: 24px; --gap: 12px; --msg-gap: 24px; --hdr: 60px; --text-1-lh: 22px; }
+[data-radius="8"]  { --r-sm: 5px; --r-md: 6px; --r-lg: 8px; }
+[data-radius="16"] { --r-sm: 6px; --r-md: 10px; --r-lg: 16px; }
+[data-font="inter"] { --font: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+[data-font="geist"] { --font: "Geist Variable", "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+
+[data-surface="hairline"] { --card-line: var(--line); --card-bg: var(--bg-1); --card-shadow: none; }
+[data-surface="tonal"]    { --card-line: transparent; --card-bg: var(--bg-2); --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+[data-surface="stroke"]   { --card-line: var(--line-strong); --card-bg: var(--bg-0); --card-shadow: none; }
+
+[data-accent="brand"]  { --accent: var(--brand); --accent-fg: var(--brand-fg); }
+[data-accent="vscode"] { --accent: var(--focus); --accent-fg: #ffffff; }
+[data-accent="agent"][data-agent="devin"] { --accent: var(--agent-devin); --accent-fg: var(--agent-devin-fg); }
+[data-accent="agent"][data-agent="grok"]  { --accent: var(--agent-grok); --accent-fg: var(--agent-grok-fg); }
+
+[data-motion="none"] * { transition: none !important; animation: none !important; }
+[data-motion="full"] { --dur: 200ms; --dur-open: 300ms; --enter-dur: 480ms; --enter-stagger: 80ms; --enter-y: 10px; }
+
+/* Tailwind theme mapping: class names → the tokens above */
+@theme inline {
+  --color-*: initial;
+  --color-fg-1: var(--fg-1);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-fg-strong: var(--fg-strong);
+  --color-bg-0: var(--bg-0);
+  --color-bg-1: var(--bg-1);
+  --color-bg-2: var(--bg-2);
+  --color-code: var(--bg-code);
+  --color-card: var(--card-bg);
+  --color-card-line: var(--card-line);
+  --color-line: var(--line);
+  --color-chip: var(--chip);
+  --color-chip-hover: var(--chip-hover);
+  --color-line-strong: var(--line-strong);
+  --color-hover: var(--hover);
+  --color-active: var(--active);
+  --color-focus: var(--focus);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-btn-1: var(--btn-1-bg);
+  --color-btn-1-fg: var(--btn-1-fg);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-chart-user: var(--chart-user);
+  --color-chart-agent: var(--ok);
+  --color-chart-tool: var(--warn);
+  --color-chart-thought: var(--chart-thought);
+  --color-chart-system: var(--fg-3);
+
+  --font-sans: var(--font);
+  --font-mono: var(--font-mono);
+
+  --text-*: initial;
+  --text-1: var(--text-1);
+  --text-1--line-height: var(--text-1-lh);
+  --text-2: var(--text-2);
+  --text-2--line-height: var(--text-2-lh);
+  --text-3: var(--text-3);
+  --text-3--line-height: var(--text-3-lh);
+  --text-mono: var(--text-mono);
+  --text-mono--line-height: var(--text-mono-lh);
+
+  --radius-*: initial;
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-full: 9999px;
+
+  --spacing-row: var(--row);
+  --spacing-ctl: var(--ctl);
+  --spacing-lead: var(--lead);
+  --spacing-icon: var(--icon);
+  --spacing-icon-ctl: var(--icon-ctl);
+  --spacing-pad: var(--pad);
+  --spacing-pad-y: var(--pad-y);
+  --spacing-page: var(--page);
+  --spacing-gap: var(--gap);
+  --spacing-msg: var(--msg-gap);
+  --spacing-hdr: var(--hdr);
+  --spacing-indent: calc(var(--lead) + var(--gap));
+
+  --shadow-*: initial;
+  --shadow-card: var(--card-shadow);
+  --shadow-pop: var(--shadow);
+
+  --default-transition-duration: var(--dur);
+  --spacing-term: calc(var(--term-lines) * var(--text-mono-lh));
+  --spacing-pop: calc(var(--pop-rows) * var(--row));
+}
+
+/* A few base styles and motion */
+@layer base {
+  .acp-shell { font-family: var(--font); font-size: var(--text-1); line-height: var(--text-1-lh); color: var(--fg-1); background: var(--bg-0); }
+  .acp-shell ::selection { background: color-mix(in srgb, var(--focus) 35%, transparent); }
+  .acp-shell code:not(pre code) {
+    font-family: var(--font-mono); font-size: var(--text-mono); background: var(--hover);
+    padding: 0.1em 0.4em; border-radius: var(--r-sm); color: var(--fg-1);
+  }
+  .acp-shell summary::-webkit-details-marker { display: none; }
+  .acp-shell textarea { field-sizing: content; }
+  /* Scrollbars: gutter always reserved (scrollbar-gutter), thin thumb that only shows on hover, content width unaffected by the scrollbar appearing */
+  .acp-shell ::-webkit-scrollbar { width: 10px; height: 10px; }
+  .acp-shell ::-webkit-scrollbar-thumb { background: transparent; border: 3px solid transparent; background-clip: padding-box; border-radius: 6px; }
+  .acp-shell :hover::-webkit-scrollbar-thumb, .acp-shell :focus-within::-webkit-scrollbar-thumb { background: var(--line-strong); background-clip: padding-box; }
+  .acp-shell ::-webkit-scrollbar-track { background: transparent; }
+  .acp-shell ::-webkit-scrollbar-corner { background: transparent; }
+}
+
+/* Focus indication works via background lift (hover / focus-visible:bg-*), no outline drawn.
+   Must live outside @layer: the host webview paints --vscode-focusBorder on :focus (a yellow frame in Cursor),
+   and only unlayered rules beat it; Tailwind's outline-none is actually 2px transparent, which that color would tint yellow. */
+.acp-shell :focus,
+.acp-shell :focus-visible {
+  outline: none !important;
+}
+
+/* Composer input field and send button: modeled on Libraries.dev's Studio panel */
+@utility composer-field {
+  background: var(--cmp-bg);
+  box-shadow: var(--cmp-ring);
+  transition: background var(--dur) ease, box-shadow var(--dur) ease;
+  &:hover, &:focus-within { background: var(--cmp-bg-lift); }
+  &[data-busy] { background: var(--cmp-bg); }
+}
+@utility send-btn {
+  background: var(--send-bg);
+  box-shadow: var(--send-ring);
+  color: var(--send-ink);
+  transition: background var(--dur) ease, color var(--dur) ease;
+  &[data-on] { background: var(--send-bg-on); color: var(--send-ink-on); }
+  &[data-on]:hover, &[data-on]:focus-visible { filter: brightness(1.08); }
+  /* metal mode lit: the surface is handed to metal-fx (its own dark / light base + silver ring); the ink follows its root's color */
+  &[data-on][data-metal] { background: transparent; box-shadow: none; color: inherit; }
+}
+@utility shimmer {
+  background: linear-gradient(90deg, #9a9a9a 0%, var(--fg-strong) 50%, #9a9a9a 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: acp-shimmer 2s linear infinite;
+}
+/* Timeline rail (Kimi-style): a dashed hairline down the centre of the lead-slot column, from the top of a fold's body to the last row's icon centre */
+@utility timeline {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    left: calc(var(--lead) / 2);
+    top: 0;
+    bottom: calc(var(--row) / 2);
+    border-left: 1px dashed var(--line-strong);
+    pointer-events: none;
+  }
+}
+@utility enter {
+  animation: acp-enter var(--enter-dur) cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * var(--enter-stagger));
+}
+@utility caret {
+  display: inline-block; width: 0.5em; height: 1em; vertical-align: -0.12em; margin-left: 2px;
+  background: var(--fg-2); border-radius: 1px; animation: acp-caret 1s steps(2) infinite;
+}
+@utility beam-wrap { display: block !important; width: 100%; }
+@utility scroll-stable { scrollbar-gutter: stable; }
+@utility term-follow { overflow-anchor: none; }
+
+@keyframes acp-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes acp-enter { from { opacity: 0; transform: translateY(var(--enter-y)); } }
+@keyframes acp-caret { to { opacity: 0; } }
+@keyframes acp-pulse { 50% { opacity: 0.3; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .acp-shell * { animation: none !important; transition: none !important; }
+  .acp-shell .shimmer { background: none; color: var(--fg-2); }
+}
