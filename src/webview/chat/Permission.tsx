@@ -2,7 +2,7 @@ import type { PermissionBlock } from '@shared/transcript';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 
-// Permission card: the only bordered thing in the whole conversation. Title / command / three right-aligned buttons
+// Permission card: the only bordered thing in the whole conversation. Title / command / three right-aligned buttons; allow-once is the primary, the rest secondary
 export function Permission({ block, onChoose }: { block: PermissionBlock; onChoose?: (optionId: string) => void }) {
   return (
     <Card className="flex flex-col gap-gap p-pad">
@@ -13,7 +13,7 @@ export function Permission({ block, onChoose }: { block: PermissionBlock; onChoo
         {block.options.map(o => (
           <Button
             key={o.id}
-            variant={o.kind === 'allow_once' ? 'primary' : o.kind.startsWith('reject') ? 'ghost' : 'secondary'}
+            variant={o.kind === 'allow_once' ? 'primary' : 'secondary'}
             kbd={o.kind === 'allow_once' ? '⏎' : undefined}
             onClick={() => onChoose?.(o.id)}
           >

@@ -2,18 +2,18 @@ import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from './cn';
 
-type Variant = 'primary' | 'secondary' | 'ghost';
+type Variant = 'primary' | 'secondary';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   kbd?: string;
 }
 
+// Two neutral tiers (picked in the buttons LAB, scheme "tonal"): primary is a tonal grey fill with strong text and a firmer outline, secondary is an outline that fills on hover.
+// No inverted solid (that look belongs to the send button alone) and no colored buttons (accent is reserved for status dots)
 const VARIANT: Record<Variant, string> = {
-  // All three variants neutral: inverted solid / grey fill / outline; no colored buttons (accent is reserved for status dots)
-  primary: 'bg-btn-1 text-btn-1-fg font-medium hover:brightness-90 focus-visible:brightness-90',
-  secondary: 'bg-hover text-fg-1 border border-line hover:bg-active focus-visible:bg-active',
-  ghost: 'border border-line text-fg-2 hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1',
+  primary: 'border border-line-strong bg-active text-fg-strong font-medium hover:bg-chip-hover focus-visible:bg-chip-hover',
+  secondary: 'border border-line text-fg-2 hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1',
 };
 
 // All buttons share --ctl height, --r-md radius, and 12px horizontal padding

@@ -53,7 +53,7 @@ export function Notice({ status, error, agent, authMethods, accounts, accountId,
               {others.map(a => <Button key={a.id} variant="secondary" title={a.detail} onClick={() => onSelectAccount(a.id)}>用 {a.label}</Button>)}
               <Button variant="primary" onClick={() => onAddAccount('import')}>导入 CLI 登录</Button>
               <Button variant="secondary" onClick={() => onAddAccount('login')}>在终端登录</Button>
-              {authMethods?.map(m => <Button key={m.id} variant="ghost" title={m.description} onClick={() => onLogin(m.id)}>{m.name}（仅本次）</Button>)}
+              {authMethods?.map(m => <Button key={m.id} variant="secondary" title={m.description} onClick={() => onLogin(m.id)}>{m.name}（仅本次）</Button>)}
             </>
           )}
           {status === 'auth_required' && !withAccounts && (authMethods?.length
@@ -61,7 +61,7 @@ export function Notice({ status, error, agent, authMethods, accounts, accountId,
             : <Button variant="primary" onClick={() => onLogin()}>去登录</Button>)}
           {status === 'readonly' || status === 'closed'
             ? <Button variant="primary" onClick={onNewSession}>新会话继续</Button>
-            : <Button variant={status === 'auth_required' ? 'ghost' : 'primary'} onClick={onRetry}>重试</Button>}
+            : <Button variant={status === 'auth_required' ? 'secondary' : 'primary'} onClick={onRetry}>重试</Button>}
         </div>
       </Card>
     </div>

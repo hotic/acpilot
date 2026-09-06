@@ -22,7 +22,7 @@
   --cmp-bg: rgba(255, 255, 255, 0.04);
   --cmp-bg-lift: rgba(255, 255, 255, 0.08);
   --cmp-ring: inset 0 0 0 1px rgba(0, 0, 0, 0.04), inset 0 0 0 0.5px rgba(255, 255, 255, 0.06);
-  /* Inverted solid: the pair shared by the primary button and the send button's lit state; no colored buttons anywhere in the app */
+  /* Inverted solid: the send button's lit state and the settings switch; Button itself is tonal (grey fill / outline) and never uses it; no colored buttons anywhere in the app */
   --btn-1-bg: rgba(255, 255, 255, 0.95);
   --btn-1-fg: #151515;
   --send-bg: rgba(255, 255, 255, 0.04);
