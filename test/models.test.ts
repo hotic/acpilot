@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findVariant, groupModels, parseModelName, variantLabel, visibleOptions } from '../src/shared/models';
+import { findVariant, groupModels, modelBrand, parseModelName, variantLabel, visibleOptions } from '../src/shared/models';
 
 // Real name samples issued by Devin (measured via pnpm probe devin), covering all suffix combinations
 const DEVIN = [
@@ -88,5 +88,30 @@ describe('model name parsing', () => {
     expect(visibleOptions(all, ['Claude Opus 5'], 'claude-opus-5-max').filter(o => o.name.startsWith('Claude Opus 5 ')).map(o => o.name)).toEqual(['Claude Opus 5 Max']);
     expect(visibleOptions(all, groupModels(all).map(f => f.name))).toBe(all);
     expect(visibleOptions(all, undefined)).toBe(all);
+  });
+});
+
+describe('modelBrand', () => {
+  it('maps known families to their vendor key', () => {
+    expect(modelBrand('GLM-5.2')).toBe('zhipu');
+    expect(modelBrand('Kimi K3')).toBe('kimi');
+    expect(modelBrand('SWE-1.7 Lightning')).toBe('windsurf');
+    expect(modelBrand('Adaptive')).toBe('devin');
+    expect(modelBrand('Claude Opus 5')).toBe('claude');
+    expect(modelBrand('GPT-6 Astra')).toBe('openai');
+    expect(modelBrand('GPT-5.3-Codex')).toBe('openai');
+    expect(modelBrand('Gemini 3.8 Flash')).toBe('gemini');
+    expect(modelBrand('Cursor Grok 4.6')).toBe('grok');
+  });
+
+  it('returns undefined for unbranded names', () => {
+    expect(modelBrand('Composer 2.5')).toBeUndefined();
+    expect(modelBrand('Inkling')).toBeUndefined();
+    expect(modelBrand('Nemotron 3 Ultra')).toBeUndefined();
+  });
+
+  it('matches on word boundaries only', () => {
+    expect(modelBrand('Glmer 1')).toBeUndefined();
+    expect(modelBrand('Adaptation X')).toBeUndefined();
   });
 });

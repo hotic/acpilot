@@ -1,11 +1,12 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
-import { Braces, Cpu, FileText, Globe, KeyRound, Plus, Server, SlidersHorizontal, Sparkles, X } from 'lucide-react';
+import { Braces, FileText, Globe, KeyRound, Plus, Server, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import type { AccountInfo, AgentInfo, ConfigControl } from '@shared/transcript';
 import type { AgentInventory, InventoryFile, InventoryMcp, InventorySkill } from '@shared/inventory';
 import { mcpAppliesTo, mcpTransport, type McpServerSetting, type McpTransport, type SettingsView } from '@shared/settings';
 import { groupModels, variantLabel, type ModelFamily } from '@shared/models';
 import { IconButton } from '../ui/Button';
 import { t } from '../i18n';
+import { ModelMark } from '../chat/ModelMark';
 import { Dot, FactRow, Group, ItemRow, Note, Page, PathText, Section, SectionAction, SectionHead, SourceHead, Switch, shortPath } from './controls';
 import type { SettingsEnv, SettingsHandlers } from './SettingsShell';
 
@@ -138,7 +139,7 @@ function ModelsSection({ agent, controls, settings, on }: { agent: AgentInfo; co
               return (
                 <ItemRow
                   key={f.name}
-                  lead={<Cpu strokeWidth={1.5} />}
+                  lead={<ModelMark family={f.name} />}
                   title={f.name}
                   desc={summary(f)}
                   dim={!shown}

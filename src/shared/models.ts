@@ -90,3 +90,27 @@ export function variantLabel(v: ModelVariant, f: ModelFamily): string {
   const parts = [v.effort || (f.efforts.length > 1 ? 'Standard' : ''), v.fast && 'Fast', v.long && '1M'].filter(Boolean);
   return parts.join(' · ') || 'Standard';
 }
+
+// Model family → vendor brand key (see webview chat/marks.tsx for the matching logos). Purely heuristic: case-insensitive keyword
+// rules on word boundaries, first hit wins. "Adaptive" maps to devin because it is Devin's own routing model; an unknown family
+// yields undefined and the renderer falls back to an initial-letter tile
+const BRAND: [RegExp, string][] = [
+  [/\bclaude\b/, 'claude'],
+  [/\bglm\b|\bzhipu\b|\bchatglm\b/, 'zhipu'],
+  [/\bkimi\b|\bmoonshot\b/, 'kimi'],
+  [/\bswe\b|\bwindsurf\b/, 'windsurf'],
+  [/\badaptive\b|\bdevin\b/, 'devin'],
+  [/\bgpt\b|\bopenai\b|\bcodex\b/, 'openai'],
+  [/\bgemini\b|\bgemma\b/, 'gemini'],
+  [/\bgrok\b/, 'grok'],
+  [/\bdeepseek\b/, 'deepseek'],
+  [/\bqwen\b|\btongyi\b/, 'qwen'],
+  [/\bmistral\b|\bmixtral\b|\bcodestral\b|\bdevstral\b/, 'mistral'],
+  [/\bllama\b/, 'llama'],
+];
+
+export function modelBrand(family: string): string | undefined {
+  const t = family.toLowerCase();
+  for (const [re, brand] of BRAND) if (re.test(t)) return brand;
+  return undefined;
+}
