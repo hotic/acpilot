@@ -73,6 +73,11 @@ export class TranscriptStore implements BlobStore {
     await writeFile(path, bytes);
     return { name, path };
   }
+
+  async readBlob(sessionId: string, name: string): Promise<Uint8Array> {
+    if (!/^[\w-]+$/.test(sessionId) || !/^[\w-]+\.\w+$/.test(name)) throw new Error(`非法的 blob 位置：${sessionId}/${name}`);
+    return readFile(join(this.dir, sessionId, name));
+  }
 }
 
 export function summarize(r: SessionRecord): SessionSummary {

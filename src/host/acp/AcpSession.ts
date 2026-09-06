@@ -3,9 +3,8 @@ import * as acp from '@agentclientprotocol/sdk';
 import type { AgentId, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, TurnError, Usage } from '@shared/transcript';
 import type { AgentRegistry } from './AgentRegistry';
 import { AgentProcess } from './AgentProcess';
+import { describeDrafts, preparePrompt, restoreDrafts, type BlobStore, type PreparedPrompt } from './attachments';
 import { activityOf, applyUpdate, endTurn, failTurn, initControls, applyConfigOptions, type NormalizeState } from './normalize';
-
-import { describeDrafts, preparePrompt, type BlobStore, type PreparedPrompt } from './attachments';
 
 // The persisted session record: view fields plus the acpSessionId needed for resuming
 export interface SessionRecord {
@@ -394,15 +393,16 @@ export class AcpSession {
     this.running = false;
   }
 
-  // Send the last user turn again after its agent turn stopped short (error / refusal / limits): both turns leave the transcript
+  // Send the last user turn again after its agent turn stopped short (error / refusal / limits): both turns leave the transcript, the attachments are rebuilt from their blobs
   async retryTurn(): Promise<void> {
     if (this.running || this.status !== 'ready') return;
     const turns = this.state.turns;
     const agent = turns[turns.length - 1], user = turns[turns.length - 2];
     if (agent?.role !== 'agent' || user?.role !== 'user' || user.auto) return;
     if (!agent.stop || agent.stop === 'end_turn' || agent.stop === 'cancelled') return;
+    const drafts = await restoreDrafts(this.id, user.attachments ?? [], this.deps.blobs);
     turns.splice(-2, 2);
-    await this.prompt(user.text);
+    await this.prompt(user.text, drafts);
   }
 
   async cancel(): Promise<void> {

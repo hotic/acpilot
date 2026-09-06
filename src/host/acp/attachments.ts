@@ -9,6 +9,7 @@ import { MAX_IMAGE_BYTES, base64Bytes, extOfMime, imageMimeOf } from '@shared/at
 // the absolute path is what the agent gets told when the content is embedded
 export interface BlobStore {
   saveBlob(sessionId: string, ext: string, bytes: Uint8Array): Promise<{ name: string; path: string }>;
+  readBlob(sessionId: string, name: string): Promise<Uint8Array>;
 }
 
 export interface PreparedPrompt {
@@ -53,6 +54,21 @@ export async function preparePrompt(sessionId: string, text: string, drafts: Dra
     }
   }
   return out;
+}
+
+// The inverse of preparePrompt, for sending a persisted user turn again: blobs are read back into image / text drafts, files stay links.
+// An image that came from a file on disk was persisted as an image blob, so it goes out as pixels again rather than being re-read from the original path.
+// Attachments whose blob never made it to disk cannot come back and are left out
+export async function restoreDrafts(sessionId: string, attachments: Attachment[], blobs: BlobStore): Promise<Draft[]> {
+  const drafts = await Promise.all(attachments.map(async (a): Promise<Draft | undefined> => {
+    if (a.kind === 'file') return { kind: 'file', uri: a.uri, name: a.name };
+    if (!a.blob) return undefined;
+    const bytes = Buffer.from(await blobs.readBlob(sessionId, a.blob));
+    return a.kind === 'image'
+      ? { kind: 'image', mimeType: a.mimeType, data: bytes.toString('base64'), name: a.name }
+      : { kind: 'text', name: a.name, text: bytes.toString('utf8') };
+  }));
+  return drafts.filter((d): d is Draft => d !== undefined);
 }
 
 // A file:// URI that names an image the models accept, small enough to inline; anything else (non-image, unreadable, oversized, remote) yields undefined.

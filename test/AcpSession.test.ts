@@ -27,7 +27,10 @@ function deps(cwd = '/tmp', compaction?: () => CompactionPolicy, modes?: Session
   const blobs = new Map<string, Uint8Array>();
   const d: SessionDeps = {
     registry, log: (l: string) => logs.push(l), onChange: () => { changes++; }, compaction,
-    blobs: { saveBlob: async (sid, ext, bytes) => { const name = `b${blobs.size}${ext}`; blobs.set(name, bytes); return { name, path: `/blobs/${sid}/${name}` }; } },
+    blobs: {
+      saveBlob: async (sid, ext, bytes) => { const name = `b${blobs.size}${ext}`; blobs.set(name, bytes); return { name, path: `/blobs/${sid}/${name}` }; },
+      readBlob: async (_sid, name) => { const b = blobs.get(name); if (!b) throw new Error(`no blob ${name}`); return b; },
+    },
   };
   return { d, logs, blobs, changes: () => changes, session: () => AcpSession.fresh('fake', cwd, d) };
 }
@@ -149,7 +152,7 @@ describe('AcpSession', () => {
 
   it('blob store failing does not lose the prompt: it still goes out inline, the attachment just has no preview', async () => {
     const { d, session } = deps();
-    d.blobs = { saveBlob: async () => { throw new Error('disk full'); } };
+    d.blobs = { saveBlob: async () => { throw new Error('disk full'); }, readBlob: async () => { throw new Error('nope'); } };
     const notes: string[] = [];
     d.notify = t => notes.push(t);
     const s = session();
@@ -285,6 +288,20 @@ describe('AcpSession', () => {
     s.dispose();
   });
 
+  it('cancel: text stops midway, the turn wraps up, can send again', async () => {
+    const { session } = deps();
+    const s = session();
+    await s.start();
+    const p = s.prompt('slow');
+    await until(() => { const t = s.view().turns[1]; return t?.role === 'agent' && t.blocks.some(b => b.type === 'text'); });
+    await s.cancel();
+    await p;
+    expect(s.view().running).toBe(false);
+    await s.prompt('hi');
+    expect(s.view().turns).toHaveLength(4);
+    s.dispose();
+  });
+
   it('prompt error: the turn ends with stop=error carrying code / kind / retryable, the session stays ready; retryTurn drops both turns and sends the same prompt again', async () => {
     const { session } = deps();
     const s = session();
@@ -310,6 +327,29 @@ describe('AcpSession', () => {
     s.dispose();
   });
 
+  it('retryTurn: attachments are rebuilt from their blobs; nothing happens after a normal end', async () => {
+    const { session, blobs } = deps();
+    const s = session();
+    await s.start();
+    await s.prompt('fail with picture', [{ kind: 'image', mimeType: 'image/png', data: Buffer.from('png!').toString('base64'), name: 'shot.png' }]);
+    expect(blobs.size).toBe(1);
+    await s.retryTurn();
+    const v = s.view();
+    expect(v.turns).toHaveLength(2);
+    const user = v.turns[0]!;
+    expect(user).toMatchObject({ role: 'user', text: 'fail with picture', attachments: [{ kind: 'image', mimeType: 'image/png', name: 'shot.png' }] });
+    // The re-sent image is byte-for-byte the original (the fake store names blobs by count, the real one by content hash)
+    const blob = user.role === 'user' && user.attachments?.[0]?.kind === 'image' ? user.attachments[0].blob : undefined;
+    expect(Buffer.from(blobs.get(blob ?? '')!).toString()).toBe('png!');
+    const agent = v.turns[1]!;
+    if (agent.role !== 'agent') throw new Error();
+    expect(agent.stop).toBe('end_turn');
+    expect(agent.blocks[0]).toMatchObject({ type: 'text', markdown: 'text · image:image/png' });
+    await s.retryTurn();
+    expect(s.view().turns).toHaveLength(2);
+    s.dispose();
+  });
+
   it('short stops: refusal leaves an empty turn with stop=refusal, max_tokens keeps the text and stop=max_tokens; a normal turn records end_turn', async () => {
     const { session } = deps();
     const s = session();
@@ -325,20 +365,6 @@ describe('AcpSession', () => {
     expect(truncated.blocks.at(-1)).toMatchObject({ type: 'text', markdown: 'once upon a', streaming: false });
     expect(ok.stop).toBe('end_turn');
     expect(ok.error).toBeUndefined();
-    s.dispose();
-  });
-
-  it('cancel: text stops midway, the turn wraps up, can send again', async () => {
-    const { session } = deps();
-    const s = session();
-    await s.start();
-    const p = s.prompt('slow');
-    await until(() => { const t = s.view().turns[1]; return t?.role === 'agent' && t.blocks.some(b => b.type === 'text'); });
-    await s.cancel();
-    await p;
-    expect(s.view().running).toBe(false);
-    await s.prompt('hi');
-    expect(s.view().turns).toHaveLength(4);
     s.dispose();
   });
 
