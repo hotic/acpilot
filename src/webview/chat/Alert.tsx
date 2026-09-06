@@ -12,28 +12,28 @@ export interface AlertProps {
   onDismiss: () => void;
 }
 
-// A turn stopped short (the same card Cursor pins above its composer, in our own tones): what happened as the title, the agent's words below, then a copyable detail line;
-// one action on the right — send it again for an error, carry on for a limit — and nothing for a refusal, which is the agent's decision. ✕ hides it, the transcript keeps the row
+// A turn stopped short (the same card Cursor pins above its composer, in our own tones): one row holds a colorless glyph, what happened,
+// the copyable detail, and the action — send it again for an error, carry on for a limit, nothing for a refusal — with ✕ hiding the card
+// (the transcript keeps the row); the agent's words sit below in small type when there are any
 export function Alert({ turn, onRetry, onContinue, onDismiss }: AlertProps) {
   const stop = turn.stop as ShortStop;
   const err = turn.error;
   const detail = [err?.code !== undefined ? String(err.code) : '', err?.kind ?? ''].filter(Boolean).join(' · ');
   const copyable = [err?.message, detail].filter(Boolean).join('\n');
+  const message = stop === 'error' ? err?.message || 'agent 没有说明原因，日志里可能有更多信息' : TEXT[stop];
   return (
     <div className="px-page pt-2">
-      <Card role="alert" className="flex flex-col gap-gap p-pad">
+      <Card role="alert" className="flex flex-col gap-1.5 px-pad py-2.5">
         <div className="flex items-center gap-2">
-          <TriangleAlert className="size-icon shrink-0 text-warn" strokeWidth={1.75} />
-          <span className="min-w-0 flex-1 truncate text-2 font-semibold text-fg-strong">{TITLE[stop]}</span>
-          <IconButton aria-label="关闭" onClick={onDismiss} className="-my-1 -mr-1.5"><X strokeWidth={1.5} /></IconButton>
-        </div>
-        <p className="m-0 whitespace-pre-wrap text-2 text-fg-2 [overflow-wrap:anywhere]">{stop === 'error' ? err?.message || 'agent 没有说明原因，日志里可能有更多信息' : TEXT[stop]}</p>
-        <div className="flex items-center gap-2">
+          <TriangleAlert className="size-icon shrink-0 text-fg-3" strokeWidth={1.75} />
+          <span className="shrink-0 text-2 font-medium text-fg-1">{TITLE[stop]}</span>
           {copyable && <CopyDetail text={copyable} label={detail} />}
           <span className="flex-1" />
           {stop === 'error' && <Button variant="primary" onClick={onRetry}>重试</Button>}
           {(stop === 'max_tokens' || stop === 'max_turn_requests') && <Button variant="primary" onClick={onContinue}>继续</Button>}
+          <IconButton aria-label="关闭" onClick={onDismiss} className="-my-1 -mr-1.5"><X strokeWidth={1.5} /></IconButton>
         </div>
+        {message && <p className="m-0 whitespace-pre-wrap text-3 text-fg-2 [overflow-wrap:anywhere]">{message}</p>}
       </Card>
     </div>
   );
@@ -66,7 +66,7 @@ function CopyDetail({ text, label }: { text: string; label: string }) {
   return (
     <button
       type="button"
-      className="truncate text-3 text-fg-3 transition-colors hover:text-fg-1 focus-visible:text-fg-1"
+      className="min-w-0 truncate text-3 text-fg-3 transition-colors hover:text-fg-1 focus-visible:text-fg-1"
       onClick={() => { void navigator.clipboard.writeText(text).then(() => setCopied(true)); }}
     >
       {copied ? '已复制' : label ? `复制详情（${label}）` : '复制详情'}
