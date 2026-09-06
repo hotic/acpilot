@@ -1,0 +1,94 @@
+/* Hallmark · component: settings surface · genre: modern-minimal (in-app) · theme: ACPilot tokens (tokens.css), no new palette
+ * states: default · hover · focus-visible · active · disabled · loading (shimmer scan row) · empty
+ * Settings-only tokens; everything else comes from tokens.css. Type: page title / section heading above the shell's 13px body scale.
+ * Widths: content measure (editor host only), control column; tab strip and switch geometry on the 4px grid. Plain CSS (no @utility) so it can be imported on its own */
+.acp-settings {
+  --text-title: 22px;
+  --text-title-lh: 28px;
+  --text-h: 15px;
+  --text-h-lh: 22px;
+  --content-w: 720px;
+  --ctl-w: 168px;
+  --num-w: 64px;
+  --tile: 40px;
+  --tab-h: 32px;
+  --tab-px: 8px;
+  --tab-line: 2px;
+  --switch-w: 32px;
+  --switch-h: 18px;
+  --switch-pad: 2px;
+  --switch-knob: calc(var(--switch-h) - 2 * var(--switch-pad));
+  --dot: 6px;
+}
+
+/* Underline tabs: one hairline under the strip, the selected label underlined in strong ink; the strip scrolls sideways when labels overflow */
+.acp-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: var(--tab-px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  box-shadow: inset 0 -1px 0 0 var(--line);
+}
+.acp-tabs::-webkit-scrollbar { display: none; }
+.acp-tab {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  height: var(--tab-h);
+  padding: 0 var(--tab-px);
+  font-size: var(--text-2);
+  line-height: var(--text-2-lh);
+  color: var(--fg-2);
+  white-space: nowrap;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  transition: color var(--dur) ease, background var(--dur) ease;
+}
+.acp-tab:hover, .acp-tab:focus-visible { color: var(--fg-1); background: var(--hover); }
+.acp-tab[aria-selected="true"] { color: var(--fg-strong); }
+.acp-tab[aria-selected="true"]::after {
+  content: '';
+  position: absolute;
+  left: var(--tab-px);
+  right: var(--tab-px);
+  bottom: 0;
+  height: var(--tab-line);
+  border-radius: var(--tab-line);
+  background: var(--fg-strong);
+}
+.acp-tab[data-dim]:not([aria-selected="true"]) { color: var(--fg-3); }
+
+/* Cards nested inside a card (section=inset with group=cards): a lifted fill instead of the card surface, so they read as panels of the outer card */
+.acp-nested > .acp-group { background: var(--hover); border-color: var(--line); box-shadow: none; border-radius: var(--r-md); }
+
+/* Switch: monochrome like the send button's lit state (inverted solid when on); the knob slides by transform only */
+.acp-switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: var(--switch-w);
+  height: var(--switch-h);
+  border-radius: 9999px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  transition: background var(--dur) ease, box-shadow var(--dur) ease, filter var(--dur) ease;
+}
+.acp-switch::after {
+  content: '';
+  position: absolute;
+  top: var(--switch-pad);
+  left: var(--switch-pad);
+  width: var(--switch-knob);
+  height: var(--switch-knob);
+  border-radius: 9999px;
+  background: var(--fg-3);
+  transition: transform var(--dur) ease, background var(--dur) ease;
+}
+.acp-switch[aria-checked="true"] { background: var(--btn-1-bg); box-shadow: none; }
+.acp-switch[aria-checked="true"]::after { background: var(--btn-1-fg); transform: translateX(calc(var(--switch-w) - var(--switch-h))); }
+.acp-switch:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--fg-3); }
+.acp-switch[aria-checked="true"]:hover:not(:disabled) { filter: brightness(0.92); box-shadow: none; }
+.acp-switch:focus-visible { box-shadow: 0 0 0 2px var(--bg-0), 0 0 0 3px var(--fg-3) !important; }
+.acp-switch:disabled { opacity: 0.4; cursor: not-allowed; }
