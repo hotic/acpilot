@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as acp from '@agentclientprotocol/sdk';
 import type { AgentId, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, TurnError, Usage } from '@shared/transcript';
+import type { AgentRuntimeInfo } from '@shared/inventory';
 import type { AgentRegistry } from './AgentRegistry';
 import { AgentProcess } from './AgentProcess';
 import { describeDrafts, preparePrompt, restoreDrafts, type BlobStore, type PreparedPrompt } from './attachments';
@@ -114,6 +115,14 @@ export class AcpSession {
   get isRunning(): boolean { return this.running; }
   get alive(): boolean { return !!this.proc?.alive; }
   get canCompact(): boolean { return this.state.commands.some(c => c.name === 'compact'); }
+
+  // What the agent told us in initialize: name / version and the MCP transports it can take (the settings page's facts card)
+  runtimeInfo(): AgentRuntimeInfo | undefined {
+    const init = this.proc?.init;
+    if (!init) return undefined;
+    const mcp = init.agentCapabilities?.mcpCapabilities;
+    return { name: init.agentInfo?.name, version: init.agentInfo?.version, mcp: mcp ? { http: !!mcp.http, sse: !!mcp.sse } : undefined };
+  }
 
   view(): SessionView {
     return {

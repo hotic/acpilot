@@ -8,6 +8,8 @@ import { AccountManager } from './accounts/AccountManager';
 import { AccountStore, type SecretVault } from './accounts/AccountStore';
 import { DevinAccountProvider } from './accounts/devin';
 import { SessionManager } from './SessionManager';
+import { SettingsCenter } from './settings';
+import { setHostLocale } from './i18n';
 import { TranscriptStore } from './store/TranscriptStore';
 import { WebviewBridge } from './bridge';
 import { WorkspaceFiles } from './files';
@@ -59,8 +61,21 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   await manager.init();
 
+  // The settings page's backend: reads / writes acpilot.*, scans agent inventories; every bridge gets a subscription
+  const settingsCenter = new SettingsCenter({
+    read: key => cfg().get(key),
+    write: (key, value) => cfg().update(key, value, vscode.ConfigurationTarget.Global),
+    hostLanguage: () => vscode.env.language,
+    registry: () => manager.registry,
+    runtimeInfo: agent => manager.runtimeInfo(agent),
+    home: homedir,
+    cwd: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? homedir(),
+    log: line => log.info(line),
+  });
+  setHostLocale(settingsCenter.locale());
+
   const bridges = new Set<WebviewBridge>();
-  const env = { extensionUri: context.extensionUri, appearance, sessionsDir, files: new WorkspaceFiles(), log: (line: string) => log.info(line) };
+  const env = { extensionUri: context.extensionUri, appearance, sessionsDir, files: new WorkspaceFiles(), settings: settingsCenter, home: homedir, cwd: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? homedir(), log: (line: string) => log.info(line) };
   const attach = (webview: vscode.Webview, host: 'sidebar' | 'editor') => {
     const b = new WebviewBridge(webview, host, manager, env);
     bridges.add(b);
@@ -90,6 +105,11 @@ export async function activate(context: vscode.ExtensionContext) {
       if (e.affectsConfiguration('acpilot.appearance')) for (const b of bridges) b.pushAppearance();
       if (e.affectsConfiguration('acpilot.agents')) { activeRegistry = registry(); manager.setRegistry(activeRegistry); }
       if (e.affectsConfiguration('acpilot.hiddenOptions')) manager.emitHidden();
+      // Any other acpilot.* knob the settings page shows (language, followUp, mcpServers, …): re-push the view and follow a language change host-side
+      if (e.affectsConfiguration('acpilot') && !e.affectsConfiguration('acpilot.appearance') && !e.affectsConfiguration('acpilot.agents')) {
+        settingsCenter.emit();
+        setHostLocale(settingsCenter.locale());
+      }
     }),
     { dispose: () => { void manager.dispose(); for (const b of bridges) b.dispose(); } },
   );

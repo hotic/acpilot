@@ -87,6 +87,35 @@
           "default": "grok",
           "description": "新会话默认用哪个 agent"
         },
+        "acpilot.language": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "zh-CN",
+            "en"
+          ],
+          "default": "auto",
+          "description": "界面语言；auto 跟随 VS Code"
+        },
+        "acpilot.followUp": {
+          "type": "string",
+          "enum": [
+            "queue",
+            "steer",
+            "interrupt"
+          ],
+          "default": "queue",
+          "description": "agent 运行时再发一条消息的处理方式：排到这轮结束再发 / 插进当前轮次调整方向 / 打断后立刻发送。调整方向要 agent 支持，不支持的退回排队"
+        },
+        "acpilot.mcpServers": {
+          "type": "object",
+          "default": {},
+          "scope": "application",
+          "markdownDescription": "ACPilot 通过 ACP 注入给 agent 的 MCP 服务：`{ \"<名称>\": { \"command\": \"...\", \"args\": [...], \"env\": {...} } }` 或 `{ \"url\": \"...\", \"type\": \"http\" | \"sse\" }`；`agents` 限定只对某些 agent 生效，`enabled: false` 整体停用",
+          "additionalProperties": {
+            "type": "object"
+          }
+        },
         "acpilot.agents": {
           "type": "object",
           "default": {},

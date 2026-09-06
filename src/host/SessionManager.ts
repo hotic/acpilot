@@ -1,6 +1,7 @@
 import type { AccountInfo, AgentId, AgentInfo, ConfigControl, SessionSummary, SessionView } from '@shared/transcript';
 import type { AddAccountVia, WebviewMsg } from '@shared/protocol';
 import type { HiddenMap } from '@shared/settings';
+import type { AgentRuntimeInfo } from '@shared/inventory';
 import { AgentRegistry } from './acp/AgentRegistry';
 import { AcpSession, type CompactionPolicy, type SessionRecord } from './acp/AcpSession';
 import type { AccountManager } from './accounts/AccountManager';
@@ -62,6 +63,16 @@ export class SessionManager {
   }
 
   accounts(): AccountInfo[] { return this.deps.accounts?.list() ?? []; }
+
+  // Version / MCP capabilities of an agent's live session (from its initialize response); undefined when nothing of that agent is running
+  runtimeInfo(agent: AgentId): AgentRuntimeInfo | undefined {
+    for (const s of this.live.values()) {
+      if (s.agent !== agent) continue;
+      const info = s.runtimeInfo();
+      if (info) return info;
+    }
+    return undefined;
+  }
 
   // VS Code's getConfiguration().get() returns a read-only Proxy that structuredClone / postMessage can't swallow; a JSON round-trip turns it into a plain object
   hidden(): HiddenMap { return JSON.parse(JSON.stringify(this.deps.hidden?.() ?? {})) as HiddenMap; }

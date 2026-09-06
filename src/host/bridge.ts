@@ -1,8 +1,10 @@
 import { randomBytes } from 'node:crypto';
+import { stat } from 'node:fs/promises';
 import * as vscode from 'vscode';
 import type { FileHit, HostMsg, WebviewHost, WebviewMsg } from '@shared/protocol';
 import type { Appearance } from '@shared/appearance';
 import type { SessionManager } from './SessionManager';
+import type { SettingsCenter } from './settings';
 import type { WorkspaceFiles } from './files';
 
 export interface BridgeEnv {
@@ -11,6 +13,10 @@ export interface BridgeEnv {
   // The sessions directory: attachment blobs live in it and are served to the webview from there
   sessionsDir: string;
   files: WorkspaceFiles;
+  settings: SettingsCenter;
+  // Home / workspace root, for shortening paths in the settings page's inventory lists
+  home: () => string;
+  cwd: () => string;
   log: (line: string) => void;
 }
 
@@ -32,6 +38,7 @@ export class WebviewBridge implements vscode.Disposable {
     this.disposables.push(
       webview.onDidReceiveMessage((m: WebviewMsg) => this.onMessage(m)),
       { dispose: manager.subscribe(ev => this.queue(ev)) },
+      { dispose: env.settings.subscribe(ev => this.queue(ev)) },
     );
   }
 
@@ -44,6 +51,7 @@ export class WebviewBridge implements vscode.Disposable {
         state: {
           host: this.host, appearance: this.env.appearance(), agents: this.manager.agents(), accounts: this.manager.accounts(), hidden: this.manager.hidden(),
           sessions: this.manager.sessions(), active: this.manager.active(), blobBase: this.webview.asWebviewUri(vscode.Uri.file(this.env.sessionsDir)).toString(),
+          settings: this.env.settings.view(), locale: this.env.settings.locale(), home: this.env.home(), cwd: this.env.cwd(),
         },
       });
       return;
@@ -56,7 +64,27 @@ export class WebviewBridge implements vscode.Disposable {
       this.post({ type: 'files', seq: m.seq, files });
       return;
     }
+    if (await this.onSettingsMessage(m)) return;
     await this.manager.handle(m);
+  }
+
+  // The settings page's requests; returns true when the message was its business
+  private async onSettingsMessage(m: WebviewMsg): Promise<boolean> {
+    try {
+      switch (m.type) {
+        case 'setSetting': await this.env.settings.set(m.key, m.value); return true;
+        case 'openPath': await openPath(m.path); return true;
+        case 'openSettingsJson':
+          await vscode.commands.executeCommand(m.key ? 'workbench.action.openSettings' : 'workbench.action.openSettingsJson', ...(m.key ? [m.key] : []));
+          return true;
+        case 'inventory': this.post({ type: 'inventory', agent: m.agent, inventory: await this.env.settings.inventory(m.agent) }); return true;
+        case 'controls': this.post({ type: 'controls', agent: m.agent, controls: await this.manager.knownControls(m.agent) }); return true;
+        default: return false;
+      }
+    } catch (e) {
+      this.env.log(`settings ${m.type} 失败：${e instanceof Error ? e.message : String(e)}`);
+      return true;
+    }
   }
 
   // Streaming updates are dense; for the same message type within 30ms, keep only the latest
@@ -107,4 +135,12 @@ export class WebviewBridge implements vscode.Disposable {
     clearTimeout(this.timer);
     for (const d of this.disposables) d.dispose();
   }
+}
+
+// A path from the inventory lists: files open in the editor, directories reveal in the OS file manager
+async function openPath(path: string): Promise<void> {
+  const uri = vscode.Uri.file(path);
+  const s = await stat(path).catch(() => undefined);
+  if (s?.isDirectory()) await vscode.commands.executeCommand('revealFileInOS', uri);
+  else await vscode.commands.executeCommand('vscode.open', uri);
 }

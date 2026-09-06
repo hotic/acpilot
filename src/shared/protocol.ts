@@ -1,6 +1,8 @@
-import type { AccountInfo, AgentId, AgentInfo, Draft, SessionSummary, SessionView } from './transcript';
+import type { AccountInfo, AgentId, AgentInfo, ConfigControl, Draft, SessionSummary, SessionView } from './transcript';
 import type { Appearance } from './appearance';
-import type { HiddenMap } from './settings';
+import type { HiddenMap, SettingKey, SettingsView } from './settings';
+import type { Locale } from './i18n';
+import type { AgentInventory } from './inventory';
 
 // Message contract between host ↔ webview; both sides trust only this file
 
@@ -14,6 +16,12 @@ export interface InitState {
   hidden: HiddenMap;
   sessions: SessionSummary[];
   active?: SessionView;
+  // The settings page swaps in over the chat, so every webview carries the settings view and the resolved locale from the start
+  settings: SettingsView;
+  locale: Locale;
+  // Home / workspace root, for shortening paths in the inventory lists
+  home: string;
+  cwd: string;
   // Webview URI of the sessions directory: an attachment blob is loaded from `${blobBase}/${sessionId}/${blob}`
   blobBase?: string;
 }
@@ -32,6 +40,11 @@ export type HostMsg =
   | { type: 'session'; session: SessionView }
   | { type: 'accounts'; accounts: AccountInfo[] }
   | { type: 'hidden'; hidden: HiddenMap }
+  // The settings view plus the resolved locale (a language change swaps both at once)
+  | { type: 'settings'; settings: SettingsView; locale: Locale }
+  // Answers to the inventory / controls requests, one agent at a time (both are lazy: scanned / read on demand)
+  | { type: 'inventory'; agent: AgentId; inventory: AgentInventory }
+  | { type: 'controls'; agent: AgentId; controls: ConfigControl[] }
   | { type: 'toast'; level: 'info' | 'error'; text: string }
   // Reply to searchFiles; seq echoes the request so stale replies can be dropped
   | { type: 'files'; seq: number; files: FileHit[] };
@@ -65,4 +78,11 @@ export type WebviewMsg =
   | { type: 'retry' }
   // Send the last user turn again after its agent turn ended in error / a short stop; both turns are dropped from the transcript first
   | { type: 'retryTurn' }
-  | { type: 'openInEditor' };
+  | { type: 'openInEditor' }
+  // Settings page: write a setting (host maps it onto acpilot.<key> at user scope), open a file / directory from the inventory lists,
+  // open settings.json (or the Settings UI filtered to `key`), rescan an agent's extension inventory, read the configOptions of its latest session
+  | { type: 'setSetting'; key: SettingKey; value: unknown }
+  | { type: 'openPath'; path: string }
+  | { type: 'openSettingsJson'; key?: string }
+  | { type: 'inventory'; agent: AgentId }
+  | { type: 'controls'; agent: AgentId };
