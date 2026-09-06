@@ -162,11 +162,17 @@ export function MenuList({ items, onSelect, searchable, empty = '没有匹配', 
   const shown = query ? items.filter(it => it.label.toLowerCase().includes(query) || it.description?.toLowerCase().includes(query)) : items;
   const buttons = () => [...(ref.current?.querySelectorAll<HTMLButtonElement>(ITEM_SELECTOR) ?? [])];
 
-  // On first open, focus the selected item and scroll to it: must finish before paint (layout effect), or the list flashes its top first and then jumps up
+  // On first open, focus the selected item and center it in the list: must finish before paint (layout effect), or the list flashes its top first
+  // and then jumps up. Center by adjusting the list's own scrollTop — scrollIntoView would drag every scrollable ancestor (the chat scroll) along
   useLayoutEffect(() => {
     const checked = ref.current?.querySelector<HTMLButtonElement>('button[aria-checked="true"]');
-    if (searchable) { input.current?.focus(); checked?.scrollIntoView({ block: 'center' }); }
+    if (searchable) input.current?.focus();
     else (checked ?? buttons()[0])?.focus();
+    const list = ref.current?.querySelector<HTMLElement>('.overflow-y-auto');
+    if (searchable && checked && list) {
+      const lr = list.getBoundingClientRect(), cr = checked.getBoundingClientRect();
+      list.scrollTop += cr.top - lr.top - (lr.height - cr.height) / 2;
+    }
   }, []);
 
   const onKey = (e: ReactKeyboardEvent) => {
