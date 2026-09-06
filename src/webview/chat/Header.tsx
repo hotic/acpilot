@@ -1,38 +1,74 @@
-import { History, Menu as MenuIcon, Plus } from 'lucide-react';
-import type { AgentInfo, SessionSummary } from '@shared/transcript';
+import { History, Menu as MenuIcon, Plus, Settings2, UserRound } from 'lucide-react';
+import type { AccountInfo, AgentInfo, SessionSummary } from '@shared/transcript';
 import { useAppearance } from '../appearance';
 import { IconButton } from '../ui/Button';
 import { Popover } from '../ui/Popover';
+import { AgentPanel } from './AgentPanel';
 import { SessionList } from './SessionList';
 import type { ShellHandlers } from './Shell';
 
 export interface HeaderProps {
   title: string;
   sessions: SessionSummary[];
+  agent: AgentInfo;
   agents: AgentInfo[];
+  // Accounts across all agents; the panel filters to the current agent's
+  accounts?: AccountInfo[];
+  accountId?: string;
   activeSessionId?: string;
-  on: Pick<ShellHandlers, 'selectSession' | 'newSession' | 'renameSession' | 'deleteSession' | 'pinSession'>;
+  on: Pick<ShellHandlers, 'selectSession' | 'newSession' | 'renameSession' | 'deleteSession' | 'pinSession' | 'selectAgent' | 'selectAccount' | 'addAccount' | 'removeAccount'>;
   onToggleDrawer?: () => void;
+  // Swaps the chat for the settings page (webview-local view state)
+  onOpenSettings?: () => void;
 }
 
-// Header: a plain text title on the left (sharing the conversation flow's left edge), a clock icon for session history and a plus for new session on the right
-// (the common layout of Claude Code / Codex / Cursor); one divider below. The drawer axis swaps the left side for a menu button
-export function Header({ title, sessions, agents, activeSessionId, on, onToggleDrawer }: HeaderProps) {
+// Header: a plain text title on the left (sharing the conversation flow's left edge), account / session history / new session icons on the right
+// (the common layout of Claude Code / Codex / Cursor); one divider below. The drawer axis swaps the left side for a menu button.
+// The person icon is the account layer's home (login state, switching, adding): it opens the agent panel, whose footer leads to the accounts page
+export function Header({ title, sessions, agent, agents, accounts, accountId, activeSessionId, on, onToggleDrawer, onOpenSettings }: HeaderProps) {
   const { sessions: mode } = useAppearance();
+  const account = accounts?.find(a => a.id === accountId);
+  const settingsButton = onOpenSettings && (
+    <IconButton onClick={onOpenSettings} title="设置" aria-label="设置">
+      <Settings2 strokeWidth={1.5} />
+    </IconButton>
+  );
+  const accountButton = (
+    <Popover side="bottom" align="end" width="md" role="menu" content={close => (
+      <AgentPanel
+        agent={agent} agents={agents} accounts={accounts?.filter(a => a.agent === agent.id) ?? []} accountId={accountId} close={close}
+        onSelectAgent={on.selectAgent} onSelectAccount={on.selectAccount} onAddAccount={on.addAccount} onRemoveAccount={on.removeAccount}
+      />
+    )}>
+      {({ open, toggle, ref }) => (
+        <IconButton
+          ref={ref} data-open={open || undefined} onClick={toggle}
+          title={account ? `${agent.name} · ${account.label}` : agent.name} aria-label="账号"
+          className="data-[open]:bg-active data-[open]:text-fg-1"
+        >
+          <UserRound strokeWidth={1.5} />
+        </IconButton>
+      )}
+    </Popover>
+  );
   return (
     <div className="flex h-hdr shrink-0 items-center gap-gap px-page shadow-[inset_0_-1px_0_0_var(--line)]">
       {mode === 'drawer'
         ? (
-          <button type="button" onClick={onToggleDrawer} className="-ml-2 inline-flex h-ctl min-w-0 items-center gap-1.5 rounded-md px-2 text-2 font-medium text-fg-strong transition-colors hover:bg-hover focus-visible:bg-hover">
-            <MenuIcon className="size-icon shrink-0 text-fg-3" strokeWidth={1.75} />
-            <span className="truncate">{title}</span>
-          </button>
+          <>
+            <button type="button" onClick={onToggleDrawer} className="-ml-2 inline-flex h-ctl min-w-0 items-center gap-1.5 rounded-md px-2 text-2 font-medium text-fg-strong transition-colors hover:bg-hover focus-visible:bg-hover">
+              <MenuIcon className="size-icon shrink-0 text-fg-3" strokeWidth={1.75} />
+              <span className="truncate">{title}</span>
+            </button>
+            <div className="-mr-1.5 ml-auto flex shrink-0 items-center gap-0.5">{accountButton}{settingsButton}</div>
+          </>
         )
         : (
           <>
             <span className="min-w-0 flex-1 truncate text-2 font-medium text-fg-strong">{title}</span>
             {/* The icon is 6px smaller than the button box; the negative margin makes the right edge of the last icon bite into the page-margin line */}
             <div className="-mr-1.5 flex shrink-0 items-center gap-0.5">
+              {accountButton}
               <Popover side="bottom" align="end" width="xl" content={close => (
                 <SessionList
                   sessions={sessions}
@@ -40,7 +76,6 @@ export function Header({ title, sessions, agents, activeSessionId, on, onToggleD
                   activeId={activeSessionId}
                   autoFocus
                   onSelect={id => { on.selectSession(id); close(); }}
-                  onNew={() => { on.newSession(); close(); }}
                   onRename={on.renameSession}
                   onDelete={on.deleteSession}
                   onPin={on.pinSession}
@@ -55,6 +90,7 @@ export function Header({ title, sessions, agents, activeSessionId, on, onToggleD
               <IconButton onClick={() => on.newSession()} title="新会话" aria-label="新会话">
                 <Plus strokeWidth={1.5} />
               </IconButton>
+              {settingsButton}
             </div>
           </>
         )}

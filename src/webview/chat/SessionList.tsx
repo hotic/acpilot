@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Pencil, Pin, PinOff, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Pin, PinOff, Search, Trash2 } from 'lucide-react';
 import type { AgentInfo, SessionSummary } from '@shared/transcript';
 import { cn } from '../ui/cn';
 import { AgentMark } from './AgentMark';
@@ -18,15 +18,14 @@ export interface SessionListProps {
   // When opened in an overlay the search box auto-focuses; the drawer is permanent and doesn't steal focus
   autoFocus?: boolean;
   onSelect: (id: string) => void;
-  onNew: () => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onPin: (id: string, pinned: boolean) => void;
 }
 
-// Session list: search + new at the top; an extra row of agent filters when sessions span multiple agents; the body groups by pinned / today / yesterday / earlier.
+// Session list: search at the top (new-session lives on the shell outside); an extra row of agent filters when sessions span multiple agents; pinned sessions get their own section, the rest is one flat list.
 // Each item: vendor mark · title · time; on hover those swap for three actions — pin / rename / delete. Deletion applies immediately, undo lives on the Toast at the shell's bottom
-export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, onNew, onRename, onDelete, onPin }: SessionListProps) {
+export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, onRename, onDelete, onPin }: SessionListProps) {
   const [query, setQuery] = useState('');
   const [agentFilter, setAgentFilter] = useState<string>();
   const [editing, setEditing] = useState<string>();
@@ -38,13 +37,24 @@ export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, o
 
   const now = new Date();
   const dayOf = (iso: string) => Math.floor((startOfDay(now) - startOfDay(new Date(iso))) / 86_400_000);
+  const pinned = shown.filter(s => s.pinned);
   const rest = shown.filter(s => !s.pinned);
-  const groups = [
-    { label: '置顶', items: shown.filter(s => s.pinned) },
-    { label: '今天', items: rest.filter(s => dayOf(s.updatedAt) <= 0) },
-    { label: '昨天', items: rest.filter(s => dayOf(s.updatedAt) === 1) },
-    { label: '更早', items: rest.filter(s => dayOf(s.updatedAt) > 1) },
-  ].filter(g => g.items.length);
+
+  const renderItem = (s: SessionSummary) => (
+    <Item
+      key={s.id}
+      session={s}
+      agentName={nameOf(s.agent)}
+      active={s.id === activeId}
+      time={fmtTime(s.updatedAt, dayOf(s.updatedAt))}
+      editing={editing === s.id}
+      onSelect={() => onSelect(s.id)}
+      onEdit={() => setEditing(s.id)}
+      onRename={t => { setEditing(undefined); if (t.trim() && t.trim() !== s.title) onRename(s.id, t); }}
+      onDelete={() => { setEditing(undefined); onDelete(s.id); }}
+      onPin={() => onPin(s.id, !s.pinned)}
+    />
+  );
 
   return (
     <div className="flex max-h-[60vh] flex-col" onKeyDown={e => { if (e.key === 'Escape' && editing) { e.stopPropagation(); setEditing(undefined); } }}>
@@ -60,9 +70,6 @@ export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, o
             className="min-w-0 flex-1 bg-transparent text-2 text-fg-1 outline-none placeholder:text-fg-3"
           />
         </label>
-        <button type="button" onClick={onNew} title="新会话" aria-label="新会话" className="inline-flex size-ctl shrink-0 items-center justify-center rounded-md text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1">
-          <Plus className="size-icon-ctl" strokeWidth={1.5} />
-        </button>
       </div>
       {usedAgents.length > 1 && (
         <div className="flex flex-wrap items-center gap-1 px-1 pt-1">
@@ -75,27 +82,14 @@ export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, o
         </div>
       )}
       <div className="mt-1 flex min-h-0 flex-col overflow-y-auto border-t border-line pb-1" role="listbox" aria-label="会话">
-        {!groups.length && <div className="px-2 py-3 text-3 text-fg-3">{sessions.length ? '没有匹配的会话' : '还没有会话'}</div>}
-        {groups.map(g => (
-          <div key={g.label} className="flex flex-col">
-            <div className="px-2 pt-2.5 pb-1 text-3 text-fg-3">{g.label}</div>
-            {g.items.map(s => (
-              <Item
-                key={s.id}
-                session={s}
-                agentName={nameOf(s.agent)}
-                active={s.id === activeId}
-                time={fmtTime(s.updatedAt, dayOf(s.updatedAt))}
-                editing={editing === s.id}
-                onSelect={() => onSelect(s.id)}
-                onEdit={() => setEditing(s.id)}
-                onRename={t => { setEditing(undefined); if (t.trim() && t.trim() !== s.title) onRename(s.id, t); }}
-                onDelete={() => { setEditing(undefined); onDelete(s.id); }}
-                onPin={() => onPin(s.id, !s.pinned)}
-              />
-            ))}
+        {!shown.length && <div className="px-2 py-3 text-3 text-fg-3">{sessions.length ? '没有匹配的会话' : '还没有会话'}</div>}
+        {pinned.length > 0 && (
+          <div className="flex flex-col">
+            <div className="px-2 pt-2.5 pb-1 text-3 text-fg-3">置顶</div>
+            {pinned.map(renderItem)}
           </div>
-        ))}
+        )}
+        <div className="flex flex-col pt-1">{rest.map(renderItem)}</div>
       </div>
     </div>
   );

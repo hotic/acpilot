@@ -1,20 +1,20 @@
 import { useCallback, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react';
-import { ChevronLeft, Plus, Shrink } from 'lucide-react';
-import type { AccountInfo, AgentInfo, ConfigControl, Draft, SessionControls, Turn, Usage } from '@shared/transcript';
-import type { AddAccountVia, FileHit } from '@shared/protocol';
+import { Shrink } from 'lucide-react';
+import type { ConfigControl, Draft, SessionControls, Turn, Usage } from '@shared/transcript';
+import type { FileHit } from '@shared/protocol';
 import type { HiddenMap } from '@shared/settings';
-import { findVariant, groupModels, variantLabel, visibleOptions, type ModelFamily, type ModelVariant } from '@shared/models';
+import { findVariant, groupModels, modelBrand, variantLabel, visibleOptions, type ModelFamily, type ModelVariant } from '@shared/models';
 import { useAppearance } from '../appearance';
 import { cn } from '../ui/cn';
 import { Chip, IconButton } from '../ui/Button';
 import { RadioPills, SwitchRow } from '../ui/Field';
-import { Menu, MenuFooter, MenuHeader, MenuList, Popover, type MenuItem } from '../ui/Popover';
+import { Menu, MenuList, Popover, type MenuItem } from '../ui/Popover';
 import { WorkingBeam } from '../effects/WorkingBeam';
 import { SendButton } from '../effects/SendButton';
-import { AgentMark } from './AgentMark';
 import { DraftChips } from './Attachments';
 import { collectDrafts, hasPayload } from './drafts';
 import { MentionList, mentionAt, useMentionHits } from './Mention';
+import { ModelMark } from './ModelMark';
 import { modeIcon } from './modeIcons';
 import { estimateUsage, type UsageSegment } from './usageBreakdown';
 
@@ -23,10 +23,6 @@ export interface ComposerProps {
   // Entire composer disabled while the session isn't ready (connecting / login required / read-only)
   disabled?: boolean;
   theme: 'dark' | 'light';
-  agent: AgentInfo;
-  agents: AgentInfo[];
-  accounts?: AccountInfo[];
-  accountId?: string;
   controls: SessionControls;
   turns: Turn[];
   // Option families hidden for the current agent (settings page): configOption id → family names
@@ -42,10 +38,6 @@ export interface ComposerProps {
   onStop: () => void;
   onSetMode: (id: string) => void;
   onSetConfig: (configId: string, value: string) => void;
-  onSelectAgent: (id: AgentInfo['id']) => void;
-  onSelectAccount: (id: string) => void;
-  onAddAccount: (agent: AgentInfo['id'], via: AddAccountVia) => void;
-  onRemoveAccount: (id: string) => void;
   onCompact: () => void;
 }
 
@@ -53,7 +45,8 @@ export interface ComposerProps {
 const SEARCH_FROM = 12;
 
 // Composer has three layers: attachment chips (when any), the input area, and a toolbar row below.
-// The row's left side ("mode · model · reasoning level …") lists whatever the agent's ACP session provides; the right side holds "context ring · agent · send".
+// The row's left side ("mode · reasoning level …") lists whatever the agent's ACP session provides, minus the model family;
+// the right side holds "context ring · model · send" — the model sits where Cursor / Devin put it, next to the send button.
 // Attachments come from pasting / dropping (images, OS files, Explorer items) or from an @ mention that searches the workspace
 export function Composer(p: ComposerProps) {
   const { composer } = useAppearance();
@@ -68,7 +61,13 @@ export function Composer(p: ComposerProps) {
   const beamActive = focused || openMenus > 0;
   const mode = p.controls.modes.find(m => m.id === p.controls.modeId);
   const dim = p.running || p.disabled;
-  const account = p.accounts?.find(a => a.id === p.accountId);
+  // Model options (the ones that decompose into families) leave the left row and join the right, next to the send button
+  const isModel = (c: ConfigControl) => {
+    const shown = visibleOptions(c.options, p.hidden?.[c.id], c.value);
+    return groupModels(shown).length < shown.length;
+  };
+  const modelControls = p.controls.options.filter(isModel);
+  const leftControls = p.controls.options.filter(c => !isModel(c));
   // Files are read asynchronously after a paste / drop; sending is held until every read has landed, so a message never leaves without its attachments
   const [reading, setReading] = useState(0);
   const canSend = !p.disabled && reading === 0 && (text.trim().length > 0 || drafts.length > 0);
@@ -184,7 +183,7 @@ export function Composer(p: ComposerProps) {
         )}
       />
       {mentionOpen && <MentionList anchor={fieldRef} hits={hits} active={active} empty={span!.query.length > 0} onHover={setActive} onPick={pick} />}
-      {/* The row is a container: below the sm tier (a 380 sidebar leaves ~324 here) the mode and agent chips collapse to icon + caret so the model name keeps its room —
+      {/* The row is a container: below the sm tier (a 380 sidebar leaves ~324 here) the mode chip collapses to icon + caret so the option chips keep their room —
           the same move Cursor makes in a narrow sidebar; the editor panel is wide enough for the names */}
       <div className="@container flex items-center gap-1 px-2 pt-1 pb-2">
         <div className="flex min-w-0 flex-1 items-center gap-1">
@@ -213,30 +212,14 @@ export function Composer(p: ComposerProps) {
               }}
             </Menu>
           )}
-          {p.controls.options.map(c => (
+          {leftControls.map(c => (
             <OptionControl key={c.id} control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
           ))}
         </div>
         {p.usage && <ContextRing usage={p.usage} turns={p.turns} canCompact={!!p.canCompact && !dim} onCompact={p.onCompact} onOpenChange={onOpenChange} />}
-        <Popover
-          side="top" align="end" width="md" role="menu" onOpenChange={onOpenChange}
-          content={close => (
-            <AgentPanel
-              agent={p.agent} agents={p.agents} accounts={p.accounts?.filter(a => a.agent === p.agent.id) ?? []} accountId={p.accountId} close={close}
-              onSelectAgent={p.onSelectAgent} onSelectAccount={p.onSelectAccount} onAddAccount={p.onAddAccount} onRemoveAccount={p.onRemoveAccount}
-            />
-          )}
-        >
-          {({ open, toggle, ref }) => (
-            <Chip
-              ref={ref} data-open={open || undefined} onClick={toggle} className="shrink-0" narrow="icon"
-              title={account ? `${p.agent.name} · ${account.label}` : p.agent.name}
-              icon={<AgentMark id={p.agent.id} name={p.agent.name} />}
-            >
-              {p.agent.name}
-            </Chip>
-          )}
-        </Popover>
+        {modelControls.map(c => (
+          <OptionControl key={c.id} control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
+        ))}
         <SendButton running={p.running} filled={canSend} theme={p.theme} onClick={p.running ? p.onStop : send} />
       </div>
     </div>
@@ -274,11 +257,11 @@ function ModelControl({ control: c, families, onSelect, onOpenChange }: OptionMe
   const meta = cur && curVar && (cur.variants.length > 1 || curVar.effort || curVar.fast || curVar.long) ? variantLabel(curVar, cur) : undefined;
   return (
     <Popover
-      side="top" width="md" role="menu" onOpenChange={onOpenChange}
+      side="top" align="end" width="md" role="menu" onOpenChange={onOpenChange}
       content={close => <ModelPanel families={families} cur={cur} curVar={curVar} onSelect={onSelect} close={close} />}
     >
       {({ open, toggle, ref }) => (
-        <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={c.name} meta={meta}>
+        <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={c.name} meta={meta} icon={<ModelMark family={cur?.name ?? c.name} />}>
           {cur?.name ?? c.options.find(o => o.id === c.value)?.name ?? c.name}
         </Chip>
       )}
@@ -295,7 +278,7 @@ interface ModelPanelProps {
 }
 
 function ModelPanel({ families, cur, curVar, onSelect, close }: ModelPanelProps) {
-  const items = families.map((f): MenuItem => ({ id: f.name, label: f.name, checked: f === cur }));
+  const items = families.map((f): MenuItem => ({ id: f.name, label: f.name, icon: <ModelMark family={f.name} />, checked: f === cur }));
   const pickFamily = (name: string) => {
     const f = families.find(x => x.name === name);
     if (f) onSelect(((curVar && findVariant(f, curVar.effort, curVar.fast, curVar.long)) ?? f.variants[0]!).id);
@@ -337,57 +320,17 @@ function ModelParams({ family: f, variant: v, onSelect }: { family: ModelFamily;
   );
 }
 
-// Flat configOption menu; long lists are searchable
+// Flat configOption menu; long lists are searchable. Vendor marks only appear when at least one option names a known brand
+// (Grok's monolithic model list) — a thought_level menu of "Low / High" stays text-only instead of earning letter tiles
 function OptionMenu({ control: c, onSelect, onOpenChange }: OptionMenuProps) {
-  const items = c.options.map((o): MenuItem => ({ id: o.id, label: o.name, description: o.description, checked: o.id === c.value }));
+  const branded = c.options.some(o => modelBrand(o.name));
+  const items = c.options.map((o): MenuItem => ({ id: o.id, label: o.name, description: o.description, icon: branded ? <ModelMark family={o.name} /> : undefined, checked: o.id === c.value }));
+  const curName = c.options.find(o => o.id === c.value)?.name;
+  const curIcon = branded && curName && modelBrand(curName) ? <ModelMark family={curName} /> : undefined;
   return (
     <Menu side="top" width="md" items={items} searchable={c.options.length >= SEARCH_FROM} onSelect={onSelect} onOpenChange={onOpenChange}>
-      {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={c.name}>{c.options.find(o => o.id === c.value)?.name ?? c.name}</Chip>}
+      {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={c.name} icon={curIcon}>{curName ?? c.name}</Chip>}
     </Menu>
-  );
-}
-
-interface AgentPanelProps {
-  agent: AgentInfo;
-  agents: AgentInfo[];
-  // Accounts of the current agent only
-  accounts: AccountInfo[];
-  accountId?: string;
-  close: () => void;
-  onSelectAgent: (id: AgentInfo['id']) => void;
-  onSelectAccount: (id: string) => void;
-  onAddAccount: (agent: AgentInfo['id'], via: AddAccountVia) => void;
-  onRemoveAccount: (id: string) => void;
-}
-
-// Agent menu (modeled on Devin): the options area lists agents only, one row each with vendor mark + name + check; ones not installed locally are greyed out.
-// Agents that go through the account layer show the current account in the footer (click to enter the accounts page) plus a "＋" (import from local login if never imported, otherwise go sign in a new one in the terminal).
-// Accounts page: a sub-page with a navigation bar on top (back · agent name · "＋"), one account per row (removable on hover), no footer
-function AgentPanel(p: AgentPanelProps) {
-  const [view, setView] = useState<'agents' | 'accounts'>('agents');
-  const current = p.accounts.find(a => a.id === p.accountId);
-  const add = { label: '添加账号', icon: <Plus strokeWidth={1.75} />, onClick: () => { p.onAddAccount(p.agent.id, 'auto'); p.close(); } };
-
-  if (view === 'accounts') {
-    return (
-      <MenuList
-        items={p.accounts.map(a => ({ id: a.id, label: a.label, description: a.detail, checked: a.id === p.accountId, onRemove: () => p.onRemoveAccount(a.id) }))}
-        empty="还没有账号，点「＋」添加"
-        onSelect={id => { p.onSelectAccount(id); p.close(); }}
-        header={<MenuHeader lead={{ label: '返回', icon: <ChevronLeft strokeWidth={1.75} />, onClick: () => setView('agents') }} action={add}>{p.agent.name}</MenuHeader>}
-      />
-    );
-  }
-  return (
-    <MenuList
-      items={p.agents.map(a => ({
-        id: a.id, label: a.name, icon: <AgentMark id={a.id} name={a.name} />, checked: a.id === p.agent.id, disabled: a.available === false,
-      }))}
-      onSelect={id => { p.onSelectAgent(id); p.close(); }}
-      footer={p.agent.accounts
-        ? <MenuFooter onClick={() => setView('accounts')} action={add}>{current ? current.label : '未登录'}</MenuFooter>
-        : undefined}
-    />
   );
 }
 

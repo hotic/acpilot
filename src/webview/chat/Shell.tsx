@@ -72,6 +72,8 @@ export interface ShellProps {
   // Where attachment blobs are served from (the host's sessions directory as a webview URI); absent in the LAB
   blobBase?: string;
   on: ShellHandlers;
+  // Opens the settings page (a local view swap, not a host action — hence not part of ShellHandlers)
+  onOpenSettings?: () => void;
   // For replaying the entrance animation: remounts the conversation when it changes
   replayKey?: number | string;
 }
@@ -116,7 +118,6 @@ export function Shell(p: ShellProps) {
       agents={p.agents}
       activeId={p.activeSessionId}
       onSelect={id => { on.selectSession(id); setDrawerOpen(false); }}
-      onNew={() => { on.newSession(); setDrawerOpen(false); }}
       onRename={on.renameSession}
       onDelete={handlers.deleteSession}
       onPin={on.pinSession}
@@ -147,10 +148,14 @@ export function Shell(p: ShellProps) {
             <Header
               title={p.title}
               sessions={p.sessions}
+              agent={p.agent}
               agents={p.agents}
+              accounts={p.accounts}
+              accountId={p.accountId}
               activeSessionId={p.activeSessionId}
               on={handlers}
               onToggleDrawer={() => setDrawerOpen(o => !o)}
+              onOpenSettings={p.onOpenSettings}
             />
             <div className="relative flex min-h-0 flex-1 flex-col">
               <Thread turns={p.turns} running={p.running} wide={wide} replayKey={p.replayKey} blobUrl={blobUrl} onPermission={on.permission} />
@@ -181,10 +186,6 @@ export function Shell(p: ShellProps) {
                 running={p.running}
                 disabled={p.status !== 'ready'}
                 theme={p.theme}
-                agent={p.agent}
-                agents={p.agents}
-                accounts={p.accounts}
-                accountId={p.accountId}
                 turns={p.turns}
                 controls={p.controls}
                 hidden={p.hidden?.[p.agent.id]}
@@ -197,10 +198,6 @@ export function Shell(p: ShellProps) {
                 onStop={on.stop}
                 onSetMode={on.setMode}
                 onSetConfig={on.setConfig}
-                onSelectAgent={on.selectAgent}
-                onSelectAccount={on.selectAccount}
-                onAddAccount={on.addAccount}
-                onRemoveAccount={on.removeAccount}
                 onCompact={on.compact}
               />
             </div>
