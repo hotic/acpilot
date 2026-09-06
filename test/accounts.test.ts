@@ -99,8 +99,8 @@ describe('Devin credentials file and auth status parsing', () => {
     await writeFile(join(dir, 'credentials.toml'), tomlOf(cred));
     expect(await readCredentials(join(dir, 'credentials.toml'))).toEqual(cred);
     expect(await readCredentials(join(dir, 'nope.toml'))).toBeUndefined();
-    const out = 'Logged in (via Devin).\n\nUser:\n  Name:              hotic\n  Email:             s@asgard.sh\n\nAccount:\n  Tier:              Devin Max\n  Plan:              Max\n';
-    expect(parseStatus(out)).toEqual({ label: 's@asgard.sh', detail: 'Devin Max · hotic' });
+    const out = 'Logged in (via Devin).\n\nUser:\n  Name:              Someone\n  Email:             someone@example.com\n\nAccount:\n  Tier:              Devin Max\n  Plan:              Max\n';
+    expect(parseStatus(out)).toEqual({ label: 'someone@example.com', detail: 'Devin Max · Someone' });
     expect(parseStatus('Not logged in.')).toBeUndefined();
   });
 });
