@@ -1,0 +1,332 @@
+{
+  "name": "acpilot",
+  "displayName": "ACPilot",
+  "description": "One chat shell for official agent CLIs (Grok, Devin, Kimi Code) over ACP.",
+  "version": "0.0.1",
+  "publisher": "spark-nano",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.2",
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "main": "./dist/extension.cjs",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "acpilot",
+          "title": "ACPilot",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "acpilot": [
+        {
+          "type": "webview",
+          "id": "acpilot.chat",
+          "name": "ACPilot",
+          "icon": "media/icon.svg",
+          "contextualTitle": "ACPilot"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "acpilot.newSession",
+        "title": "新建会话",
+        "category": "ACPilot",
+        "icon": "$(add)"
+      },
+      {
+        "command": "acpilot.openInEditor",
+        "title": "在编辑区打开",
+        "category": "ACPilot",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "acpilot.showLog",
+        "title": "查看日志",
+        "category": "ACPilot"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "acpilot.newSession",
+          "when": "view == acpilot.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "acpilot.openInEditor",
+          "when": "view == acpilot.chat",
+          "group": "navigation@2"
+        },
+        {
+          "command": "acpilot.showLog",
+          "when": "view == acpilot.chat"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ACPilot",
+      "properties": {
+        "acpilot.defaultAgent": {
+          "type": "string",
+          "default": "grok",
+          "description": "新会话默认用哪个 agent"
+        },
+        "acpilot.agents": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "追加自定义 ACP agent：`{ \"<id>\": { \"name\": \"显示名\", \"command\": \"可执行文件\", \"args\": [\"...\"], \"login\": \"登录命令\" } }`",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "login": {
+                "type": "string"
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "command"
+            ]
+          }
+        },
+        "acpilot.compactAtTokens": {
+          "type": "number",
+          "default": 300000,
+          "description": "一轮结束后上下文用量（agent 报的 usage.used）达到这么多 token 就自动发 /compact。只对报 usage 且有 /compact 命令的 agent 生效；上下文窗口比这个数小的模型由 agent 自己兜底"
+        },
+        "acpilot.autoCompact": {
+          "type": "boolean",
+          "default": true,
+          "description": "超阈值后自动发送 /compact（关掉就只能在上下文面板里手动压）"
+        },
+        "acpilot.pinnedOptions": {
+          "type": "object",
+          "default": {},
+          "scope": "application",
+          "markdownDescription": "钉住的选项（模型 / 推理层级…），菜单里进「常用」段：`{ \"<agent>\": { \"<configOption id>\": [\"<值>\", ...] } }`。在菜单里悬停一项点 pin 即可，一般不用手编",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "acpilot.appearance.density": {
+          "type": "string",
+          "enum": [
+            "cozy",
+            "compact",
+            "airy"
+          ],
+          "default": "airy",
+          "description": "密度"
+        },
+        "acpilot.appearance.radius": {
+          "type": "string",
+          "enum": [
+            "12",
+            "8",
+            "16"
+          ],
+          "default": "12",
+          "description": "圆角"
+        },
+        "acpilot.appearance.surface": {
+          "type": "string",
+          "enum": [
+            "hairline",
+            "tonal",
+            "stroke"
+          ],
+          "default": "tonal",
+          "description": "表面：hairline 细线 / tonal 无边分层 / stroke 描边"
+        },
+        "acpilot.appearance.font": {
+          "type": "string",
+          "enum": [
+            "system",
+            "inter",
+            "geist"
+          ],
+          "default": "inter",
+          "description": "字体"
+        },
+        "acpilot.appearance.userMessage": {
+          "type": "string",
+          "enum": [
+            "bubble",
+            "block",
+            "plain"
+          ],
+          "default": "bubble",
+          "description": "用户消息样式"
+        },
+        "acpilot.appearance.toolLine": {
+          "type": "string",
+          "enum": [
+            "text",
+            "icon",
+            "rich"
+          ],
+          "default": "text",
+          "description": "工具行：纯文字 / 加图标 / 图标 + 元信息"
+        },
+        "acpilot.appearance.thought": {
+          "type": "string",
+          "enum": [
+            "text",
+            "shimmer",
+            "orb"
+          ],
+          "default": "orb",
+          "description": "思考中的样子"
+        },
+        "acpilot.appearance.sessions": {
+          "type": "string",
+          "enum": [
+            "dropdown",
+            "drawer"
+          ],
+          "default": "dropdown",
+          "description": "会话列表：下拉 / 抽屉"
+        },
+        "acpilot.appearance.composer": {
+          "type": "string",
+          "enum": [
+            "island",
+            "flush"
+          ],
+          "default": "island",
+          "description": "输入框：浮岛 / 贴底"
+        },
+        "acpilot.appearance.beam": {
+          "type": "string",
+          "enum": [
+            "line",
+            "none",
+            "pulse",
+            "full"
+          ],
+          "default": "full",
+          "description": "工作中的 Beam 边光"
+        },
+        "acpilot.appearance.beamColor": {
+          "type": "string",
+          "enum": [
+            "mono",
+            "ocean",
+            "colorful"
+          ],
+          "default": "mono",
+          "description": "Beam 配色"
+        },
+        "acpilot.appearance.send": {
+          "type": "string",
+          "enum": [
+            "accent",
+            "icon",
+            "metal"
+          ],
+          "default": "metal",
+          "description": "发送钮"
+        },
+        "acpilot.appearance.accent": {
+          "type": "string",
+          "enum": [
+            "brand",
+            "agent",
+            "vscode"
+          ],
+          "default": "agent",
+          "description": "强调色来源"
+        },
+        "acpilot.appearance.motion": {
+          "type": "string",
+          "enum": [
+            "subtle",
+            "none",
+            "full"
+          ],
+          "default": "subtle",
+          "description": "动效强度"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build:webview": "vite build --config vite.webview.config.ts",
+    "build:host": "node esbuild.host.mjs",
+    "build": "pnpm build:host && pnpm build:webview",
+    "watch:host": "node esbuild.host.mjs --watch",
+    "watch:webview": "vite build --config vite.webview.config.ts --watch",
+    "dev": "pnpm build && (pnpm watch:host & pnpm watch:webview & wait)",
+    "typecheck": "tsc -p tsconfig.webview.json --noEmit && tsc -p tsconfig.host.json --noEmit",
+    "test": "vitest run",
+    "probe": "tsx scripts/acp-probe.ts",
+    "package": "pnpm build && vsce package --no-dependencies",
+    "vscode:prepublish": "pnpm build"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "1.4.0",
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/inter": "5.3.0",
+    "border-beam": "1.3.0",
+    "clsx": "2.1.1",
+    "lucide-react": "1.35.0",
+    "metal-fx": "1.0.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "thinking-orbs": "0.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "22.15.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@types/vscode": "1.125.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.2",
+    "tailwindcss": "4.3.3",
+    "tsx": "^4.23.13",
+    "typescript": "7.0.2",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@vscode/vsce-sign",
+      "keytar"
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+*.vsix
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+
+# Internal docs (not published)
+docs/
+
+# Lab playground (local only)
+lab/
+src/lab/
+vite.lab.config.ts
