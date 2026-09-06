@@ -18,6 +18,7 @@ export const en = {
   'common.retry': 'Retry',
   'common.refresh': 'Refresh',
   'common.image': 'Image',
+  'common.previewImage': 'Preview {name}',
   'common.removeNamed': 'Remove {name}',
 
   'session.untitled': 'New session',

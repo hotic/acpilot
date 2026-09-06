@@ -35,6 +35,8 @@
   --active: rgba(255, 255, 255, 0.08);
   --focus: var(--vscode-focusBorder, #0078d4);
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
+  /* Full-shell dim behind the image lightbox */
+  --scrim: rgba(0, 0, 0, 0.72);
 
   --ok: #3fb950;
   --warn: #d29922;
@@ -144,6 +146,7 @@
   --active: rgba(0, 0, 0, 0.07);
   --focus: var(--vscode-focusBorder, #005fb8);
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+  --scrim: rgba(0, 0, 0, 0.45);
   --ok: #1f883d;
   --warn: #9a6700;
   --danger: #cf222e;
@@ -218,6 +221,7 @@
   --color-hover: var(--hover);
   --color-active: var(--active);
   --color-focus: var(--focus);
+  --color-scrim: var(--scrim);
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-fg);
   --color-btn-1: var(--btn-1-bg);

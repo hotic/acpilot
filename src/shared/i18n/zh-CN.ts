@@ -19,6 +19,7 @@ export const zhCN = {
   'common.retry': '重试',
   'common.refresh': '刷新',
   'common.image': '图片',
+  'common.previewImage': '预览 {name}',
   'common.removeNamed': '移除 {name}',
 
   // Header / session list
