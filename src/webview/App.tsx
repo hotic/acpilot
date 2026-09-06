@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { HostMsg, InitState, WebviewMsg } from '@shared/protocol';
+import type { FileHit, HostMsg, InitState, WebviewMsg } from '@shared/protocol';
 import type { AccountInfo, AgentInfo, PinMap, SessionSummary, SessionView } from '@shared/transcript';
 import { BASE_APPEARANCE, type Appearance } from './appearance';
 import { Shell, type ShellHandlers } from './chat/Shell';
@@ -11,6 +11,19 @@ declare global {
 
 const vscode = acquireVsCodeApi();
 const post = (m: WebviewMsg) => vscode.postMessage(m);
+
+// The one request/response pair over postMessage: file search for @ mentions. Each request gets a seq; the matching `files` reply resolves it.
+// A reply that never comes (host gone) resolves empty after a while so nothing waits forever
+const FILES_TIMEOUT = 5000;
+let fileSeq = 0;
+const fileWaits = new Map<number, (files: FileHit[]) => void>();
+const settleFiles = (seq: number, files: FileHit[]) => { fileWaits.get(seq)?.(files); fileWaits.delete(seq); };
+const searchFiles = (query: string) => new Promise<FileHit[]>(resolve => {
+  const seq = ++fileSeq;
+  fileWaits.set(seq, resolve);
+  setTimeout(() => settleFiles(seq, []), FILES_TIMEOUT);
+  post({ type: 'searchFiles', query, seq });
+});
 
 // Root of the real webview: consumes the whole state pushed by the host, posts actions back via postMessage unchanged
 export function App() {
@@ -34,6 +47,7 @@ export function App() {
         case 'accounts': setAccounts(m.accounts); break;
         case 'pins': setPins(m.pins); break;
         case 'session': setSession(m.session); break;
+        case 'files': settleFiles(m.seq, m.files); break;
         case 'toast': break;
       }
     };
@@ -43,7 +57,8 @@ export function App() {
   }, []);
 
   const on = useMemo<ShellHandlers>(() => ({
-    send: text => post({ type: 'send', text }),
+    send: (text, attachments) => post({ type: 'send', text, ...(attachments.length ? { attachments } : {}) }),
+    searchFiles,
     stop: () => post({ type: 'stop' }),
     permission: (blockId, optionId) => post({ type: 'permission', blockId, optionId }),
     setMode: id => post({ type: 'setMode', id }),
@@ -89,6 +104,8 @@ export function App() {
       canCompact={session?.commands.some(c => c.name === 'compact')}
       sessions={sessions}
       activeSessionId={session?.id}
+      cwd={session?.cwd}
+      blobBase={init.blobBase}
       on={on}
       replayKey={session?.id}
     />

@@ -1,26 +1,34 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, extname, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
 import { AgentRegistry } from '../src/host/acp/AgentRegistry';
 import { AgentProcess } from '../src/host/acp/AgentProcess';
 import { DevinAccountProvider } from '../src/host/accounts/devin';
 import type { AccountProvider } from '../src/host/accounts/types';
 
-// Usage: pnpm probe grok [--auth] [--api-key-env VAR] [--import-local] [prompt]
+// Usage: pnpm probe grok [--auth] [--api-key-env VAR] [--import-local] [--image PATH] [prompt]
 // Runs initialize + session/new against any agent, printing capabilities / authMethods / modes / configOptions; if a prompt is given, sends one turn and prints every update.
 // --auth: when session/new fails with -32000, call authenticate with the first authMethod (browser login will pop up) and retry; Devin's browser flow only authenticates this process, nothing is persisted
 // --api-key-env VAR: during authenticate, put the value of env var VAR into `_meta.api_key` (the field Devin recognizes), keeping the key off the command line
 // --import-local: go through the account-layer provider (devin) to read the local CLI login → look up identity → authenticate with it; same path as "Import CLI login" in the extension
+// --image PATH: attach the file as an inline `image` content block after the text (to check whether the agent really accepts images regardless of promptCapabilities.image)
+// --link PATH: attach the file as a `resource_link` block (does the agent read it by itself?); --embed PATH: attach as an embedded text `resource` block
 // --elicit: advertise form elicitation and print every elicitation/create the agent sends (Devin's ask_user_question goes this way), answering with the first
 //   enum option of each property (or an empty string), so the turn can finish; without the flag the request is answered method-not-found, which shows what an agent does then
 const argv = process.argv.slice(2);
 const doAuth = argv.includes('--auth');
 const importLocal = argv.includes('--import-local');
 const elicit = argv.includes('--elicit');
-const keyEnvIdx = argv.indexOf('--api-key-env');
-const apiKey = keyEnvIdx >= 0 ? process.env[argv[keyEnvIdx + 1] ?? ''] : undefined;
-const positional = argv.filter((a, i) => !a.startsWith('--') && (keyEnvIdx < 0 || i !== keyEnvIdx + 1));
+const valued = (flag: string) => { const i = argv.indexOf(flag); return i >= 0 ? { idx: i + 1, value: argv[i + 1] } : undefined; };
+const keyEnv = valued('--api-key-env');
+const apiKey = keyEnv ? process.env[keyEnv.value ?? ''] : undefined;
+const imagePath = valued('--image')?.value;
+const linkPath = valued('--link')?.value;
+const embedPath = valued('--embed')?.value;
+const valueIdx = new Set([keyEnv, valued('--image'), valued('--link'), valued('--embed')].flatMap(v => (v ? [v.idx] : [])));
+const positional = argv.filter((a, i) => !a.startsWith('--') && !valueIdx.has(i));
 const [agentId = 'grok', ...rest] = positional;
 const promptText = rest.join(' ');
 
@@ -99,9 +107,26 @@ async function newSession(): Promise<acp.NewSessionResponse> {
 try {
   const s = await newSession();
   console.log('session/new →', JSON.stringify(s, null, 2));
-  if (promptText) {
+  // An attachment flag alone also sends a turn (text block omitted), to check how an agent takes a prompt with no text
+  if (promptText || imagePath || linkPath || embedPath) {
+    const prompt: acp.ContentBlock[] = promptText ? [{ type: 'text', text: promptText }] : [];
+    if (imagePath) {
+      const mimeType = ({ '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' } as Record<string, string>)[extname(imagePath).toLowerCase()] ?? 'image/png';
+      prompt.push({ type: 'image', mimeType, data: (await readFile(imagePath)).toString('base64') });
+      console.log(`\nimage: ${imagePath} (${mimeType}) · promptCapabilities.image = ${proc.init.agentCapabilities?.promptCapabilities?.image ?? '-'}`);
+    }
+    if (linkPath) {
+      const abs = resolve(linkPath);
+      prompt.push({ type: 'resource_link', uri: pathToFileURL(abs).href, name: basename(abs) });
+      console.log(`\nresource_link: ${abs}`);
+    }
+    if (embedPath) {
+      const abs = resolve(embedPath);
+      prompt.push({ type: 'resource', resource: { uri: pathToFileURL(abs).href, mimeType: 'text/plain', text: await readFile(abs, 'utf8') } });
+      console.log(`\nresource (embedded): ${abs} · promptCapabilities.embeddedContext = ${proc.init.agentCapabilities?.promptCapabilities?.embeddedContext ?? '-'}`);
+    }
     console.log(`\nprompt: ${promptText}\n`);
-    const r = await proc.agent.request(acp.methods.agent.session.prompt, { sessionId: s.sessionId, prompt: [{ type: 'text', text: promptText }] });
+    const r = await proc.agent.request(acp.methods.agent.session.prompt, { sessionId: s.sessionId, prompt });
     console.log('\nstop →', r.stopReason);
   }
 } catch (e) {

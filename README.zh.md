@@ -17,6 +17,12 @@
 2. 打开副侧栏的 ACPilot 视图，下方工具行切 agent / 模式 / 模型
 3. 输入即发；进行中再发会排队；方块钮取消
 
+### 图片与文件
+
+- 直接粘贴 / 拖入图片（PNG · JPEG · GIF · WebP，≤ 10 MB）：以 base64 内联进 prompt。Grok 虽然在 `initialize` 里报 `image: false`，实测照样看得见，所以不看这个标志
+- 从资源管理器拖文件进输入框，或输入 `@` 搜索工作区文件：作为 `resource_link` 发送，agent 自己去读（拖进来的图片文件会被读成图片发出）
+- 从 Finder 拖入的文本文件（≤ 256 KB）：webview 拿不到路径，内容内嵌为 `resource` 块；二进制文件拒收
+
 会话记录落在扩展的 globalStorage 里，重启后优先 `session/resume`，其次 `session/load`，都不支持就只读历史。
 
 ### Devin 多账号

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { AccountInfo, AgentInfo, AuthMethodInfo, PinMap, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
-import type { AddAccountVia } from '@shared/protocol';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Paperclip } from 'lucide-react';
+import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PinMap, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
+import type { AddAccountVia, FileHit } from '@shared/protocol';
 import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
 import { ShellLayerContext } from '../ui/Popover';
 import { cn } from '../ui/cn';
@@ -15,7 +16,9 @@ import { PlanBar } from './PlanBar';
 
 // Every action the webview sends to the host; in the LAB a fake host implements these, the real build swaps in postMessage
 export interface ShellHandlers {
-  send: (text: string) => void;
+  send: (text: string, attachments: Draft[]) => void;
+  // @ mention lookup over workspace files
+  searchFiles: (query: string) => Promise<FileHit[]>;
   stop: () => void;
   permission: (blockId: string, optionId: string) => void;
   setMode: (id: string) => void;
@@ -64,9 +67,21 @@ export interface ShellProps {
   canCompact?: boolean;
   sessions: SessionSummary[];
   activeSessionId?: string;
+  // Workspace root of the session; attachments are labeled relative to it
+  cwd?: string;
+  // Where attachment blobs are served from (the host's sessions directory as a webview URI); absent in the LAB
+  blobBase?: string;
   on: ShellHandlers;
   // For replaying the entrance animation: remounts the conversation when it changes
   replayKey?: number | string;
+}
+
+// A toast: text plus an optional undo; each dismisses itself, several can stack (an attachment notice must not take the undo of a deletion with it)
+interface ToastState {
+  key: string;
+  text: string;
+  icon?: ReactNode;
+  undo?: () => void;
 }
 
 // Chat shell: header / conversation flow / composer stacked vertically; the drawer axis adds a column on the left. The shell root doubles as the overlay mount point
@@ -75,17 +90,20 @@ export function Shell(p: ShellProps) {
   const wide = p.host === 'editor';
   const root = useRef<HTMLDivElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  // Deletion applies immediately, with an undoable toast floating at the bottom (modeled on Codex's archive), no confirmation dialog
-  const [deleted, setDeleted] = useState<{ id: string; title: string }>();
-  const closeToast = useCallback(() => setDeleted(undefined), []);
+  // Deletion applies immediately, with an undoable toast floating at the bottom (modeled on Codex's archive), no confirmation dialog; refused attachments show up the same way
+  const [toasts, setToasts] = useState<ToastState[]>([]);
+  const dropToast = useCallback((key: string) => setToasts(ts => ts.filter(t => t.key !== key)), []);
+  const pushToast = useCallback((t: ToastState) => setToasts(ts => [...ts.filter(x => x.key !== t.key), t]), []);
+  const notice = useCallback((text: string) => pushToast({ key: `n${Date.now()}`, text, icon: <Paperclip className="size-icon shrink-0 text-fg-3" strokeWidth={1.5} /> }), [pushToast]);
   const handlers = useMemo<ShellHandlers>(() => ({
     ...on,
     deleteSession: id => {
       const title = p.sessions.find(s => s.id === id)?.title ?? '会话';
       on.deleteSession(id);
-      setDeleted({ id, title });
+      pushToast({ key: id, text: `已删除「${title}」`, undo: () => { on.restoreSession(id); dropToast(id); } });
     },
-  }), [on, p.sessions]);
+  }), [on, p.sessions, pushToast, dropToast]);
+  const blobUrl = useMemo(() => (p.blobBase && p.activeSessionId ? (blob: string) => `${p.blobBase}/${p.activeSessionId}/${blob}` : undefined), [p.blobBase, p.activeSessionId]);
   // The card for a turn that stopped short stands until dismissed or until the transcript moves on; the key ties the dismissal to that one turn.
   // While the session isn't ready the Notice has the floor (a login problem after a failed prompt is its business)
   const lastTurn = p.turns[p.turns.length - 1];
@@ -135,15 +153,10 @@ export function Shell(p: ShellProps) {
               onToggleDrawer={() => setDrawerOpen(o => !o)}
             />
             <div className="relative flex min-h-0 flex-1 flex-col">
-              <Thread turns={p.turns} running={p.running} wide={wide} replayKey={p.replayKey} onPermission={on.permission} />
-              {deleted && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center px-page">
-                  <Toast
-                    key={deleted.id}
-                    text={`已删除「${deleted.title}」`}
-                    onUndo={() => { on.restoreSession(deleted.id); setDeleted(undefined); }}
-                    onClose={closeToast}
-                  />
+              <Thread turns={p.turns} running={p.running} wide={wide} replayKey={p.replayKey} blobUrl={blobUrl} onPermission={on.permission} />
+              {toasts.length > 0 && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex flex-col items-center gap-1 px-page">
+                  {toasts.map(t => <Toast key={t.key} text={t.text} icon={t.icon} onUndo={t.undo} onClose={() => dropToast(t.key)} />)}
                 </div>
               )}
             </div>
@@ -153,7 +166,7 @@ export function Shell(p: ShellProps) {
                 <Alert
                   turn={alertTurn}
                   onRetry={on.retryTurn}
-                  onContinue={() => on.send('继续')}
+                  onContinue={() => on.send('继续', [])}
                   onDismiss={() => setDismissedAlert(alertKey)}
                 />
               )}
@@ -177,7 +190,10 @@ export function Shell(p: ShellProps) {
                 pins={p.pins?.[p.agent.id]}
                 usage={p.usage}
                 canCompact={p.canCompact}
+                cwd={p.cwd ?? ''}
                 onSend={on.send}
+                onSearchFiles={on.searchFiles}
+                onNotice={notice}
                 onStop={on.stop}
                 onSetMode={on.setMode}
                 onSetConfig={on.setConfig}
@@ -201,6 +217,7 @@ interface ThreadProps {
   running: boolean;
   wide: boolean;
   replayKey?: number | string;
+  blobUrl?: (blob: string) => string;
   onPermission: ShellHandlers['permission'];
 }
 
@@ -209,7 +226,7 @@ const STAGGER_CAP = 12;
 
 // Conversation flow: stick-to-bottom following only happens on transcript changes (new content / streaming growth); user actions like expand / collapse never touch the scroll position —
 // the toggle under the mouse stays put while the content below it moves. Scrolling away from the bottom releases the follow; scrolling back to the bottom restores it
-function Thread({ turns, running, wide, replayKey, onPermission }: ThreadProps) {
+function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: ThreadProps) {
   const ref = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   useEffect(() => {
@@ -237,7 +254,7 @@ function Thread({ turns, running, wide, replayKey, onPermission }: ThreadProps) 
           const idx = Math.min(i, STAGGER_CAP);
           i += t.role === 'agent' ? t.blocks.length + 1 : 1;
           return t.role === 'user'
-            ? <UserMessage key={ti} turn={t} index={idx} />
+            ? <UserMessage key={ti} turn={t} index={idx} blobUrl={blobUrl} />
             : <AgentMessage key={ti} turn={t} index={idx} running={running && ti === turns.length - 1} onPermission={onPermission} />;
         })}
       </div>

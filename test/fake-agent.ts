@@ -78,6 +78,18 @@ const app = acp.agent({ name: 'fake-agent' })
       return { stopReason: 'end_turn' };
     }
 
+    // any non-text block → echo what arrived (type plus the fields that matter), mirroring Grok's habit of echoing every prompt block as a user_message_chunk first
+    if (params.prompt.some(p => p.type !== 'text')) {
+      for (const p of params.prompt) await send({ sessionUpdate: 'user_message_chunk', content: p });
+      const echo = params.prompt.map(p =>
+        p.type === 'image' ? `image:${p.mimeType}`
+          : p.type === 'resource' ? `resource:${p.resource.uri}:${'text' in p.resource ? p.resource.text : '<blob>'}`
+            : p.type === 'resource_link' ? `resource_link:${p.uri}:${p.name}`
+              : p.type).join(' · ');
+      await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: echo } });
+      return { stopReason: 'end_turn' };
+    }
+
     await send({ sessionUpdate: 'user_message_chunk', content: { type: 'text', text } });
 
     if (text.includes('refuse')) return { stopReason: 'refusal' };

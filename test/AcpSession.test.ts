@@ -1,7 +1,10 @@
-import { mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { AgentBlock, PermissionBlock, SessionOption, ToolCallBlock } from '@shared/transcript';
+import { MAX_IMAGE_BYTES } from '@shared/attachments';
 import { AgentRegistry } from '../src/host/acp/AgentRegistry';
 import { AcpSession, type CompactionPolicy, type SessionDeps } from '../src/host/acp/AcpSession';
 
@@ -20,8 +23,13 @@ function deps(cwd = '/tmp', compaction?: () => CompactionPolicy, modes?: Session
   const registry = new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE], login: 'echo login', modes } });
   const logs: string[] = [];
   let changes = 0;
-  const d: SessionDeps = { registry, log: (l: string) => logs.push(l), onChange: () => { changes++; }, compaction };
-  return { d, logs, changes: () => changes, session: () => AcpSession.fresh('fake', cwd, d) };
+  // In-memory blob store: remembers what was written so tests can check the payload landed
+  const blobs = new Map<string, Uint8Array>();
+  const d: SessionDeps = {
+    registry, log: (l: string) => logs.push(l), onChange: () => { changes++; }, compaction,
+    blobs: { saveBlob: async (sid, ext, bytes) => { const name = `b${blobs.size}${ext}`; blobs.set(name, bytes); return { name, path: `/blobs/${sid}/${name}` }; } },
+  };
+  return { d, logs, blobs, changes: () => changes, session: () => AcpSession.fresh('fake', cwd, d) };
 }
 
 // Wait until a condition holds (5s timeout by default)
@@ -68,6 +76,133 @@ describe('AcpSession', () => {
     expect(v.title).toBe('Fake title');
     expect(v.commands).toEqual([{ name: 'compact', description: 'compact it' }]);
     s.dispose();
+  });
+
+  it('attachments: image and dropped text are written to the blob store and sent as image / resource blocks, a file goes as resource_link; the turn keeps only references', async () => {
+    const { session, blobs } = deps();
+    const s = session();
+    await s.start();
+    const png = Buffer.from('fake-png-bytes').toString('base64');
+    await s.prompt('echo blocks', [
+      { kind: 'image', mimeType: 'image/png', data: png, name: 'shot.png' },
+      { kind: 'text', name: 'notes.md', text: '# notes' },
+      { kind: 'file', uri: 'file:///repo/src/a.ts', name: 'src/a.ts' },
+    ]);
+    const v = s.view();
+    expect(v.turns[0]).toEqual({
+      role: 'user', text: 'echo blocks',
+      attachments: [
+        { kind: 'image', blob: 'b0.png', mimeType: 'image/png', name: 'shot.png' },
+        { kind: 'text', blob: 'b1.txt', name: 'notes.md' },
+        { kind: 'file', uri: 'file:///repo/src/a.ts', name: 'src/a.ts' },
+      ],
+    });
+    expect(Buffer.from(blobs.get('b0.png')!).toString()).toBe('fake-png-bytes');
+    expect(Buffer.from(blobs.get('b1.txt')!).toString()).toBe('# notes');
+    // the fake agent echoes the block types and key fields it received
+    const agent = v.turns[1]!;
+    if (agent.role !== 'agent') throw new Error();
+    const echoed = agent.blocks.find(b => b.type === 'text');
+    expect(echoed).toMatchObject({ type: 'text', markdown: 'text · image:image/png · resource:file:///blobs/' + s.id + '/b1.txt:# notes · resource_link:file:///repo/src/a.ts:src/a.ts' });
+    s.dispose();
+  });
+
+  it('attachments only: the text block is omitted and the title comes from what was attached', async () => {
+    const { session } = deps();
+    const s = session();
+    await s.start();
+    await s.prompt('', [{ kind: 'image', mimeType: 'image/png', data: 'AAAA' }, { kind: 'file', uri: 'file:///repo/README.md', name: 'README.md' }]);
+    const v = s.view();
+    expect(v.turns[0]).toMatchObject({ role: 'user', text: '' });
+    expect(v.title).toBe('1 张图片、README.md');
+    const agent = v.turns[1]!;
+    if (agent.role !== 'agent') throw new Error();
+    expect(agent.blocks.find(b => b.type === 'text')).toMatchObject({ markdown: 'image:image/png · resource_link:file:///repo/README.md:README.md' });
+    // the echoed user_message_chunk (Grok sends the image back too) must not create a second user turn
+    expect(v.turns.filter(t => t.role === 'user')).toHaveLength(1);
+    s.dispose();
+  });
+
+  it('file draft pointing at an image on disk is read and sent as pixels; an oversized image draft is dropped with a note, the rest still goes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'acpilot-att-'));
+    const png = join(dir, 'shot.png');
+    writeFileSync(png, 'real-png-bytes');
+    const { d, session, blobs } = deps();
+    const notes: string[] = [];
+    d.notify = t => notes.push(t);
+    const s = session();
+    await s.start();
+    const huge = Buffer.alloc(MAX_IMAGE_BYTES + 1).toString('base64');
+    await s.prompt('echo blocks', [
+      { kind: 'file', uri: pathToFileURL(png).href, name: 'shot.png' },
+      { kind: 'image', mimeType: 'image/png', data: huge, name: 'huge.png' },
+    ]);
+    const v = s.view();
+    expect(v.turns[0]).toMatchObject({ role: 'user', attachments: [{ kind: 'image', blob: 'b0.png', mimeType: 'image/png', name: 'shot.png' }] });
+    expect(Buffer.from(blobs.get('b0.png')!).toString()).toBe('real-png-bytes');
+    const agent = v.turns[1]!;
+    if (agent.role !== 'agent') throw new Error();
+    expect(agent.blocks.find(b => b.type === 'text')).toMatchObject({ markdown: 'text · image:image/png' });
+    expect(notes).toEqual([`huge.png 超过 ${MAX_IMAGE_BYTES >> 20} MB，已跳过`]);
+    s.dispose();
+  });
+
+  it('blob store failing does not lose the prompt: it still goes out inline, the attachment just has no preview', async () => {
+    const { d, session } = deps();
+    d.blobs = { saveBlob: async () => { throw new Error('disk full'); } };
+    const notes: string[] = [];
+    d.notify = t => notes.push(t);
+    const s = session();
+    await s.start();
+    await s.prompt('echo blocks', [{ kind: 'image', mimeType: 'image/png', data: 'AAAA', name: 'shot.png' }, { kind: 'text', name: 'n.md', text: 'x' }]);
+    const v = s.view();
+    expect(v.turns[0]).toEqual({ role: 'user', text: 'echo blocks', attachments: [{ kind: 'image', mimeType: 'image/png', name: 'shot.png' }, { kind: 'text', name: 'n.md' }] });
+    const agent = v.turns[1]!;
+    if (agent.role !== 'agent') throw new Error();
+    expect(agent.blocks.find(b => b.type === 'text')).toMatchObject({ markdown: 'text · image:image/png · resource:attachment:///n.md:x' });
+    expect(notes).toHaveLength(2);
+    expect(notes[0]).toContain('disk full');
+    s.dispose();
+  });
+
+  it('cancel while staging drops the prompt without a turn; a send arriving meanwhile is queued and goes out afterwards', async () => {
+    const { d, session } = deps();
+    let release!: () => void;
+    const gate = new Promise<void>(r => { release = r; });
+    const inner = d.blobs;
+    d.blobs = { ...inner, saveBlob: async (...a) => { await gate; return inner.saveBlob(...a); } };
+    const s = session();
+    await s.start();
+    const first = s.prompt('echo blocks', [{ kind: 'image', mimeType: 'image/png', data: 'AAAA' }]);
+    expect(s.view().running).toBe(true);
+    await s.cancel();
+    await s.prompt('hi');
+    expect(s.view().queued).toBe('hi');
+    release();
+    await first;
+    await until(() => !s.view().running && s.view().turns.length === 2);
+    const v = s.view();
+    expect(v.turns[0]).toEqual({ role: 'user', text: 'hi' });
+    expect(v.queued).toBeUndefined();
+    s.dispose();
+  });
+
+  it('dispose while staging: nothing is appended or sent afterwards', async () => {
+    const { d, session, blobs } = deps();
+    let release!: () => void;
+    const gate = new Promise<void>(r => { release = r; });
+    const inner = d.blobs;
+    d.blobs = { ...inner, saveBlob: async (...a) => { await gate; return inner.saveBlob(...a); } };
+    const s = session();
+    await s.start();
+    const p = s.prompt('echo blocks', [{ kind: 'image', mimeType: 'image/png', data: 'AAAA' }]);
+    s.dispose();
+    release();
+    await p;
+    expect(s.view().turns).toEqual([]);
+    expect(s.view().running).toBe(false);
+    // the blob had already been handed to the store by the time dispose landed; the manager removes the directory when it drops the session
+    expect(blobs.size).toBe(1);
   });
 
   it('permission: card appears → approve → tool completes, diff normalized, usage arrives', async () => {

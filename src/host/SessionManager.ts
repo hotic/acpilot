@@ -106,7 +106,10 @@ export class SessionManager {
   };
 
   private sessionDeps() {
-    return { registry: this.deps.registry, log: this.deps.log, onChange: this.onChange, accounts: this.deps.accounts, compaction: this.deps.compaction };
+    return {
+      registry: this.deps.registry, log: this.deps.log, onChange: this.onChange, blobs: this.deps.store,
+      notify: (text: string) => this.deps.toast('info', text), accounts: this.deps.accounts, compaction: this.deps.compaction,
+    };
   }
 
   // On activation, if there is no session or the current one is gone, start a new one; otherwise bring the current session live (no replay)
@@ -128,10 +131,11 @@ export class SessionManager {
     await s.start();
   }
 
-  // If the current session hasn't said a word yet (just opened / stuck on login), replace it directly; don't leave a trail of empty "New session" entries
+  // If the current session hasn't said a word yet (just opened / stuck on login), replace it directly; don't leave a trail of empty "New session" entries.
+  // A session still staging its first prompt (attachments being written, no turn yet) is not empty
   private async dropEmptyCurrent() {
     const cur = this.current();
-    if (!cur || cur.view().turns.length > 0) return;
+    if (!cur || cur.view().turns.length > 0 || cur.isRunning) return;
     cur.dispose();
     this.live.delete(cur.id);
     this.index = this.index.filter(x => x.id !== cur.id);
@@ -160,7 +164,7 @@ export class SessionManager {
     const s = this.current();
     try {
       switch (msg.type) {
-        case 'send': await s?.prompt(msg.text); break;
+        case 'send': await s?.prompt(msg.text, msg.attachments); break;
         case 'stop': await s?.cancel(); break;
         case 'permission': s?.resolvePermission(msg.blockId, msg.optionId); break;
         case 'setMode': await s?.setMode(msg.id); break;

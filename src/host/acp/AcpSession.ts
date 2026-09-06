@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import * as acp from '@agentclientprotocol/sdk';
-import type { AgentId, AuthMethodInfo, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, TurnError, Usage } from '@shared/transcript';
+import type { AgentId, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, TurnError, Usage } from '@shared/transcript';
 import type { AgentRegistry } from './AgentRegistry';
 import { AgentProcess } from './AgentProcess';
 import { activityOf, applyUpdate, endTurn, failTurn, initControls, applyConfigOptions, type NormalizeState } from './normalize';
+
+import { describeDrafts, preparePrompt, type BlobStore, type PreparedPrompt } from './attachments';
 
 // The persisted session record: view fields plus the acpSessionId needed for resuming
 export interface SessionRecord {
@@ -38,8 +40,18 @@ export interface SessionDeps {
   registry: AgentRegistry;
   log: (line: string) => void;
   onChange: (s: AcpSession) => void;
+  // Attachment payloads (pasted images / dropped text) are parked here when a prompt goes out
+  blobs: BlobStore;
+  // A note for the user that isn't an error (an attachment was dropped or lost its preview); shown as a toast by the host
+  notify?: (text: string) => void;
   accounts?: SessionAccountHooks;
   compaction?: () => CompactionPolicy;
+}
+
+// A prompt waiting for the current turn to finish
+interface QueuedPrompt {
+  text: string;
+  attachments: Draft[];
 }
 
 interface PendingPermission {
@@ -64,7 +76,10 @@ export class AcpSession {
   private error?: string;
   private authMethods?: AuthMethodInfo[];
   private running = false;
-  private queued?: string;
+  // running splits into staging (attachments being prepared, nothing on the wire yet) and the request itself; a cancel during staging just drops the prompt
+  private staging = false;
+  private stagingAborted = false;
+  private queued?: QueuedPrompt;
   private replaying = false;
   private proc?: AgentProcess;
   private pending = new Map<string, PendingPermission>();
@@ -106,7 +121,7 @@ export class AcpSession {
       id: this.id, agent: this.agent, accountId: this.accountId, title: this.title, cwd: this.cwd,
       status: this.status, error: this.error, authMethods: this.authMethods,
       turns: this.state.turns, running: this.running, controls: this.state.controls,
-      usage: this.state.usage, commands: this.state.commands, queued: this.queued,
+      usage: this.state.usage, commands: this.state.commands, queued: this.queued && summarizePrompt(this.queued),
       createdAt: this.createdAt, updatedAt: this.updatedAt,
     };
   }
@@ -282,20 +297,51 @@ export class AcpSession {
     await this.start();
   }
 
-  // auto: sent by ACPilot itself (over-threshold /compact); doesn't change the title and renders as a note line
-  async prompt(text: string, auto = false): Promise<void> {
+  // auto: sent by ACPilot itself (over-threshold /compact); doesn't change the title and renders as a note line.
+  // Attachments are staged (blobs written, image files read) before the turn opens. running is claimed before that await so a second send arriving
+  // meanwhile queues instead of racing onto the wire; if the session was cancelled or closed while staging, the prompt is dropped without a turn
+  async prompt(text: string, attachments: Draft[] = [], auto = false): Promise<void> {
     if (this.status !== 'ready') return;
-    if (this.running) { this.queued = text; this.touch(); return; }
-    this.state.turns.push(auto ? { role: 'user', text, auto: true } : { role: 'user', text });
-    if (!auto && (!this.state.title || this.state.title === '新会话')) this.state.title = text.trim().split('\n')[0]!.slice(0, 40);
+    if (!text.trim() && attachments.length === 0) return;
+    if (this.running) { this.queued = { text, attachments }; this.touch(); return; }
     this.running = true;
+    this.staging = true;
+    this.stagingAborted = false;
+    this.touch();
+    let prepared: PreparedPrompt | undefined, stagingError: string | undefined;
+    try { prepared = await preparePrompt(this.id, text, attachments, this.deps.blobs); }
+    catch (e) { stagingError = msg(e); }
+    this.staging = false;
+    if (this.stagingAborted || this.status !== 'ready') {
+      this.log('prompt dropped: cancelled or closed while staging');
+      this.running = false;
+      this.touch();
+      this.flushQueued();
+      return;
+    }
+    if (!prepared) {
+      // Staging blew up as a whole (should not happen — a single draft degrades into `problems` instead): send the text alone when there is any, so nothing typed is lost
+      this.log(`附件处理失败：${stagingError}`);
+      if (text.trim()) {
+        this.deps.notify?.(`附件处理失败（${stagingError ?? '未知原因'}），只发送了文字`);
+        prepared = { blocks: [{ type: 'text', text }], attachments: [], problems: [] };
+      } else {
+        this.deps.notify?.(`附件处理失败（${stagingError ?? '未知原因'}），这条没发出去`);
+        this.running = false;
+        this.touch();
+        this.flushQueued();
+        return;
+      }
+    }
+    for (const p of prepared.problems) { this.log(p); this.deps.notify?.(p); }
+    if (attachments.length) this.log(`attachments: ${prepared.blocks.slice(text ? 1 : 0).map(b => b.type).join(' ')}`);
+    this.state.turns.push(auto ? { role: 'user', text, auto: true } : { role: 'user', text, ...(prepared.attachments.length ? { attachments: prepared.attachments } : {}) });
+    if (!auto && (!this.state.title || this.state.title === '新会话')) this.state.title = summarizePrompt({ text, attachments }).slice(0, 40);
     this.state.turns.push({ role: 'agent', blocks: [], activity: activityOf(this.state.turns) });
     this.touch();
     let stop: acp.StopReason = 'cancelled';
     try {
-      const r = await this.proc!.agent.request(acp.methods.agent.session.prompt, {
-        sessionId: this.acpSessionId!, prompt: [{ type: 'text', text }],
-      });
+      const r = await this.proc!.agent.request(acp.methods.agent.session.prompt, { sessionId: this.acpSessionId!, prompt: prepared.blocks });
       this.log(`prompt done: ${r.stopReason}`);
       stop = r.stopReason;
       this.settle(stop);
@@ -309,18 +355,26 @@ export class AcpSession {
     // A hand-typed /compact counts as a compaction too; likewise record the usage right after it
     if (auto || text.trim() === '/compact') this.compactedAt = this.state.usage?.used ?? 0;
     this.touch();
-    const next = this.queued;
-    if (next) { this.queued = undefined; void this.prompt(next); return; }
+    if (this.flushQueued()) return;
     if (!auto && stop === 'end_turn' && this.shouldAutoCompact()) {
       this.log(`usage ${this.state.usage?.used} ≥ 阈值，自动 /compact`);
       void this.compact(true);
     }
   }
 
+  // Send the prompt queued during the last turn, if any; nobody awaits it, so its failures end up in the log
+  private flushQueued(): boolean {
+    const next = this.queued;
+    if (!next) return false;
+    this.queued = undefined;
+    this.prompt(next.text, next.attachments).catch(e => this.log(`queued prompt 失败：${msg(e)}`));
+    return true;
+  }
+
   // Compact the context: simply send /compact to the agent (ACP has no dedicated compaction request; it relies on the agent's own slash command)
   async compact(auto = false): Promise<void> {
     if (!this.canCompact) { if (!auto) throw new Error('这个 agent 没有 /compact'); return; }
-    await this.prompt('/compact', auto);
+    await this.prompt('/compact', [], auto);
   }
 
   private shouldAutoCompact(): boolean {
@@ -354,6 +408,8 @@ export class AcpSession {
   async cancel(): Promise<void> {
     if (!this.running || !this.proc) return;
     this.log('cancel');
+    // Nothing is on the wire yet: just make sure the prompt being staged never goes out
+    if (this.staging) { this.stagingAborted = true; return; }
     for (const p of this.pending.values()) p.resolve({ outcome: { outcome: 'cancelled' } });
     this.pending.clear();
     this.removePermissionBlocks();
@@ -483,6 +539,11 @@ class AccountAuthError extends Error {}
 
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+// First line of the text, or what was attached when there is no text (title of a session opened with attachments only, the queue note)
+function summarizePrompt(p: QueuedPrompt): string {
+  return p.text.trim().split('\n')[0]!.trim() || describeDrafts(p.attachments);
 }
 
 // Which option auto-approval picks: allow_always first, then allow_once, otherwise the first one

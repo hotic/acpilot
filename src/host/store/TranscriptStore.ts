@@ -1,10 +1,12 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SessionSummary } from '@shared/transcript';
 import type { SessionRecord } from '../acp/AcpSession';
+import type { BlobStore } from '../acp/attachments';
 
-// Session persistence: <dir>/index.json holds the summary list, <dir>/<id>.json holds the full record. Writes are debounced per session
-export class TranscriptStore {
+// Session persistence: <dir>/index.json holds the summary list, <dir>/<id>.json holds the full record, <dir>/<id>/ holds its attachment blobs. Writes are debounced per session
+export class TranscriptStore implements BlobStore {
   private timers = new Map<string, NodeJS.Timeout>();
 
   constructor(private dir: string) {}
@@ -53,9 +55,23 @@ export class TranscriptStore {
     await writeFile(join(this.dir, `${record.id}.json`), JSON.stringify(record));
   }
 
+  // Removes the record and its blob directory
   async remove(id: string) {
     clearTimeout(this.timers.get(id));
     await rm(join(this.dir, `${id}.json`), { force: true });
+    await rm(join(this.dir, id), { recursive: true, force: true });
+  }
+
+  // Blob names are content hashes, so pasting the same image twice yields one file. The session id names the directory, so it must be a plain token
+  // (fresh ids are UUIDs; a hand-edited record could hold anything)
+  async saveBlob(sessionId: string, ext: string, bytes: Uint8Array): Promise<{ name: string; path: string }> {
+    if (!/^[\w-]+$/.test(sessionId) || !/^\.\w+$/.test(ext)) throw new Error(`非法的 blob 位置：${sessionId}/*${ext}`);
+    const name = `${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}${ext}`;
+    const dir = join(this.dir, sessionId);
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, name);
+    await writeFile(path, bytes);
+    return { name, path };
   }
 }
 

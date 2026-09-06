@@ -12,9 +12,10 @@ import { Plan } from './Plan';
 import { ToolCall } from './ToolCall';
 import { Prose } from './Prose';
 import { Permission } from './Permission';
+import { TurnAttachments } from './Attachments';
 
 // User message: color block / right-aligned bubble / plain text; ones ACPilot sends automatically (/compact) render as a note line, not a bubble
-export function UserMessage({ turn, index }: { turn: UserTurn; index: number }) {
+export function UserMessage({ turn, index, blobUrl }: { turn: UserTurn; index: number; blobUrl?: (blob: string) => string }) {
   const { userMessage } = useAppearance();
   if (turn.auto) {
     return (
@@ -26,14 +27,15 @@ export function UserMessage({ turn, index }: { turn: UserTurn; index: number }) 
   return (
     <div
       className={cn(
-        'enter text-1 text-fg-1 whitespace-pre-wrap [overflow-wrap:anywhere]',
+        'enter flex flex-col gap-gap text-1 text-fg-1 [overflow-wrap:anywhere]',
         userMessage === 'bubble' && 'self-end max-w-[88%] rounded-lg bg-chip px-3 py-[9px]',
         userMessage === 'block' && 'rounded-lg bg-chip px-3 py-[9px]',
         userMessage === 'plain' && 'font-medium',
       )}
       style={{ '--i': index } as CSSProperties}
     >
-      {turn.text}
+      {turn.attachments?.length ? <TurnAttachments attachments={turn.attachments} blobUrl={blobUrl} /> : null}
+      {turn.text && <div className="whitespace-pre-wrap">{turn.text}</div>}
     </div>
   );
 }

@@ -176,7 +176,7 @@ describe('account layer wired into sessions', () => {
   it('AcpSession using the hooks directly: a missing credential raises AccountAuthError, enters auth_required and keeps the reason', async () => {
     const registry = new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE] } });
     const s = AcpSession.fresh('fake', '/tmp/acpilot-needs-auth', {
-      registry, log: () => {}, onChange: () => {},
+      registry, log: () => {}, onChange: () => {}, blobs: { saveBlob: async () => ({ name: 'x', path: '/tmp/x' }) },
       accounts: { spawnEnv: async () => undefined, authenticate: async () => { throw new Error('账号 x 的凭据不在了'); } },
     }, 'missing');
     await s.start();

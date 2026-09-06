@@ -17,6 +17,12 @@ The shell handles UI, session organization, permission approvals, accounts, and 
 2. Open the ACPilot view in the secondary sidebar; switch agent / mode / model from the toolbar below the composer
 3. Type and send; messages sent mid-turn are queued; the square button cancels
 
+### Images and files
+
+- Paste or drop images (PNG · JPEG · GIF · WebP, ≤ 10 MB): they go inline as base64. Grok advertises `image: false` in `initialize` yet sees them fine, so the flag is ignored
+- Drag files from the Explorer into the composer, or type `@` to search workspace files: sent as `resource_link`, the agent reads them itself (dropped image files are read and sent as images)
+- Text files dropped from Finder (≤ 256 KB): a webview has no path for them, so the content is embedded as a `resource` block; binaries are refused
+
 Transcripts live in the extension's globalStorage. On restart, sessions try `session/resume` first, then `session/load`, and fall back to read-only history if neither is supported.
 
 ### Multiple Devin accounts

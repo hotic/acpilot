@@ -1,4 +1,4 @@
-import type { AccountInfo, AgentId, AgentInfo, PinMap, SessionSummary, SessionView } from './transcript';
+import type { AccountInfo, AgentId, AgentInfo, Draft, PinMap, SessionSummary, SessionView } from './transcript';
 import type { Appearance } from './appearance';
 
 // Message contract between host ↔ webview; both sides trust only this file
@@ -13,6 +13,14 @@ export interface InitState {
   pins: PinMap;
   sessions: SessionSummary[];
   active?: SessionView;
+  // Webview URI of the sessions directory: an attachment blob is loaded from `${blobBase}/${sessionId}/${blob}`
+  blobBase?: string;
+}
+
+// One hit of the @ file search: file URI plus the workspace-relative path shown in the list
+export interface FileHit {
+  uri: string;
+  path: string;
 }
 
 export type HostMsg =
@@ -23,7 +31,9 @@ export type HostMsg =
   | { type: 'session'; session: SessionView }
   | { type: 'accounts'; accounts: AccountInfo[] }
   | { type: 'pins'; pins: PinMap }
-  | { type: 'toast'; level: 'info' | 'error'; text: string };
+  | { type: 'toast'; level: 'info' | 'error'; text: string }
+  // Reply to searchFiles; seq echoes the request so stale replies can be dropped
+  | { type: 'files'; seq: number; files: FileHit[] };
 
 // How an account comes in: import reads the CLI's own local login; login runs an isolated login in the terminal that leaves the local login untouched;
 // auto is the "+" in the menu: import the local login if it hasn't been imported yet, otherwise log in a new one in the terminal
@@ -31,8 +41,10 @@ export type AddAccountVia = 'import' | 'login' | 'auto';
 
 export type WebviewMsg =
   | { type: 'ready' }
-  | { type: 'send'; text: string }
+  | { type: 'send'; text: string; attachments?: Draft[] }
   | { type: 'stop' }
+  // @ mention: fuzzy search over workspace files, answered with a `files` message
+  | { type: 'searchFiles'; query: string; seq: number }
   | { type: 'permission'; blockId: string; optionId: string }
   | { type: 'setMode'; id: string }
   | { type: 'setConfig'; configId: string; value: string }

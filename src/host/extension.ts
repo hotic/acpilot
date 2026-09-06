@@ -10,6 +10,7 @@ import { DevinAccountProvider } from './accounts/devin';
 import { SessionManager } from './SessionManager';
 import { TranscriptStore } from './store/TranscriptStore';
 import { WebviewBridge } from './bridge';
+import { WorkspaceFiles } from './files';
 
 const VIEW_ID = 'acpilot.chat';
 
@@ -43,9 +44,10 @@ export async function activate(context: vscode.ExtensionContext) {
     toast,
   });
 
+  const sessionsDir = join(storage, 'sessions');
   const manager = new SessionManager({
     registry: activeRegistry,
-    store: new TranscriptStore(join(storage, 'sessions')),
+    store: new TranscriptStore(sessionsDir),
     log: line => log.info(line),
     cwd: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? homedir(),
     defaultAgent: () => cfg().get<string>('defaultAgent') ?? 'grok',
@@ -62,8 +64,9 @@ export async function activate(context: vscode.ExtensionContext) {
   await manager.init();
 
   const bridges = new Set<WebviewBridge>();
+  const env = { extensionUri: context.extensionUri, appearance, sessionsDir, files: new WorkspaceFiles(), log: (line: string) => log.info(line) };
   const attach = (webview: vscode.Webview, host: 'sidebar' | 'editor') => {
-    const b = new WebviewBridge(webview, host, manager, context.extensionUri, appearance);
+    const b = new WebviewBridge(webview, host, manager, env);
     bridges.add(b);
     return b;
   };

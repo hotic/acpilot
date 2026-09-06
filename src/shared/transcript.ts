@@ -147,9 +147,24 @@ export interface CompactionBlock {
 
 export type AgentBlock = ThoughtBlock | PlanBlock | ToolCallBlock | TextBlock | PermissionBlock | CompactionBlock;
 
+// What the composer attaches to a prompt before the host has seen it: images and dropped text carry their payload (base64 / text),
+// files carry a URI (Explorer drag / @ mention) that the host resolves — image files become `image`, everything else stays a link
+export type Draft =
+  | { kind: 'image'; mimeType: string; data: string; name?: string }
+  | { kind: 'text'; name: string; text: string }
+  | { kind: 'file'; uri: string; name: string };
+
+// Attachment as persisted on a user turn. Images and dropped text live in the session's blob directory (the turn keeps only the file name,
+// the webview loads it via blobBase; absent when the write failed — the prompt still went out, only the preview is gone); files are paths the agent reads by itself (sent as resource_link)
+export type Attachment =
+  | { kind: 'image'; blob?: string; mimeType: string; name?: string }
+  | { kind: 'text'; blob?: string; name: string }
+  | { kind: 'file'; uri: string; name: string };
+
 export interface UserTurn {
   role: 'user';
   text: string;
+  attachments?: Attachment[];
   // Sent automatically by ACPilot (/compact over threshold); rendered as a note line instead of a bubble
   auto?: boolean;
 }
