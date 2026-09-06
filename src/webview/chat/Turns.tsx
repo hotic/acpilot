@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { Check, ChevronRight, Compass, FoldVertical, Layers, X } from 'lucide-react';
+import { Check, ChevronRight, Compass, FoldVertical, Layers, TriangleAlert, X } from 'lucide-react';
 import type { AgentBlock, AgentTurn, CompactionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, useLab, type Lab } from '../appearance';
 import { Row, RowTarget } from '../ui/Row';
@@ -67,7 +67,38 @@ export function AgentMessage({ turn, index, running, onPermission }: { turn: Age
           <Activity label={turn.activity!.label} />
         </div>
       )}
+      {!running && outcomeOf(turn) && (
+        <div className="enter" style={{ '--i': Math.min(i++, 12) } as CSSProperties}>
+          <Outcome turn={turn} />
+        </div>
+      )}
     </div>
+  );
+}
+
+// How the turn ended, when that is worth a line: it stopped short (error / refusal / a limit / stopped by hand), or it ended normally with nothing to show.
+// Nothing for a normal end with content, nor for turns persisted before `stop` existed
+function outcomeOf(turn: AgentTurn): string | undefined {
+  switch (turn.stop) {
+    case 'error': return '请求失败';
+    case 'refusal': return '模型拒绝了这次请求';
+    case 'max_tokens': return '回复被截断：达到单轮输出上限';
+    case 'max_turn_requests': return '达到单轮请求次数上限';
+    case 'cancelled': return '已停止';
+    default: return turn.stop === 'end_turn' && turn.blocks.length === 0 ? '没有回复' : undefined;
+  }
+}
+
+// One faint row closing the message: a warning glyph for the short stops, none for "stopped" / "no reply"; the error's own words ride along as the target
+function Outcome({ turn }: { turn: AgentTurn }) {
+  const { toolLine } = useAppearance();
+  const warn = turn.stop !== 'cancelled' && turn.stop !== 'end_turn';
+  const lead = toolLine === 'text' || !warn ? undefined : <TriangleAlert className="size-icon" strokeWidth={1.5} />;
+  return (
+    <Row lead={lead} className="text-fg-3">
+      <span>{outcomeOf(turn)}</span>
+      {turn.stop === 'error' && turn.error?.message && <RowTarget className="text-fg-3">{turn.error.message}</RowTarget>}
+    </Row>
   );
 }
 

@@ -10,6 +10,8 @@ import { AgentMessage, UserMessage } from './Turns';
 import { Composer } from './Composer';
 import { Notice } from './Notice';
 import { Toast } from './Toast';
+import { Alert, isShortStop } from './Alert';
+import { PlanBar } from './PlanBar';
 
 // Every action the webview sends to the host; in the LAB a fake host implements these, the real build swaps in postMessage
 export interface ShellHandlers {
@@ -34,6 +36,8 @@ export interface ShellHandlers {
   compact: () => void;
   login: (methodId?: string) => void;
   retry: () => void;
+  // Send the last user turn again after its agent turn ended in error
+  retryTurn: () => void;
 }
 
 export interface ShellProps {
@@ -82,6 +86,12 @@ export function Shell(p: ShellProps) {
       setDeleted({ id, title });
     },
   }), [on, p.sessions]);
+  // The card for a turn that stopped short stands until dismissed or until the transcript moves on; the key ties the dismissal to that one turn.
+  // While the session isn't ready the Notice has the floor (a login problem after a failed prompt is its business)
+  const lastTurn = p.turns[p.turns.length - 1];
+  const alertKey = `${p.activeSessionId}:${p.turns.length}`;
+  const [dismissedAlert, setDismissedAlert] = useState<string>();
+  const alertTurn = !p.running && p.status === 'ready' && lastTurn?.role === 'agent' && isShortStop(lastTurn) && dismissedAlert !== alertKey ? lastTurn : undefined;
   const sessionsPanel = (
     <SessionList
       sessions={p.sessions}
@@ -138,6 +148,15 @@ export function Shell(p: ShellProps) {
               )}
             </div>
             <div className={cn('shrink-0', wide && a.composer === 'island' && 'mx-auto w-full max-w-[calc(720px+2*var(--pad))]')}>
+              <PlanBar key={p.activeSessionId} turns={p.turns} running={p.running} />
+              {alertTurn && (
+                <Alert
+                  turn={alertTurn}
+                  onRetry={on.retryTurn}
+                  onContinue={() => on.send('继续')}
+                  onDismiss={() => setDismissedAlert(alertKey)}
+                />
+              )}
               <Notice
                 status={p.status} error={p.error} agent={p.agent} authMethods={p.authMethods}
                 accounts={p.accounts?.filter(x => x.agent === p.agent.id)} accountId={p.accountId}

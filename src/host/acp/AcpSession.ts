@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import * as acp from '@agentclientprotocol/sdk';
-import type { AgentId, AuthMethodInfo, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, Usage } from '@shared/transcript';
+import type { AgentId, AuthMethodInfo, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, TurnError, Usage } from '@shared/transcript';
 import type { AgentRegistry } from './AgentRegistry';
 import { AgentProcess } from './AgentProcess';
-import { activityOf, applyUpdate, endTurn, initControls, applyConfigOptions, type NormalizeState } from './normalize';
+import { activityOf, applyUpdate, endTurn, failTurn, initControls, applyConfigOptions, type NormalizeState } from './normalize';
 
 // The persisted session record: view fields plus the acpSessionId needed for resuming
 export interface SessionRecord {
@@ -300,10 +300,11 @@ export class AcpSession {
       stop = r.stopReason;
       this.settle(stop);
     } catch (e) {
+      // The error stays on the turn (the webview shows it as a card, history keeps the row); the session itself is still usable, so status stays ready —
+      // except when the peer says the credential is gone, which is the Notice's business
       this.log(`prompt 失败：${msg(e)}`);
-      this.settle('cancelled');
+      this.settle('cancelled', turnErrorOf(e));
       if (isAuth(e)) this.status = 'auth_required';
-      else this.error = msg(e);
     }
     // A hand-typed /compact counts as a compaction too; likewise record the usage right after it
     if (auto || text.trim() === '/compact') this.compactedAt = this.state.usage?.used ?? 0;
@@ -331,12 +332,23 @@ export class AcpSession {
     return this.compactedAt === undefined || used >= this.compactedAt + policy.atTokens / 10;
   }
 
-  private settle(stop: acp.StopReason) {
-    endTurn(this.state, stop);
+  private settle(stop: acp.StopReason, error?: TurnError) {
+    if (error) failTurn(this.state, error); else endTurn(this.state, stop);
     for (const p of this.pending.values()) p.resolve({ outcome: { outcome: 'cancelled' } });
     this.pending.clear();
     this.removePermissionBlocks();
     this.running = false;
+  }
+
+  // Send the last user turn again after its agent turn stopped short (error / refusal / limits): both turns leave the transcript
+  async retryTurn(): Promise<void> {
+    if (this.running || this.status !== 'ready') return;
+    const turns = this.state.turns;
+    const agent = turns[turns.length - 1], user = turns[turns.length - 2];
+    if (agent?.role !== 'agent' || user?.role !== 'user' || user.auto) return;
+    if (!agent.stop || agent.stop === 'end_turn' || agent.stop === 'cancelled') return;
+    turns.splice(-2, 2);
+    await this.prompt(user.text);
   }
 
   async cancel(): Promise<void> {
@@ -483,6 +495,22 @@ function bestAllow(options: acp.PermissionOption[]): string {
 function isAuth(e: unknown): boolean {
   if (e instanceof AccountAuthError) return true;
   return e instanceof acp.RequestError ? e.code === -32000 : /auth/i.test(msg(e)) && /required|login|unauthor/i.test(msg(e));
+}
+
+// What a failed session/prompt leaves on the turn: the JSON-RPC message and code, plus Devin's typed cause (errorKind / retryable) when present.
+// Some agents put the readable reason only in data (Devin: data.message or data.detail), so that is preferred over a generic top-level message
+function turnErrorOf(e: unknown): TurnError {
+  if (!(e instanceof acp.RequestError)) return { message: msg(e) };
+  const data = (e.data && typeof e.data === 'object' ? e.data : {}) as Record<string, unknown>;
+  const detail = [data.message, data.detail, data.reason].find((v): v is string => typeof v === 'string' && v.trim().length > 0);
+  const kind = data['cognition.ai/errorKind'];
+  const retryable = data['cognition.ai/retryable'];
+  return {
+    message: detail && detail !== e.message ? `${e.message}: ${detail}` : e.message,
+    code: e.code,
+    ...(typeof kind === 'string' ? { kind } : {}),
+    ...(typeof retryable === 'boolean' ? { retryable } : {}),
+  };
 }
 
 const AUTH_WORDS = /auth|credential|login|logged|unauthor/i;

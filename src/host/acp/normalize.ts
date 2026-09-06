@@ -1,7 +1,7 @@
 import { basename } from 'node:path';
 import type * as acp from '@agentclientprotocol/sdk';
 import type {
-  AgentBlock, AgentTurn, CompactionBlock, CompactionStatus, ConfigControl, DiffLine, PlanStatus, SessionControls, SessionOption, SlashCommand, ToolCallBlock, ToolContent, ToolKind, Turn, Usage,
+  AgentBlock, AgentTurn, CompactionBlock, CompactionStatus, ConfigControl, DiffLine, PlanPriority, PlanStatus, SessionControls, SessionOption, SlashCommand, ToolCallBlock, ToolContent, ToolKind, Turn, TurnError, Usage,
 } from '@shared/transcript';
 
 // Normalize ACP session/update into transcript blocks. Pure functions + in-place mutation of the Turn array; AcpSession pushes to the webview
@@ -99,7 +99,7 @@ export function applyUpdate(s: NormalizeState, u: acp.SessionUpdate): boolean {
     case 'plan': {
       closeUserTurn(s);
       const t = currentAgentTurn(s);
-      const entries = u.entries.map(e => ({ title: e.content, status: e.status as PlanStatus }));
+      const entries = u.entries.map(e => ({ title: e.content, status: e.status as PlanStatus, priority: e.priority as PlanPriority }));
       const plan = t.blocks.find(b => b.type === 'plan');
       if (plan) plan.entries = entries;
       else { sealStreaming(s, t); t.blocks.push({ type: 'plan', entries }); }
@@ -158,15 +158,25 @@ function closeUserTurn(s: NormalizeState) {
   if (last?.role === 'user') delete last._open;
 }
 
-// Turn ended: seal all streaming blocks; tools still running are marked per stopReason
+// Turn ended: seal all streaming blocks, record how it ended; tools still running are marked per stopReason
 export function endTurn(s: NormalizeState, stopReason: acp.StopReason) {
   const t = s.turns[s.turns.length - 1];
   if (t?.role !== 'agent') return;
   sealStreaming(s, t);
   t.activity = undefined;
+  t.stop = stopReason;
   for (const b of t.blocks) {
     if (b.type === 'tool_call' && (b.status === 'in_progress' || b.status === 'pending')) b.status = stopReason === 'cancelled' ? 'cancelled' : 'failed';
   }
+}
+
+// session/prompt itself failed: wrap up like a cancellation (nothing more is coming) and keep the error on the turn so the UI can show it
+export function failTurn(s: NormalizeState, error: TurnError) {
+  endTurn(s, 'cancelled');
+  const t = s.turns[s.turns.length - 1];
+  if (t?.role !== 'agent') return;
+  t.stop = 'error';
+  t.error = error;
 }
 
 // Build the controls from the session/new / resume response

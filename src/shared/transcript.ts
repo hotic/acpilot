@@ -105,10 +105,18 @@ export interface ThoughtBlock {
 }
 
 export type PlanStatus = 'pending' | 'in_progress' | 'completed';
+export type PlanPriority = 'high' | 'medium' | 'low';
+
+export interface PlanEntry {
+  title: string;
+  status: PlanStatus;
+  // ACP PlanEntry.priority; absent on entries persisted before it was kept
+  priority?: PlanPriority;
+}
 
 export interface PlanBlock {
   type: 'plan';
-  entries: { title: string; status: PlanStatus }[];
+  entries: PlanEntry[];
 }
 
 export interface TextBlock {
@@ -146,11 +154,27 @@ export interface UserTurn {
   auto?: boolean;
 }
 
+// How an agent turn ended. `end_turn` and `cancelled` are the normal outcomes; the rest stopped the turn short and are shown to the user:
+// the ACP stopReasons max_tokens / max_turn_requests / refusal, plus `error` when session/prompt itself failed (details in AgentTurn.error)
+export type TurnStop = 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled' | 'error';
+
+export interface TurnError {
+  message: string;
+  // JSON-RPC error code when the failure was a protocol error
+  code?: number;
+  // The vendor's error kind (Devin: data['cognition.ai/errorKind']) and whether it says the same request may succeed if retried
+  kind?: string;
+  retryable?: boolean;
+}
+
 export interface AgentTurn {
   role: 'agent';
   blocks: AgentBlock[];
   // What it's currently doing (inferred from usage and tool states); empty when the turn ends
   activity?: { kind: ToolKind; label: string };
+  // How the turn ended; absent while it runs (and on turns persisted before this field existed)
+  stop?: TurnStop;
+  error?: TurnError;
 }
 
 export type Turn = UserTurn | AgentTurn;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyUpdate, diffLines, emptyState, endTurn } from '../src/host/acp/normalize';
+import { applyUpdate, diffLines, emptyState, endTurn, failTurn } from '../src/host/acp/normalize';
 
 describe('diffLines', () => {
   it('LCS line-level diff, keeping only context near changes', () => {
@@ -38,13 +38,42 @@ describe('applyUpdate', () => {
     expect(t.blocks[0]).toMatchObject({ type: 'tool_call', id: 'x', verb: '运行', target: 'ls -la', targetMono: true, status: 'in_progress' });
   });
 
-  it('endTurn: cancelled marks running tools cancelled, the rest failed', () => {
+  it('endTurn: cancelled marks running tools cancelled, the rest failed; the stop reason lands on the turn', () => {
     const s = emptyState();
     applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'a', title: 't', status: 'in_progress' });
     endTurn(s, 'cancelled');
     const t = s.turns[0];
     if (t?.role !== 'agent') throw new Error();
     expect(t.blocks[0]).toMatchObject({ status: 'cancelled' });
+    expect(t.stop).toBe('cancelled');
+    applyUpdate(s, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'partial' } });
+    endTurn(s, 'max_tokens');
+    expect(t.stop).toBe('max_tokens');
+    expect(t.blocks[1]).toMatchObject({ type: 'text', streaming: false });
+  });
+
+  it('failTurn: seals the turn like a cancellation and keeps the error on it', () => {
+    const s = emptyState();
+    applyUpdate(s, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'hm' } });
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'a', title: 't', status: 'in_progress' });
+    failTurn(s, { message: 'Upstream error', code: -32603, kind: 'upstream_error', retryable: true });
+    const t = s.turns[0];
+    if (t?.role !== 'agent') throw new Error();
+    expect(t.stop).toBe('error');
+    expect(t.error).toEqual({ message: 'Upstream error', code: -32603, kind: 'upstream_error', retryable: true });
+    expect(t.activity).toBeUndefined();
+    expect(t.blocks[0]).toMatchObject({ type: 'thought', streaming: false });
+    expect(t.blocks[1]).toMatchObject({ status: 'cancelled' });
+  });
+
+  it('plan: entries keep their priority, a later plan replaces the whole list within the turn', () => {
+    const s = emptyState();
+    applyUpdate(s, { sessionUpdate: 'plan', entries: [{ content: 'a', priority: 'high', status: 'in_progress' }, { content: 'b', priority: 'low', status: 'pending' }] });
+    applyUpdate(s, { sessionUpdate: 'plan', entries: [{ content: 'a', priority: 'high', status: 'completed' }, { content: 'b', priority: 'low', status: 'in_progress' }] });
+    const t = s.turns[0];
+    if (t?.role !== 'agent') throw new Error();
+    expect(t.blocks).toHaveLength(1);
+    expect(t.blocks[0]).toEqual({ type: 'plan', entries: [{ title: 'a', status: 'completed', priority: 'high' }, { title: 'b', status: 'in_progress', priority: 'low' }] });
   });
 
   it('configOptions: every select becomes a control, groups flattened, sorted by category, boolean hidden, category=mode promoted to modes', () => {

@@ -3,7 +3,9 @@ import * as acp from '@agentclientprotocol/sdk';
 
 // Fake ACP agent: runs in a child process, plays different scripts based on the prompt text, feeding events to the AcpSession tests
 // Scripts: default → thought + text; "tool" → tool call + permission request; "slow" → streams slowly, waits for cancel; "auth" → session/new fails with -32000;
-// "big" → reports a very large usage; "/compact" → compaction_update in_progress → completed, usage drops
+// "big" → reports a very large usage; "/compact" → compaction_update in_progress → completed, usage drops;
+// "fail" → session/prompt rejects with a typed upstream error the way Devin does (once: the same prompt succeeds when sent again);
+// "refuse" → stopReason refusal with no output; "truncate" → some text, then stopReason max_tokens
 // Resume: when resume doesn't know the sessionId, a cwd containing "gone" mimics Devin's session_not_found, otherwise reports unknown session
 // Login: when cwd contains "needs-auth", session/new requires authenticate first; authenticate validates _meta.api_key the way Devin does (only accepts good-key)
 
@@ -60,6 +62,12 @@ const app = acp.agent({ name: 'fake-agent' })
     const send = (update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId: sid, update });
     cancelled.delete(sid);
 
+    // Typed upstream failure, once per distinct prompt text, before anything is streamed — the retry of the same prompt then runs the normal script
+    if (text.includes('fail') && !failed.has(text)) {
+      failed.add(text);
+      throw new acp.RequestError(-32603, 'Upstream error', { 'cognition.ai/errorKind': 'upstream_error', 'cognition.ai/retryable': true, detail: 'quota exhausted' });
+    }
+
     // the first compaction drops usage to 20%; afterwards "nothing left to compact" leaves usage unchanged — simulating a compaction that can't shrink
     if (text.trim() === '/compact') {
       const id = `cp${++compactions}`;
@@ -71,8 +79,16 @@ const app = acp.agent({ name: 'fake-agent' })
     }
 
     await send({ sessionUpdate: 'user_message_chunk', content: { type: 'text', text } });
+
+    if (text.includes('refuse')) return { stopReason: 'refusal' };
+
     await send({ sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'thinking ' } });
     await send({ sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'hard' } });
+
+    if (text.includes('truncate')) {
+      await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'once upon a' } });
+      return { stopReason: 'max_tokens' };
+    }
 
     if (text.includes('big')) {
       usedTokens += 400_000;
@@ -111,7 +127,7 @@ const app = acp.agent({ name: 'fake-agent' })
       return { stopReason: 'end_turn' };
     }
 
-    await send({ sessionUpdate: 'plan', entries: [{ content: 'step 1', priority: 'medium', status: 'completed' }, { content: 'step 2', priority: 'medium', status: 'in_progress' }] });
+    await send({ sessionUpdate: 'plan', entries: [{ content: 'step 1', priority: 'high', status: 'completed' }, { content: 'step 2', priority: 'medium', status: 'in_progress' }] });
     await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'hello ' } });
     await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'world' } });
     await send({ sessionUpdate: 'session_info_update', title: 'Fake title' });
@@ -121,6 +137,8 @@ const app = acp.agent({ name: 'fake-agent' })
 
 let authed = false;
 const cancelled = new Set<string>();
+// Prompts that have already failed once, so a retry of the same text goes through
+const failed = new Set<string>();
 
 // two select-type configOptions: reasoning level intentionally listed before model, verifying the client sorts by category
 const config: Record<string, string> = { model: 'm1', effort: 'high' };

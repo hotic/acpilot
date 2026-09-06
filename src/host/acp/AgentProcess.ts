@@ -4,12 +4,15 @@ import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
 import type { AgentDef } from './AgentRegistry';
 
-// What the client side has to accept: updates / permission requests / file reads & writes the agent sends on its own initiative
+// What the client side has to accept: updates / permission requests / file reads & writes / questions the agent sends on its own initiative.
+// The optional handlers double as capability switches: a handler present is advertised in initialize, an absent one answers method-not-found
 export interface ClientHandlers {
   onUpdate: (n: acp.SessionNotification) => void;
   onPermission: (req: acp.RequestPermissionRequest, signal: AbortSignal) => Promise<acp.RequestPermissionResponse>;
   onReadFile?: (req: acp.ReadTextFileRequest) => Promise<acp.ReadTextFileResponse>;
   onWriteFile?: (req: acp.WriteTextFileRequest) => Promise<void>;
+  // Form elicitation (elicitation/create with mode=form): the agent asks the user for structured input, e.g. Devin's ask_user_question
+  onElicitation?: (req: acp.CreateElicitationRequest, signal: AbortSignal) => Promise<acp.CreateElicitationResponse>;
   onStderr?: (line: string) => void;
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
 }
@@ -53,6 +56,10 @@ export class AgentProcess {
         if (!h.onWriteFile) throw acp.RequestError.methodNotFound(acp.methods.client.fs.writeTextFile);
         await h.onWriteFile(ctx.params);
         return {};
+      })
+      .onRequest(acp.methods.client.elicitation.create, ctx => {
+        if (!h.onElicitation) throw acp.RequestError.methodNotFound(acp.methods.client.elicitation.create);
+        return h.onElicitation(ctx.params, ctx.signal);
       });
     const conn = app.connect(stream);
 
@@ -66,6 +73,7 @@ export class AgentProcess {
       clientCapabilities: {
         fs: { readTextFile: !!h.onReadFile, writeTextFile: !!h.onWriteFile },
         terminal: false,
+        ...(h.onElicitation ? { elicitation: { form: {} } } : {}),
       },
     };
     const init: acp.InitializeResponse = await Promise.race([conn.agent.request(acp.methods.agent.initialize, initReq), exited]);

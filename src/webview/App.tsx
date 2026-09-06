@@ -62,6 +62,7 @@ export function App() {
     compact: () => post({ type: 'compact' }),
     login: methodId => post({ type: 'login', methodId }),
     retry: () => post({ type: 'retry' }),
+    retryTurn: () => post({ type: 'retryTurn' }),
   }), []);
 
   if (!init) return null;

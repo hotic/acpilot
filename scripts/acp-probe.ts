@@ -12,9 +12,12 @@ import type { AccountProvider } from '../src/host/accounts/types';
 // --auth: when session/new fails with -32000, call authenticate with the first authMethod (browser login will pop up) and retry; Devin's browser flow only authenticates this process, nothing is persisted
 // --api-key-env VAR: during authenticate, put the value of env var VAR into `_meta.api_key` (the field Devin recognizes), keeping the key off the command line
 // --import-local: go through the account-layer provider (devin) to read the local CLI login → look up identity → authenticate with it; same path as "Import CLI login" in the extension
+// --elicit: advertise form elicitation and print every elicitation/create the agent sends (Devin's ask_user_question goes this way), answering with the first
+//   enum option of each property (or an empty string), so the turn can finish; without the flag the request is answered method-not-found, which shows what an agent does then
 const argv = process.argv.slice(2);
 const doAuth = argv.includes('--auth');
 const importLocal = argv.includes('--import-local');
+const elicit = argv.includes('--elicit');
 const keyEnvIdx = argv.indexOf('--api-key-env');
 const apiKey = keyEnvIdx >= 0 ? process.env[argv[keyEnvIdx + 1] ?? ''] : undefined;
 const positional = argv.filter((a, i) => !a.startsWith('--') && (keyEnvIdx < 0 || i !== keyEnvIdx + 1));
@@ -44,6 +47,22 @@ const proc = await AgentProcess.spawn(def, bin, process.cwd(), {
     const allow = req.options.find(o => o.kind === 'allow_once') ?? req.options[0]!;
     return { outcome: { outcome: 'selected', optionId: allow.optionId } };
   },
+  onElicitation: elicit
+    ? async req => {
+        console.log('\n[elicitation/create]', JSON.stringify(req, null, 2));
+        // The union has a catch-all variant for future modes, so narrow on the field rather than on mode
+        if (!('requestedSchema' in req)) return { action: 'decline' };
+        const content: Record<string, unknown> = {};
+        // Devin spells the choices as oneOf [{ const, title }] (plus _meta["cognition.ai/allowOther"]), the MCP-style form as enum []
+        for (const [key, prop] of Object.entries((req.requestedSchema as acp.ElicitationSchema).properties ?? {})) {
+          const p = prop as Record<string, unknown>;
+          const oneOf = Array.isArray(p.oneOf) ? (p.oneOf[0] as Record<string, unknown> | undefined)?.const : undefined;
+          content[key] = oneOf ?? (Array.isArray(p.enum) ? p.enum[0] : p.type === 'boolean' ? true : p.type === 'number' || p.type === 'integer' ? 0 : '');
+        }
+        console.log('[elicitation/create] → accept', JSON.stringify(content));
+        return { action: 'accept', content };
+      }
+    : undefined,
   onStderr: line => console.error(`\x1b[33mstderr\x1b[0m ${line}`),
   onExit: (code, signal) => console.error(`exit code=${code} signal=${signal}`),
 });

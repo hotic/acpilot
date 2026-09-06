@@ -71,7 +71,11 @@ export class SessionManager {
   sessions(): SessionSummary[] {
     return this.index.map(s => {
       const live = this.live.get(s.id);
-      const state = live?.isRunning ? 'working' : live?.view().turns.some(t => t.role === 'agent' && t.blocks.some(b => b.type === 'permission')) ? 'waiting' : undefined;
+      const turns = live?.view().turns ?? [];
+      const last = turns[turns.length - 1];
+      const state = live?.isRunning ? 'working'
+        : turns.some(t => t.role === 'agent' && t.blocks.some(b => b.type === 'permission')) ? 'waiting'
+          : last?.role === 'agent' && last.stop === 'error' ? 'error' : undefined;
       return { ...s, state };
     });
   }
@@ -174,6 +178,7 @@ export class SessionManager {
         case 'pinOption': await this.pinOption(msg.agent, msg.configId, msg.value, msg.pinned); break;
         case 'compact': await s?.compact(); break;
         case 'retry': await s?.retry(); break;
+        case 'retryTurn': await s?.retryTurn(); break;
         case 'login': await this.login(s, msg.methodId); break;
         default: break;
       }

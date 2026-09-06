@@ -150,6 +150,49 @@ describe('AcpSession', () => {
     s.dispose();
   });
 
+  it('prompt error: the turn ends with stop=error carrying code / kind / retryable, the session stays ready; retryTurn drops both turns and sends the same prompt again', async () => {
+    const { session } = deps();
+    const s = session();
+    await s.start();
+    await s.prompt('please fail');
+    let v = s.view();
+    expect(v.status).toBe('ready');
+    expect(v.running).toBe(false);
+    expect(v.error).toBeUndefined();
+    expect(v.turns).toHaveLength(2);
+    const agent = v.turns[1]!;
+    if (agent.role !== 'agent') throw new Error();
+    expect(agent.stop).toBe('error');
+    expect(agent.error).toEqual({ message: 'Upstream error: quota exhausted', code: -32603, kind: 'upstream_error', retryable: true });
+    await s.retryTurn();
+    v = s.view();
+    expect(v.turns).toHaveLength(2);
+    expect(v.turns[0]).toEqual({ role: 'user', text: 'please fail' });
+    const again = v.turns[1]!;
+    if (again.role !== 'agent') throw new Error();
+    expect(again.stop).toBe('end_turn');
+    expect(again.blocks.some(b => b.type === 'text')).toBe(true);
+    s.dispose();
+  });
+
+  it('short stops: refusal leaves an empty turn with stop=refusal, max_tokens keeps the text and stop=max_tokens; a normal turn records end_turn', async () => {
+    const { session } = deps();
+    const s = session();
+    await s.start();
+    await s.prompt('refuse this');
+    await s.prompt('truncate this');
+    await s.prompt('hi');
+    const [, refused, , truncated, , ok] = s.view().turns;
+    if (refused?.role !== 'agent' || truncated?.role !== 'agent' || ok?.role !== 'agent') throw new Error();
+    expect(refused.stop).toBe('refusal');
+    expect(refused.blocks).toEqual([]);
+    expect(truncated.stop).toBe('max_tokens');
+    expect(truncated.blocks.at(-1)).toMatchObject({ type: 'text', markdown: 'once upon a', streaming: false });
+    expect(ok.stop).toBe('end_turn');
+    expect(ok.error).toBeUndefined();
+    s.dispose();
+  });
+
   it('cancel: text stops midway, the turn wraps up, can send again', async () => {
     const { session } = deps();
     const s = session();

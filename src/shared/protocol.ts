@@ -52,4 +52,6 @@ export type WebviewMsg =
   | { type: 'compact' }
   | { type: 'login'; methodId?: string }
   | { type: 'retry' }
+  // Send the last user turn again after its agent turn ended in error / a short stop; both turns are dropped from the transcript first
+  | { type: 'retryTurn' }
   | { type: 'openInEditor' };
