@@ -5,10 +5,9 @@ import { Card } from '../ui/Card';
 import { Chip, IconButton } from '../ui/Button';
 import { Menu, type MenuItem } from '../ui/Popover';
 import { t } from '../i18n';
-import { useLayout } from './layout';
 
-// Building blocks of the settings surface. Vertical rhythm: top bar → page switch → page (title-less in a sidebar) → Sections, each a titled Group of rows.
-// Controls sit at a row's right edge; labels and descriptions wrap on the left
+// Building blocks of the settings surface. Vertical rhythm: top bar → rail | page (title-less: the top bar names it) → SectionHeads, each stacking Sections,
+// each a labelled Group of rows. Controls sit at a row's right edge; labels and descriptions wrap on the left
 
 // The bar at the top of the surface, same anatomy as the chat Header: back at the left edge, title, one action at the right edge
 export function TopBar({ title, onBack, action }: { title: ReactNode; onBack?: () => void; action?: ReactNode }) {
@@ -30,11 +29,7 @@ export function Page({ children, className }: { children: ReactNode; className?:
   return <div className={cn('mx-auto flex w-full max-w-(--content-w) flex-col gap-pad px-page py-pad-y', className)}>{children}</div>;
 }
 
-export function PageTitle({ children }: { children: ReactNode }) {
-  return <h1 className="m-0 text-(length:--text-title) leading-(--text-title-lh) font-semibold text-fg-strong">{children}</h1>;
-}
-
-// Heading of a top-level section when several are stacked on one page (nav=stack / fold); the Section heads below sit one level under it
+// Heading of a top-level section, several of which stack on one page; the Section labels below sit one level under it
 export function SectionHead({ children, count, action, className }: { children: ReactNode; count?: number; action?: ReactNode; className?: string }) {
   return (
     <div className={cn('flex min-h-ctl items-center gap-gap', className)}>
@@ -62,49 +57,18 @@ export interface SectionProps {
   children: ReactNode;
 }
 
-// A titled group of rows. The section axis decides where the title lives: above the card as a heading with the description under it,
-// above the card as a faint label with the description as a footnote, or inside the card as its first row
+// A labelled group of rows: a faint label (and the one action) above the card, the description as a footnote under it
 export function Section({ title, desc, count, action, cards, children }: SectionProps) {
-  const { section } = useLayout();
-  const body = cards ? <div className={cn('flex flex-col gap-2', section === 'inset' && 'acp-nested p-2')}>{children}</div> : children;
-  // The action shares the title line only; the description runs the full width under it
-  const titleLine = (cls: string) => (title !== undefined || action) && (
-    <div className={cn('flex items-center gap-gap', action && 'min-h-ctl')}>
-      <span className={cn('flex min-w-0 flex-1 items-baseline gap-2', cls)}><span className="truncate">{title}</span>{count !== undefined && <Count n={count} />}</span>
-      {action}
-    </div>
-  );
-  if (section === 'inset') {
-    return (
-      <Group>
-        {(title !== undefined || desc || action) && (
-          <div className="flex min-h-[calc(var(--ctl)+var(--pad))] flex-col justify-center px-pad py-1.5">
-            {titleLine('text-2 font-medium text-fg-1')}
-            {desc && <span className="text-3 text-fg-3">{desc}</span>}
-          </div>
-        )}
-        {cards ? body : children}
-      </Group>
-    );
-  }
-  if (section === 'label') {
-    return (
-      <div className="flex flex-col gap-1.5">
-        {(title !== undefined || action) && <div className="pl-pad">{titleLine('text-3 text-fg-3')}</div>}
-        {cards ? body : <Group>{children}</Group>}
-        {desc && <p className="m-0 px-pad text-3 text-fg-3">{desc}</p>}
-      </div>
-    );
-  }
   return (
-    <div className="flex flex-col gap-2">
-      {(title !== undefined || desc || action) && (
-        <div className="flex flex-col">
-          {titleLine('text-2 font-medium text-fg-strong')}
-          {desc && <p className="m-0 text-3 text-fg-3">{desc}</p>}
+    <div className="flex flex-col gap-1.5">
+      {(title !== undefined || action) && (
+        <div className={cn('flex items-center gap-gap pl-pad', action && 'min-h-ctl')}>
+          <span className="flex min-w-0 flex-1 items-baseline gap-2 text-3 text-fg-3"><span className="truncate">{title}</span>{count !== undefined && <Count n={count} />}</span>
+          {action}
         </div>
       )}
-      {cards ? body : <Group>{children}</Group>}
+      {cards ? <div className="flex flex-col gap-2">{children}</div> : <Group>{children}</Group>}
+      {desc && <p className="m-0 px-pad text-3 text-fg-3">{desc}</p>}
     </div>
   );
 }
@@ -177,23 +141,6 @@ export function Segmented<V extends string>({ options, value, onChange, label }:
   );
 }
 
-export interface Tab<V extends string> { value: V; label: string; icon?: ReactNode; count?: number; dim?: boolean; hint?: string }
-
-// Underline tabs: a hairline under the whole strip, the selected tab's label underlined in strong ink. Scrolls sideways when the labels don't fit
-export function TabStrip<V extends string>({ tabs, value, onChange, label, className }: { tabs: Tab<V>[]; value: V; onChange: (v: V) => void; label: string; className?: string }) {
-  return (
-    <div role="tablist" aria-label={label} className={cn('acp-tabs', className)}>
-      {tabs.map(x => (
-        <button key={x.value} type="button" role="tab" aria-selected={x.value === value} data-dim={x.dim || undefined} title={x.hint} onClick={() => onChange(x.value)} className="acp-tab">
-          {x.icon && <span className="flex shrink-0 items-center [&_svg]:size-icon">{x.icon}</span>}
-          <span className="truncate">{x.label}</span>
-          {x.count !== undefined && <Count n={x.count} />}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // Dropdown select: a bordered Chip that opens the shared Menu; radio semantics, the current value gets the check
 export function Select<V extends string>({ options, value, onChange, label, className }: { options: Option<V>[]; value: V; onChange: (v: V) => void; label: string; className?: string }) {
   const cur = options.find(o => o.value === value);
@@ -247,12 +194,6 @@ export function NumberField({ value, onCommit, min, step, unit, label }: { value
       {unit && <span className="text-3 text-fg-3">{unit}</span>}
     </label>
   );
-}
-
-// Small label pill: scope (personal / project), transport, disabled …
-export function Tag({ children, tone = 'neutral', className }: { children: ReactNode; tone?: 'neutral' | 'ok' | 'warn' | 'muted'; className?: string }) {
-  const TONE = { neutral: 'bg-hover text-fg-2', ok: 'bg-hover text-ok', warn: 'bg-hover text-warn', muted: 'text-fg-3' };
-  return <span className={cn('inline-flex h-lead shrink-0 items-center whitespace-nowrap rounded-sm px-1.5 text-3', TONE[tone], className)}>{children}</span>;
 }
 
 // Status dot before a status line: ok / off
@@ -324,16 +265,8 @@ export function PathText({ path, env, onOpen, className }: { path: string; env: 
   );
 }
 
-// The file / directory a run of rows came from. As a row inside a shared card (group=pathrow) it is the underlined path;
-// as the head of its own card (group=cards) it is a plain mono path with the open button revealed on hover
-export function SourceHead({ path, env, onOpen, variant }: { path: string; env: { home: string; cwd: string }; onOpen: (path: string) => void; variant: 'pathrow' | 'cards' }) {
-  if (variant === 'pathrow') {
-    return (
-      <div className="flex min-h-row items-center px-pad pt-2 pb-0.5 text-3">
-        <PathText path={path} env={env} onOpen={onOpen} className="text-fg-3" />
-      </div>
-    );
-  }
+// The file / directory a run of rows came from, as the head row of their card: a plain mono path with the open button revealed on hover
+export function SourceHead({ path, env, onOpen }: { path: string; env: { home: string; cwd: string }; onOpen: (path: string) => void }) {
   return (
     <div className="group/row flex min-h-row items-center gap-gap px-pad py-1">
       <PathText path={path} env={env} className="text-fg-2" />

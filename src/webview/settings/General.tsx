@@ -14,7 +14,7 @@ export function General({ settings, agents, on }: { settings: SettingsView; agen
   const followUps = FOLLOW_UPS.map(f => ({ value: f, label: t(`settings.followUp.${f}` as const) }));
   return (
     <Page>
-      <Section desc={t('settings.general.desc')}>
+      <Section>
         <Field label={t('settings.language')} desc={t('settings.language.desc')}>
           <Select<Language> options={languages} value={settings.language} onChange={v => on.setSetting('language', v)} label={t('settings.language')} />
         </Field>
