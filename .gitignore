@@ -12,7 +12,9 @@ dist/
 .DS_Store
 
 # Editor
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 
 # Internal docs (not published)
 docs/
