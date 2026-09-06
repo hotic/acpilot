@@ -73,9 +73,11 @@
   --text-mono: 12px;
   --text-mono-lh: 18px;
 
-  /* Sizes: 4px grid. Row height = control height = 28; lead slot 20, icon in slot 14; icon in controls 16 */
+  /* Sizes: 4px grid. Row height = control height = 28; lead slot 20, icon in slot 14; icon in controls 16.
+     Chips (menu selectors) sit one tier below full controls, Cursor-style: snug around their text instead of filling the row */
   --row: 28px;
   --ctl: 28px;
+  --ctl-sm: 22px;
   --lead: 20px;
   --icon: 14px;
   --icon-ctl: 16px;
@@ -177,8 +179,8 @@
 }
 
 /* Appearance axes (acpilot.appearance.*): change tokens only, never structure */
-[data-density="compact"] { --row: 24px; --ctl: 24px; --pad: 12px; --pad-y: 12px; --page: 16px; --gap: 6px; --msg-gap: 12px; --hdr: 44px; --text-1-lh: 18px; }
-[data-density="airy"]    { --row: 32px; --ctl: 32px; --pad: 16px; --pad-y: 22px; --page: 24px; --gap: 12px; --msg-gap: 24px; --hdr: 60px; --text-1-lh: 22px; }
+[data-density="compact"] { --row: 24px; --ctl: 24px; --ctl-sm: 20px; --pad: 12px; --pad-y: 12px; --page: 16px; --gap: 6px; --msg-gap: 12px; --hdr: 44px; --text-1-lh: 18px; }
+[data-density="airy"]    { --row: 32px; --ctl: 32px; --ctl-sm: 26px; --pad: 16px; --pad-y: 22px; --page: 24px; --gap: 12px; --msg-gap: 24px; --hdr: 60px; --text-1-lh: 22px; }
 [data-radius="8"]  { --r-sm: 5px; --r-md: 6px; --r-lg: 8px; }
 [data-radius="16"] { --r-sm: 6px; --r-md: 10px; --r-lg: 16px; }
 [data-font="inter"] { --font: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
@@ -253,6 +255,7 @@
 
   --spacing-row: var(--row);
   --spacing-ctl: var(--ctl);
+  --spacing-ctl-sm: var(--ctl-sm);
   --spacing-lead: var(--lead);
   --spacing-icon: var(--icon);
   --spacing-icon-ctl: var(--icon-ctl);

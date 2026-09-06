@@ -50,8 +50,8 @@ export function IconButton({ className, children, ...rest }: ButtonHTMLAttribute
   );
 }
 
-// Selector that opens a menu (session title / mode / model / agent): --ctl tall, --r-md radius, truncatable text, trailing arrow.
-// Sets data-open while open to keep the pressed look.
+// Selector that opens a menu (session title / mode / model / agent): --ctl-sm tall and --r-sm radius, snug around its text like Cursor's
+// toolbar pills rather than filling the row; truncatable text, trailing arrow. Sets data-open while open to keep the pressed look.
 // Two looks (modeled on Cursor's toolbar): solid is the filled pill the eye lands on first — one per toolbar, the mode; quiet is text until hovered, for everything else.
 // Splitting the hierarchy this way keeps a long mode name from reading as "buttons crowding buttons" when it pushes its neighbours
 type ChipVariant = 'quiet' | 'solid';
@@ -79,7 +79,7 @@ export function Chip({ className, children, variant = 'quiet', caret = true, ico
   return (
     <button
       type="button"
-      className={cn('inline-flex h-ctl min-w-0 items-center gap-1 rounded-md px-2 text-3 transition-colors', CHIP[variant], className)}
+      className={cn('inline-flex h-ctl-sm min-w-0 items-center gap-1 rounded-sm px-1.5 text-3 transition-colors', CHIP[variant], className)}
       {...rest}
     >
       {icon && <span className={cn('flex shrink-0 items-center [&_svg]:size-icon', variant === 'quiet' && 'text-fg-3')}>{icon}</span>}
