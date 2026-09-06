@@ -1,0 +1,92 @@
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import * as acp from '@agentclientprotocol/sdk';
+import { AgentRegistry } from '../src/host/acp/AgentRegistry';
+import { AgentProcess } from '../src/host/acp/AgentProcess';
+import { DevinAccountProvider } from '../src/host/accounts/devin';
+import type { AccountProvider } from '../src/host/accounts/types';
+
+// Usage: pnpm probe grok [--auth] [--api-key-env VAR] [--import-local] [prompt]
+// Runs initialize + session/new against any agent, printing capabilities / authMethods / modes / configOptions; if a prompt is given, sends one turn and prints every update.
+// --auth: when session/new fails with -32000, call authenticate with the first authMethod (browser login will pop up) and retry; Devin's browser flow only authenticates this process, nothing is persisted
+// --api-key-env VAR: during authenticate, put the value of env var VAR into `_meta.api_key` (the field Devin recognizes), keeping the key off the command line
+// --import-local: go through the account-layer provider (devin) to read the local CLI login → look up identity → authenticate with it; same path as "Import CLI login" in the extension
+const argv = process.argv.slice(2);
+const doAuth = argv.includes('--auth');
+const importLocal = argv.includes('--import-local');
+const keyEnvIdx = argv.indexOf('--api-key-env');
+const apiKey = keyEnvIdx >= 0 ? process.env[argv[keyEnvIdx + 1] ?? ''] : undefined;
+const positional = argv.filter((a, i) => !a.startsWith('--') && (keyEnvIdx < 0 || i !== keyEnvIdx + 1));
+const [agentId = 'grok', ...rest] = positional;
+const promptText = rest.join(' ');
+
+const registry = new AgentRegistry();
+const def = registry.get(agentId);
+const bin = await registry.resolveBinary(agentId);
+if (!bin) { console.error(`找不到 ${def.command}`); process.exit(1); }
+console.log(`→ ${bin} ${def.args.join(' ')}`);
+
+const providers: Record<string, () => Promise<AccountProvider>> = {
+  devin: async () => new DevinAccountProvider(await mkdtemp(join(tmpdir(), 'acpilot-probe-')), async () => bin),
+};
+
+const proc = await AgentProcess.spawn(def, bin, process.cwd(), {
+  onUpdate: n => {
+    const u = n.update;
+    if (u.sessionUpdate === 'agent_message_chunk' && u.content.type === 'text') process.stdout.write(u.content.text);
+    else if (u.sessionUpdate === 'agent_thought_chunk' && u.content.type === 'text') process.stdout.write(`\x1b[2m${u.content.text}\x1b[0m`);
+    else if (u.sessionUpdate === 'available_commands_update') console.log(`\n[available_commands_update] ${u.availableCommands.map(c => `/${c.name}`).join(' ')}`);
+    else console.log(`\n[${u.sessionUpdate}]`, JSON.stringify(u, null, 0).slice(0, 600));
+  },
+  onPermission: async req => {
+    console.log('\n[permission]', req.toolCall.title, req.options.map(o => `${o.optionId}(${o.kind})`).join(' / '));
+    const allow = req.options.find(o => o.kind === 'allow_once') ?? req.options[0]!;
+    return { outcome: { outcome: 'selected', optionId: allow.optionId } };
+  },
+  onStderr: line => console.error(`\x1b[33mstderr\x1b[0m ${line}`),
+  onExit: (code, signal) => console.error(`exit code=${code} signal=${signal}`),
+});
+
+console.log('initialize →', JSON.stringify(proc.init, null, 2));
+
+// Account layer: import the local login first, then authenticate — credentials are handed over before session/new (same order as the extension)
+if (importLocal) {
+  const make = providers[agentId];
+  if (!make) { console.error(`${agentId} 不走账号层`); process.exit(1); }
+  const p = await make();
+  const draft = await p.importLocal();
+  if (!draft) { console.error('本机没有该 CLI 的登录记录'); process.exit(1); }
+  console.log(`导入本机登录 → ${draft.label}${draft.detail ? `（${draft.detail}）` : ''}，meta ${JSON.stringify(draft.meta)}`);
+  await p.authenticate!(proc, draft);
+  console.log('authenticate（账号层）ok');
+}
+
+async function newSession(): Promise<acp.NewSessionResponse> {
+  const req: acp.NewSessionRequest = { cwd: process.cwd(), mcpServers: [] };
+  try {
+    return await proc.agent.request(acp.methods.agent.session.new, req);
+  } catch (e) {
+    const method = proc.init.authMethods?.[0];
+    if (!(doAuth || apiKey) || !method || !(e instanceof acp.RequestError) || e.code !== -32000) throw e;
+    console.log(`\nsession/new 要登录，走 authenticate(${method.id}${apiKey ? ' + _meta.api_key' : ''})：${method.description ?? method.name}`);
+    const authReq: acp.AuthenticateRequest = apiKey ? { methodId: method.id, _meta: { api_key: apiKey } } : { methodId: method.id };
+    const r = await proc.agent.request(acp.methods.agent.authenticate, authReq);
+    console.log('authenticate →', JSON.stringify(r, null, 2));
+    return await proc.agent.request(acp.methods.agent.session.new, req);
+  }
+}
+
+try {
+  const s = await newSession();
+  console.log('session/new →', JSON.stringify(s, null, 2));
+  if (promptText) {
+    console.log(`\nprompt: ${promptText}\n`);
+    const r = await proc.agent.request(acp.methods.agent.session.prompt, { sessionId: s.sessionId, prompt: [{ type: 'text', text: promptText }] });
+    console.log('\nstop →', r.stopReason);
+  }
+} catch (e) {
+  console.error('session/new 失败：', e instanceof acp.RequestError ? `${e.code} ${e.message} ${JSON.stringify(e.data)}` : e);
+}
+proc.kill();
+process.exit(0);
