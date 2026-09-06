@@ -25,6 +25,8 @@ const app = acp.agent({ name: 'fake-agent' })
     if (params.cwd.includes('needs-auth') && !authed) {
       // Mimic Kimi: the reason goes to stderr as an ndjson log line, the -32000 itself carries nothing
       process.stderr.write(`${JSON.stringify({ level: 'info', msg: 'acp: auth readiness probe failed, trying the OAuth summary', error: 'provider managed:fake has no credential configured' })}\n`);
+      // Mimic Devin: the JSON-RPC layer then echoes its own error response to stderr — noise the client must not mistake for a diagnosis
+      process.stderr.write('2026-01-01T00:00:00Z WARN run_acp_server: agent_client_protocol::jsonrpc::outgoing_actor: Sending error response id=Number(1) method=session/new error=Error { code: -32000: Authentication required, message: "ACP host has not authenticated." }\n');
       throw acp.RequestError.authRequired();
     }
     const sessionId = `s${++seq}`;

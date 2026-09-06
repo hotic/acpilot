@@ -191,11 +191,15 @@ export class AcpSession {
     const info = this.proc.init.agentInfo;
     this.log(`initialize ok: protocol ${this.proc.init.protocolVersion}${info ? ` · ${info.name} ${info.version}` : ''}`);
     this.authMethods = this.proc.init.authMethods?.map(m => ({ id: m.id, name: m.name, description: m.description ?? undefined }));
-    // With an account bound, hand the credential over before opening the session; if it can't be handed over (secret gone / rejected), treat as login required
-    if (hooks && this.accountId) {
-      try { await hooks.authenticate(this.agent, this.accountId, this.proc); this.log('authenticate ok (account)'); }
-      catch (e) { throw new AccountAuthError(msg(e)); }
-    }
+    await this.handoff();
+  }
+
+  // With an account bound, hand the credential over before opening the session; if it can't be handed over (secret gone / rejected / timed out), treat as login required
+  private async handoff() {
+    const hooks = this.accountId ? this.deps.accounts : undefined;
+    if (!hooks || !this.accountId || !this.proc) return;
+    try { await hooks.authenticate(this.agent, this.accountId, this.proc); this.log('authenticate ok (account)'); }
+    catch (e) { throw new AccountAuthError(msg(e)); }
   }
 
   // Synthetic modes declared in the registry (the kind the protocol doesn't advertise); undefined when there are none
@@ -280,14 +284,18 @@ export class AcpSession {
     await this.proc.agent.request(acp.methods.agent.authenticate, { methodId: id });
   }
 
-  // Retry establishing the session (after login / after an error)
+  // Retry establishing the session (after login / after an error). An earlier account hand-off may have failed while the
+  // process stayed alive (e.g. a network timeout inside authenticate): re-hand the credential, or openSession just bounces off -32000 again
   async retry(): Promise<void> {
     if (this.proc?.alive && this.status === 'auth_required') {
       this.status = 'starting';
       this.error = undefined;
       this.authHint = undefined;
       this.deps.onChange(this);
-      try { await this.openSession(); } catch (e) { this.fail(e); }
+      try {
+        await this.handoff();
+        await this.openSession();
+      } catch (e) { this.fail(e); }
       this.touch();
       return;
     }
@@ -581,6 +589,8 @@ const AUTH_WORDS = /auth|credential|login|logged|unauthor/i;
 function authHintOf(line: string): string | undefined {
   const text = line.trim();
   if (!text) return undefined;
+  // The JSON-RPC layer's own "Sending error response" echo only repackages what the response already carries; it isn't a diagnosis
+  if (text.includes('jsonrpc::outgoing_actor')) return undefined;
   if (text.startsWith('{')) {
     try {
       const j = JSON.parse(text) as Record<string, unknown>;

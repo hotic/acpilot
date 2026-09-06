@@ -183,4 +183,29 @@ describe('account layer wired into sessions', () => {
     expect(s.view()).toMatchObject({ status: 'auth_required', error: '账号 x 的凭据不在了', accountId: 'missing' });
     s.dispose();
   });
+
+  // Regression: the account hand-off can fail transiently (Devin timed out fetching team settings right after a window reload)
+  // while the process stays alive; retry must re-hand the credential instead of bouncing session/load off -32000 forever
+  it('transient hand-off failure → auth_required with the reason; retry re-authenticates on the same process and becomes ready', async () => {
+    const registry = new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE] } });
+    let calls = 0;
+    const s = AcpSession.fresh('fake', '/tmp/acpilot-needs-auth', {
+      registry, log: () => {}, onChange: () => {}, blobs: { saveBlob: async () => ({ name: 'x', path: '/tmp/x' }), readBlob: async () => new Uint8Array() },
+      accounts: {
+        spawnEnv: async () => undefined,
+        authenticate: async (_agent, _id, proc) => {
+          calls++;
+          if (calls === 1) throw new Error('Authentication failed: Failed to fetch team settings: fetch timed out after 10000ms');
+          await proc.agent.request(acp.methods.agent.authenticate, { methodId: 'fake.login', _meta: { api_key: 'good-key' } });
+        },
+      },
+    }, 'acc1');
+    await s.start();
+    expect(s.view()).toMatchObject({ status: 'auth_required', error: 'Authentication failed: Failed to fetch team settings: fetch timed out after 10000ms' });
+    expect(s.alive).toBe(true);
+    await s.retry();
+    expect(calls).toBe(2);
+    expect(s.view()).toMatchObject({ status: 'ready', error: undefined });
+    s.dispose();
+  });
 });
