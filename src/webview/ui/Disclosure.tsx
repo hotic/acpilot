@@ -13,6 +13,7 @@ export interface DisclosureProps extends Omit<RowProps, 'as' | 'interactive' | '
   onToggle?: (open: boolean) => void;
 }
 
+// Rule: a body that is indented past the lead slot (i.e. not full width) gets a rail down that slot; full-width bodies (cards, lists) get none
 export function Disclosure({ body, open: controlled, defaultOpen = false, indent = true, onToggle, className, ...row }: DisclosureProps) {
   const [inner, setInner] = useState(defaultOpen);
   const open = controlled ?? inner;
@@ -21,7 +22,7 @@ export function Disclosure({ body, open: controlled, defaultOpen = false, indent
     <div className={cn('group flex flex-col', className)} data-open={open || undefined}>
       <Row as="button" interactive aria-expanded={open} onClick={toggle} {...row} />
       <Collapse open={open}>
-        <div className={cn('pt-1 pb-1.5', indent && row.lead !== undefined && 'pl-indent')}>{body}</div>
+        <div className={cn('pt-1 pb-1.5', indent && row.lead !== undefined && 'pl-indent rail')}>{body}</div>
       </Collapse>
     </div>
   );

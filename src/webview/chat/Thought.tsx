@@ -11,8 +11,8 @@ import { cn } from '../ui/cn';
 export function Thought({ block }: { block: ThoughtBlock }) {
   const { thought, toolLine } = useAppearance();
   const sec = useThoughtSeconds(block);
-  const lead = thought === 'orb' && block.streaming
-    ? <Orb kind="think" />
+  const lead = thought === 'orb' && (block.streaming || toolLine !== 'text')
+    ? <ThoughtLead streaming={!!block.streaming} />
     : toolLine === 'text' ? undefined : <Brain className="size-icon" strokeWidth={1.5} />;
   return (
     <Disclosure lead={lead} body={<p className="m-0 text-2 text-fg-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{block.text}</p>}>
@@ -20,6 +20,26 @@ export function Thought({ block }: { block: ThoughtBlock }) {
       {sec !== undefined && <span className="text-fg-3 tabular-nums">{sec}s</span>}
     </Disclosure>
   );
+}
+
+// Lead slot in orb mode: the Orb while streaming; when the thought ends the Orb shrinks out and the static icon grows in.
+// The outgoing Orb stays mounted until its exit animation ends (or immediately when motion is off, since animations are disabled there)
+function ThoughtLead({ streaming }: { streaming: boolean }) {
+  const { motion } = useAppearance();
+  const [orb, setOrb] = useState(streaming);
+  const [swapped, setSwapped] = useState(false);
+  useEffect(() => {
+    if (streaming) setOrb(true);
+    else if (orb) { setSwapped(true); if (motion === 'none') setOrb(false); }
+  }, [streaming, orb, motion]);
+  if (orb) {
+    return (
+      <span className={cn('flex', !streaming && 'swap-out')} onAnimationEnd={() => setOrb(false)}>
+        <Orb kind="think" paused={!streaming} />
+      </span>
+    );
+  }
+  return <Brain className={cn('size-icon', swapped && 'swap-in')} strokeWidth={1.5} />;
 }
 
 // While running, ticks one second at a time from startedAt; once done, uses the host-computed durationSec

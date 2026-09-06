@@ -14,6 +14,9 @@ export interface Appearance {
   send: 'accent' | 'icon' | 'metal';
   accent: 'brand' | 'agent' | 'vscode';
   motion: 'subtle' | 'none' | 'full';
+  // How an agent message's lines fold: codex wraps the whole run under one "took · did" row once the turn ends;
+  // cursor only folds runs of read-only actions, edits and commands stay visible
+  fold: 'codex' | 'cursor';
 }
 
 export type AxisKey = keyof Appearance;
@@ -40,6 +43,7 @@ export const AXES: AxisDef[] = [
   { key: 'send', label: '发送钮', group: 'Composer', options: [{ value: 'accent', label: '强调色' }, { value: 'icon', label: '纯图标' }, { value: 'metal', label: 'MetalFx' }] },
   { key: 'accent', label: '强调色', group: '氛围', options: [{ value: 'brand', label: '琥珀' }, { value: 'agent', label: '每 agent 一色' }, { value: 'vscode', label: '跟随 VS Code' }] },
   { key: 'motion', label: '动效', group: '氛围', options: [{ value: 'subtle', label: '克制' }, { value: 'none', label: '无' }, { value: 'full', label: '拉满' }] },
+  { key: 'fold', label: '折叠', group: '对话', options: [{ value: 'codex', label: '整段收拢' }, { value: 'cursor', label: '只收只读动作' }] },
 ];
 
 // Combo code ↔ Appearance: one option index digit per axis
@@ -56,12 +60,12 @@ export function decodeAppearance(code: string, fallback: Appearance): Appearance
   return out as unknown as Appearance;
 }
 
-// Baseline: finalized as 20110020030210
-export const BASE_APPEARANCE: Appearance = decodeAppearance('20110020030210', {
+// Baseline: finalized as 201110200302100
+export const BASE_APPEARANCE: Appearance = decodeAppearance('201110200302100', {
   density: 'airy', radius: '12', surface: 'tonal', font: 'inter',
-  userMessage: 'bubble', toolLine: 'text', thought: 'orb', sessions: 'dropdown',
+  userMessage: 'bubble', toolLine: 'icon', thought: 'orb', sessions: 'dropdown',
   composer: 'island', beam: 'full', beamColor: 'mono', send: 'metal',
-  accent: 'agent', motion: 'subtle',
+  accent: 'agent', motion: 'subtle', fold: 'codex',
 });
 
 // Builds an Appearance from a bag of setting values (acpilot.appearance.<axis>); invalid values fall back to the baseline

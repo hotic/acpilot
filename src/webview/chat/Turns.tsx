@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Check, ChevronRight, Compass, FoldVertical, Layers, TriangleAlert, X } from 'lucide-react';
 import type { AgentBlock, AgentTurn, CompactionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
-import { useAppearance, useLab, type Lab } from '../appearance';
+import { useAppearance, type Appearance } from '../appearance';
 import { Row, RowTarget } from '../ui/Row';
 import { Disclosure } from '../ui/Disclosure';
 import { Orb } from '../effects/Orb';
@@ -14,7 +14,8 @@ import { Prose } from './Prose';
 import { Permission } from './Permission';
 import { TurnAttachments } from './Attachments';
 
-// User message: color block / right-aligned bubble / plain text; ones ACPilot sends automatically (/compact) render as a note line, not a bubble
+// User message: color block / right-aligned bubble / plain text; ones ACPilot sends automatically (/compact) render as a note line, not a bubble.
+// Attachments (image thumbnails / file pills) sit above the text inside the same bubble
 export function UserMessage({ turn, index, blobUrl }: { turn: UserTurn; index: number; blobUrl?: (blob: string) => string }) {
   const { userMessage } = useAppearance();
   if (turn.auto) {
@@ -42,13 +43,12 @@ export function UserMessage({ turn, index, blobUrl }: { turn: UserTurn; index: n
 
 type OnPermission = (blockId: string, optionId: string) => void;
 
-// Agent message: consecutive "lines" (thought / plan / tool) are grouped together; prose / cards / terminal blocks each stand alone as blocks.
+// Agent message: consecutive "lines" (thought / plan / tool, commands included) are grouped together; prose / permission cards each stand alone as blocks.
 // The activity line only fills a "gap": the turn is running and this message has no in-progress tool line, streaming thought, or streaming text yet
 export function AgentMessage({ turn, index, running, onPermission }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission }) {
-  const { fold } = useLab();
-  // The codex mode folds terminal blocks into the line group too; other modes keep terminal blocks as standalone blocks
+  const { fold } = useAppearance();
   const codex = fold === 'codex';
-  const groups = groupBlocks(turn.blocks, codex);
+  const groups = groupBlocks(turn.blocks);
   let i = index;
   // While the codex mode is running, the head row of the last line group is the working label and carries the activity state, so no separate activity line is added
   const lastLines = groups[groups.length - 1]?.kind === 'lines';
@@ -123,12 +123,11 @@ function Activity({ label }: { label: string }) {
 const LINE_TYPES = new Set(['thought', 'plan', 'tool_call', 'compaction']);
 type Group = { kind: 'lines'; blocks: AgentBlock[] } | { kind: 'block'; block: AgentBlock };
 
-function groupBlocks(blocks: AgentBlock[], withExecute: boolean): Group[] {
+function groupBlocks(blocks: AgentBlock[]): Group[] {
   const out: Group[] = [];
   for (const b of blocks) {
     const last = out[out.length - 1];
-    const isLine = LINE_TYPES.has(b.type) && (withExecute || !(b.type === 'tool_call' && b.kind === 'execute'));
-    if (isLine) {
+    if (LINE_TYPES.has(b.type)) {
       if (last?.kind === 'lines') last.blocks.push(b);
       else out.push({ kind: 'lines', blocks: [b] });
     } else out.push({ kind: 'block', block: b });
@@ -136,8 +135,8 @@ function groupBlocks(blocks: AgentBlock[], withExecute: boolean): Group[] {
   return out;
 }
 
-// A group of lines: "none" lays them flat; "cursor" folds runs of finished read-only actions (read / search / fetch, ≥ 2) into one expandable row
-function Lines({ blocks, fold }: { blocks: AgentBlock[]; fold: Lab['fold'] }) {
+// A group of lines in cursor mode: runs of finished read-only actions (read / search / fetch, ≥ 2) fold into one expandable row, everything else stays flat
+function Lines({ blocks, fold }: { blocks: AgentBlock[]; fold: Appearance['fold'] }) {
   const items = fold === 'cursor' ? foldReadOnly(blocks) : blocks.map(b => ({ kind: 'one' as const, block: b }));
   return (
     <div className="flex flex-col gap-0.5">
@@ -176,7 +175,6 @@ function foldReadOnly(blocks: AgentBlock[]): LineItem[] {
 // the body isn't indented — expanded rows align vertically with the head row, and open/close alone marks the hierarchy
 function FoldRow({ icon, children, body, open, onToggle }: { icon: ReactNode; children: ReactNode; body: ReactNode; open?: boolean; onToggle?: (open: boolean) => void }) {
   const { toolLine } = useAppearance();
-  const { timeline } = useLab();
   return (
     <Disclosure
       lead={toolLine === 'text' ? undefined : icon}
@@ -184,7 +182,7 @@ function FoldRow({ icon, children, body, open, onToggle }: { icon: ReactNode; ch
       open={open}
       onToggle={onToggle}
       trailing={<ChevronRight className="size-3 transition-transform group-data-[open]:rotate-90" strokeWidth={1.75} />}
-      body={<div className={cn('flex flex-col gap-0.5', timeline && toolLine !== 'text' && 'timeline')}>{body}</div>}
+      body={<div className="flex flex-col gap-0.5">{body}</div>}
     >
       {children}
     </Disclosure>

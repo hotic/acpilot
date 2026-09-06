@@ -89,17 +89,24 @@
   /* Attachment thumbnail: square tile in the composer; sent images cap at three of these tall */
   --thumb: 56px;
 
-  /* Three radius levels: inline (inline code / progress bar) / control (button / Chip / menu item / row hover) / container (composer / card / overlay / code block / bubble) */
+  /* Three radius levels: inline (inline code / progress bar) / control (button / Chip / menu item / row hover) / container (composer / card / overlay / code block / bubble).
+     --r-xs is for tiny swatches only (legend squares) and does not follow the radius axis */
+  --r-xs: 3px;
   --r-sm: 6px;
   --r-md: 8px;
   --r-lg: 12px;
   /* Gap between an overlay and its anchor */
   --pop-gap: 4px;
+  /* Overlay widths: menus pick a tier instead of sizing to content, so neighbouring menus line up (mode → sm, agent / model / option → md, usage → lg, session list → xl) */
+  --pop-w-sm: 200px;
+  --pop-w-md: 260px;
+  --pop-w-lg: 300px;
+  --pop-w-xl: 360px;
 
   /* Max lines shown in a terminal block's output area; beyond that it scrolls inside the block */
   --term-lines: 12;
   /* Max rows shown in a menu; beyond that it scrolls inside the menu (Devin's 210 models) */
-  --pop-rows: 10;
+  --pop-rows: 8;
 
   /* Motion */
   --dur: 150ms;
@@ -238,6 +245,7 @@
   --text-mono--line-height: var(--text-mono-lh);
 
   --radius-*: initial;
+  --radius-xs: var(--r-xs);
   --radius-sm: var(--r-sm);
   --radius-md: var(--r-md);
   --radius-lg: var(--r-lg);
@@ -264,6 +272,10 @@
   --default-transition-duration: var(--dur);
   --spacing-term: calc(var(--term-lines) * var(--text-mono-lh));
   --spacing-pop: calc(var(--pop-rows) * var(--row));
+  --spacing-pop-sm: var(--pop-w-sm);
+  --spacing-pop-md: var(--pop-w-md);
+  --spacing-pop-lg: var(--pop-w-lg);
+  --spacing-pop-xl: var(--pop-w-xl);
 }
 
 /* A few base styles and motion */
@@ -320,12 +332,15 @@
   color: transparent;
   animation: acp-shimmer 2s linear infinite;
 }
-/* Timeline rail (Kimi-style): a dashed hairline down the centre of the lead-slot column, from the top of a fold's body to the last row's icon centre */
+/* Timeline rail (Kimi-style), for result lists only: a dashed hairline down the centre of the lead-slot column, from the list's top to the last row's icon centre.
+   Painted beneath the rows (isolated stacking context + negative z-index) */
 @utility timeline {
   position: relative;
+  isolation: isolate;
   &::before {
     content: '';
     position: absolute;
+    z-index: -1;
     left: calc(var(--lead) / 2);
     top: 0;
     bottom: calc(var(--row) / 2);
@@ -333,6 +348,22 @@
     pointer-events: none;
   }
 }
+/* Disclosure body rail (as in Devin): a solid hairline down the lead-slot column beside an indented, non-full-width body */
+@utility rail {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    left: calc(var(--lead) / 2);
+    top: 0;
+    bottom: 0;
+    border-left: 1px solid var(--line-strong);
+    pointer-events: none;
+  }
+}
+/* Thinking lead swaps from Orb to a static icon when the thought ends: the Orb shrinks out, the icon grows in */
+@utility swap-out { animation: acp-swap-out var(--dur-open) ease both; }
+@utility swap-in { animation: acp-swap-in var(--dur-open) ease both; }
 @utility enter {
   animation: acp-enter var(--enter-dur) cubic-bezier(0.2, 0.7, 0.2, 1) both;
   animation-delay: calc(var(--i, 0) * var(--enter-stagger));
@@ -343,12 +374,19 @@
 }
 @utility beam-wrap { display: block !important; width: 100%; }
 @utility scroll-stable { scrollbar-gutter: stable; }
+/* Lists inside overlays: a 2px thumb in a 6px gutter, still hover-only, so the bar never crowds the row text */
+@utility scroll-thin {
+  &::-webkit-scrollbar { width: 6px; height: 6px; }
+  &::-webkit-scrollbar-thumb { border-width: 2px; }
+}
 @utility term-follow { overflow-anchor: none; }
 
 @keyframes acp-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes acp-enter { from { opacity: 0; transform: translateY(var(--enter-y)); } }
 @keyframes acp-caret { to { opacity: 0; } }
 @keyframes acp-pulse { 50% { opacity: 0.3; } }
+@keyframes acp-swap-out { to { opacity: 0; transform: scale(0.5); } }
+@keyframes acp-swap-in { from { opacity: 0; transform: scale(0.5); } }
 
 @media (prefers-reduced-motion: reduce) {
   .acp-shell * { animation: none !important; transition: none !important; }

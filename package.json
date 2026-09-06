@@ -136,7 +136,9 @@
             "type": "object",
             "additionalProperties": {
               "type": "array",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             }
           }
         },
@@ -197,7 +199,7 @@
             "icon",
             "rich"
           ],
-          "default": "text",
+          "default": "icon",
           "description": "工具行：纯文字 / 加图标 / 图标 + 元信息"
         },
         "acpilot.appearance.thought": {
@@ -278,6 +280,15 @@
           ],
           "default": "subtle",
           "description": "动效强度"
+        },
+        "acpilot.appearance.fold": {
+          "type": "string",
+          "enum": [
+            "codex",
+            "cursor"
+          ],
+          "default": "codex",
+          "description": "过程行的折叠：整段收拢（轮次结束后收成一行「用时 · 干了啥」）/ 只收只读动作（编辑与命令保持可见）"
         }
       }
     }
@@ -328,5 +339,9 @@
       "@vscode/vsce-sign",
       "keytar"
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hotic/acpilot.git"
   }
 }
