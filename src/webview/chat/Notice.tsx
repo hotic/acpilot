@@ -4,6 +4,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Row } from '../ui/Row';
 import { Orb } from '../effects/Orb';
+import { t, tOr } from '../i18n';
 
 export interface NoticeProps {
   status: SessionStatus;
@@ -26,22 +27,23 @@ export interface NoticeProps {
 export function Notice({ status, error, agent, authMethods, accounts, accountId, onLogin, onRetry, onNewSession, onSelectAccount, onAddAccount }: NoticeProps) {
   if (status === 'ready') return null;
   if (status === 'starting') {
-    return <Row lead={<Orb kind="fetch" />} className="px-page"><span className="shimmer">正在连接 {agent.name}…</span></Row>;
+    return <Row lead={<Orb kind="fetch" />} className="px-page"><span className="shimmer">{t('notice.connecting', { agent: agent.name })}</span></Row>;
   }
   const withAccounts = !!agent.accounts;
   const others = (accounts ?? []).filter(a => a.id !== accountId);
+  // The protocol names sign-in methods in English; known ones get a localized name, the rest keep what the agent sent
+  const methodName = (m: AuthMethodInfo) => tOr(`notice.method.${agent.id}:${m.id}`, m.name);
   const body = status === 'auth_required'
     ? {
-        title: `需要登录 ${agent.name}`,
-        text: error ?? (withAccounts
-          ? '导入本机 CLI 已有的登录，或在终端登录一个新账号；凭据只存在本机钥匙串里'
-          : authMethods?.length ? '选一种方式登录，完成后重试' : '在终端完成登录后重试'),
+        title: t('notice.login.title', { agent: agent.name }),
+        text: error ?? (withAccounts ? t('notice.login.accounts') : authMethods?.length ? t('notice.login.methods') : t('notice.login.terminal')),
       }
     : status === 'readonly'
-      ? { title: '只读历史', text: error ?? '这个 agent 恢复不了老会话' }
+      ? { title: t('notice.readonly.title'), text: error ?? t('notice.readonly.text') }
       : status === 'closed'
-        ? { title: '会话已关闭', text: '进程已结束' }
-        : { title: '出错了', text: error ?? '未知错误' };
+        ? { title: t('notice.closed.title'), text: t('notice.closed.text') }
+        : { title: t('notice.error.title'), text: error ?? t('notice.error.unknown') };
+  // Two button tiers only: the one action to take is primary, everything else (other paths, retry) secondary
   return (
     <div className="px-page pt-2">
       <Card className="flex flex-col gap-gap p-pad">
@@ -50,18 +52,18 @@ export function Notice({ status, error, agent, authMethods, accounts, accountId,
         <div className="mt-0.5 flex flex-wrap justify-end gap-2">
           {status === 'auth_required' && withAccounts && (
             <>
-              {others.map(a => <Button key={a.id} variant="secondary" title={a.detail} onClick={() => onSelectAccount(a.id)}>用 {a.label}</Button>)}
-              <Button variant="primary" onClick={() => onAddAccount('import')}>导入 CLI 登录</Button>
-              <Button variant="secondary" onClick={() => onAddAccount('login')}>在终端登录</Button>
-              {authMethods?.map(m => <Button key={m.id} variant="secondary" title={m.description} onClick={() => onLogin(m.id)}>{m.name}（仅本次）</Button>)}
+              {others.map(a => <Button key={a.id} title={a.detail} onClick={() => onSelectAccount(a.id)}>{t('notice.useAccount', { label: a.label })}</Button>)}
+              <Button variant="primary" onClick={() => onAddAccount('import')}>{t('notice.importCli')}</Button>
+              <Button onClick={() => onAddAccount('login')}>{t('notice.terminalLogin')}</Button>
+              {authMethods?.map(m => <Button key={m.id} title={m.description} onClick={() => onLogin(m.id)}>{t('notice.onceOnly', { name: methodName(m) })}</Button>)}
             </>
           )}
           {status === 'auth_required' && !withAccounts && (authMethods?.length
-            ? authMethods.map((m, i) => <Button key={m.id} variant={i === 0 ? 'primary' : 'secondary'} title={m.description} onClick={() => onLogin(m.id)}>{m.name}</Button>)
-            : <Button variant="primary" onClick={() => onLogin()}>去登录</Button>)}
+            ? authMethods.map((m, i) => <Button key={m.id} variant={i === 0 ? 'primary' : 'secondary'} title={m.description} onClick={() => onLogin(m.id)}>{methodName(m)}</Button>)
+            : <Button variant="primary" onClick={() => onLogin()}>{t('notice.goLogin')}</Button>)}
           {status === 'readonly' || status === 'closed'
-            ? <Button variant="primary" onClick={onNewSession}>新会话继续</Button>
-            : <Button variant={status === 'auth_required' ? 'secondary' : 'primary'} onClick={onRetry}>重试</Button>}
+            ? <Button variant="primary" onClick={onNewSession}>{t('notice.continueNew')}</Button>
+            : <Button variant={status === 'auth_required' ? 'secondary' : 'primary'} onClick={onRetry}>{t('common.retry')}</Button>}
         </div>
       </Card>
     </div>
