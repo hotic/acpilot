@@ -1,5 +1,6 @@
-import type { AccountInfo, AgentId, AgentInfo, Draft, PinMap, SessionSummary, SessionView } from './transcript';
+import type { AccountInfo, AgentId, AgentInfo, Draft, SessionSummary, SessionView } from './transcript';
 import type { Appearance } from './appearance';
+import type { HiddenMap } from './settings';
 
 // Message contract between host ↔ webview; both sides trust only this file
 
@@ -10,7 +11,7 @@ export interface InitState {
   appearance: Appearance;
   agents: AgentInfo[];
   accounts: AccountInfo[];
-  pins: PinMap;
+  hidden: HiddenMap;
   sessions: SessionSummary[];
   active?: SessionView;
   // Webview URI of the sessions directory: an attachment blob is loaded from `${blobBase}/${sessionId}/${blob}`
@@ -30,7 +31,7 @@ export type HostMsg =
   | { type: 'sessions'; sessions: SessionSummary[] }
   | { type: 'session'; session: SessionView }
   | { type: 'accounts'; accounts: AccountInfo[] }
-  | { type: 'pins'; pins: PinMap }
+  | { type: 'hidden'; hidden: HiddenMap }
   | { type: 'toast'; level: 'info' | 'error'; text: string }
   // Reply to searchFiles; seq echoes the request so stale replies can be dropped
   | { type: 'files'; seq: number; files: FileHit[] };
@@ -59,8 +60,6 @@ export type WebviewMsg =
   | { type: 'selectAccount'; id: string }
   | { type: 'addAccount'; agent: AgentId; via: AddAccountVia }
   | { type: 'removeAccount'; id: string }
-  // Pin / unpin one option value of a configOption
-  | { type: 'pinOption'; agent: AgentId; configId: string; value: string; pinned: boolean }
   | { type: 'compact' }
   | { type: 'login'; methodId?: string }
   | { type: 'retry' }

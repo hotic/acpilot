@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Pin, Search, X } from 'lucide-react';
+import { Check, ChevronRight, Search, X } from 'lucide-react';
 import { cn } from './cn';
 
 // Overlays attach to the shell root (not body): tokens / data-theme live on the shell root, and portaling out would lose the theme.
@@ -9,6 +9,10 @@ export const ShellLayerContext = createContext<RefObject<HTMLDivElement | null> 
 
 type Side = 'top' | 'bottom';
 type Align = 'start' | 'end';
+// Width tiers (--pop-w-*): panels pick one instead of sizing to content, so menus opened from neighbouring chips look like one family
+export type PopoverWidth = 'sm' | 'md' | 'lg' | 'xl';
+
+const WIDTH: Record<PopoverWidth, string> = { sm: 'w-pop-sm', md: 'w-pop-md', lg: 'w-pop-lg', xl: 'w-pop-xl' };
 
 export interface PopoverApi {
   open: boolean;
@@ -19,6 +23,7 @@ export interface PopoverApi {
 export interface PopoverProps {
   side?: Side;
   align?: Align;
+  width?: PopoverWidth;
   content: (close: () => void) => ReactNode;
   children: (api: PopoverApi) => ReactNode;
   panelClassName?: string;
@@ -28,7 +33,7 @@ export interface PopoverProps {
 }
 
 // Trigger + panel. The panel position is computed from the anchor, with coordinates relative to the shell root; in the LAB the shell is CSS-zoomed, so measured width / layout width corrects for it
-export function Popover({ side = 'bottom', align = 'start', content, children, panelClassName, role = 'dialog', onOpenChange }: PopoverProps) {
+export function Popover({ side = 'bottom', align = 'start', width, content, children, panelClassName, role = 'dialog', onOpenChange }: PopoverProps) {
   const layer = useContext(ShellLayerContext);
   const anchor = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -83,6 +88,7 @@ export function Popover({ side = 'bottom', align = 'start', content, children, p
           style={style}
           className={cn(
             'absolute z-30 max-w-[calc(100%-2*var(--pad))] rounded-lg border border-line bg-bg-1 p-1 shadow-pop',
+            width && WIDTH[width],
             !style && 'invisible',
             panelClassName,
           )}
@@ -98,7 +104,10 @@ export function Popover({ side = 'bottom', align = 'start', content, children, p
 export interface MenuItem {
   id: string;
   label: string;
+  // Second line under the label; makes the whole list two-line
   description?: string;
+  // Tooltip only (title attribute): explanation that shouldn't cost a second line, e.g. a mode's description
+  hint?: string;
   // Lead mark (agent vendor mark and the like), --icon sized
   icon?: ReactNode;
   // Faint small text at the row's end (e.g. the current family's params), before the check
@@ -111,9 +120,6 @@ export interface MenuItem {
   section?: string;
   // Remove button at the row's end (shows on hover / focus); clicking it doesn't close the menu
   onRemove?: () => void;
-  // Pinning: items with onPin show a pin button on hover; pinned items show it permanently (faint), clicking again unpins. Doesn't close the menu
-  pinned?: boolean;
-  onPin?: (pinned: boolean) => void;
 }
 
 export interface MenuListProps {
@@ -123,7 +129,9 @@ export interface MenuListProps {
   searchable?: boolean;
   // Text shown when filtering leaves nothing
   empty?: string;
-  // A footer at the bottom (built with MenuFooter): note / entry on the left, one action button on the right. The options area only ever holds options; actions live here
+  // A bar above the list (built with MenuHeader): the navigation bar of a sub-page — back button, title, one action
+  header?: ReactNode;
+  // Below the list: a MenuFooter (entry / action) or a small form tied to the current selection. The options area only ever holds options; everything else lives here
   footer?: ReactNode;
 }
 
@@ -132,7 +140,7 @@ export interface MenuProps extends Omit<PopoverProps, 'content' | 'role'>, Omit<
   footer?: (close: () => void) => ReactNode;
 }
 
-// Single-select menu: each item is one --row-tall row, the selected item gets a check at its end; ↑↓ move, ⏎ selects, Esc closes
+// Single-select menu: each item is one --row-tall row, the selected item is tinted and gets a check at its end; ↑↓ move, ⏎ selects, Esc closes
 export function Menu({ items, onSelect, searchable, empty, footer, ...pop }: MenuProps) {
   return (
     <Popover
@@ -146,7 +154,7 @@ export function Menu({ items, onSelect, searchable, empty, footer, ...pop }: Men
 const ITEM_SELECTOR = 'button[role="menuitemradio"]:not(:disabled), button[role="menuitemcheckbox"]:not(:disabled)';
 
 // Menu body: optional search box + a scroll area of at most --pop-rows rows + optional footer. Custom panels (multi-view) can use it directly
-export function MenuList({ items, onSelect, searchable, empty = '没有匹配', footer }: MenuListProps) {
+export function MenuList({ items, onSelect, searchable, empty = '没有匹配', header, footer }: MenuListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [q, setQ] = useState('');
@@ -179,6 +187,7 @@ export function MenuList({ items, onSelect, searchable, empty = '没有匹配', 
   const twoLine = shown.some(it => it.description);
   return (
     <div ref={ref} onKeyDown={onKey} className="flex min-w-[160px] flex-col">
+      {header}
       {searchable && (
         <label className="mb-1 flex h-ctl shrink-0 items-center gap-2 border-b border-line px-2 text-fg-3">
           <Search className="size-icon shrink-0" strokeWidth={1.5} />
@@ -192,10 +201,10 @@ export function MenuList({ items, onSelect, searchable, empty = '没有匹配', 
           />
         </label>
       )}
-      <div className="flex max-h-pop flex-col overflow-y-auto">
+      {/* Searchable lists keep their scrollbar gutter while filtering so rows don't jump in width */}
+      <div className={cn('scroll-thin flex max-h-pop flex-col overflow-y-auto', searchable && 'scroll-stable')}>
         {shown.length === 0 && <div className="flex min-h-row items-center px-2 text-3 text-fg-3">{empty}</div>}
         {shown.map((it, i) => {
-          const trailing = it.onRemove || it.onPin;
           return (
             <div key={it.id} className="group/item relative flex shrink-0 flex-col">
               {it.section && it.section !== shown[i - 1]?.section && (
@@ -206,12 +215,15 @@ export function MenuList({ items, onSelect, searchable, empty = '没有匹配', 
                 role={it.kind === 'checkbox' ? 'menuitemcheckbox' : 'menuitemradio'}
                 aria-checked={it.checked || undefined}
                 disabled={it.disabled}
+                title={it.hint}
                 onClick={() => onSelect(it.id)}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md px-2 text-left text-2 text-fg-1 outline-none transition-colors',
-                  'hover:bg-hover focus-visible:bg-hover disabled:text-fg-3 disabled:hover:bg-transparent',
+                  // Radio: the selected row is tinted, and keeps the tint under hover / focus (hover is the lighter of the two, so it would read as un-selecting)
+                  it.checked && it.kind !== 'checkbox' ? 'bg-active text-fg-strong' : 'hover:bg-hover focus-visible:bg-hover',
+                  'disabled:text-fg-3 disabled:hover:bg-transparent',
                   twoLine ? 'py-1.5' : 'min-h-row',
-                  trailing && 'pr-8',
+                  it.onRemove && 'pr-8',
                 )}
               >
                 {it.icon && <span className="flex size-icon shrink-0 items-center justify-center [&_svg]:size-icon">{it.icon}</span>}
@@ -227,11 +239,6 @@ export function MenuList({ items, onSelect, searchable, empty = '没有匹配', 
                   <X className="size-3" strokeWidth={2} />
                 </TrailingButton>
               )}
-              {it.onPin && (
-                <TrailingButton label={`${it.pinned ? '取消钉住' : '钉住'} ${it.label}`} title={it.pinned ? '取消钉住' : '钉住'} shown={it.pinned} onClick={() => it.onPin!(!it.pinned)}>
-                  <Pin className="size-3" strokeWidth={2} fill={it.pinned ? 'currentColor' : 'none'} />
-                </TrailingButton>
-              )}
             </div>
           );
         })}
@@ -241,51 +248,74 @@ export function MenuList({ items, onSelect, searchable, empty = '没有匹配', 
   );
 }
 
-// Small action button at a row's end: only shows on hover / focus by default, always visible (faint) when shown
-function TrailingButton({ label, title, shown, onClick, children }: { label: string; title: string; shown?: boolean; onClick: () => void; children: ReactNode }) {
+// Small action button at a row's end: only shows on hover / focus
+function TrailingButton({ label, title, onClick, children }: { label: string; title: string; onClick: () => void; children: ReactNode }) {
   return (
     <button
       type="button"
       aria-label={label}
       title={title}
       onClick={e => { e.stopPropagation(); onClick(); }}
-      className={cn(
-        'absolute right-1 top-1/2 flex size-icon-ctl -translate-y-1/2 items-center justify-center rounded-sm text-fg-3 transition-opacity hover:bg-active hover:text-fg-1 focus-visible:opacity-100 group-hover/item:opacity-100 group-focus-within/item:opacity-100',
-        shown ? 'opacity-100' : 'opacity-0',
-      )}
+      className="absolute right-1 top-1/2 flex size-icon-ctl -translate-y-1/2 items-center justify-center rounded-sm text-fg-3 opacity-0 transition-opacity hover:bg-active hover:text-fg-1 focus-visible:opacity-100 group-hover/item:opacity-100 group-focus-within/item:opacity-100"
     >
       {children}
     </button>
   );
 }
 
-export interface MenuFooterProps {
-  // Left side: a note or an entry (clickable when onClick is given)
-  children: ReactNode;
-  onClick?: () => void;
-  // One action button on the right
-  action?: { label: string; icon: ReactNode; onClick: () => void };
+export interface FooterAction {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
 }
 
-// A --ctl-tall bar at the menu's bottom (modeled on Devin's agent menu): one divider between it and the options area
-export function MenuFooter({ children, onClick, action }: MenuFooterProps) {
-  const cls = 'flex h-ctl min-w-0 flex-1 items-center gap-1 px-2 text-left text-3 text-fg-3';
+export interface MenuBarProps {
+  // Square button at the left edge (back to the previous page)
+  lead?: FooterAction;
+  // Text in the middle: a title / note, or an entry into another page when onClick is given (then it gets a trailing chevron). Text only — icons go in lead / action
+  children?: ReactNode;
+  onClick?: () => void;
+  // Square button at the right edge
+  action?: FooterAction;
+}
+
+// A --ctl-tall bar at either edge of a menu, one divider between it and the options area (modeled on Devin's agent menu).
+// Layout is [lead] [text …spacer…] [action]: the text takes its natural width, so an entry highlights as a small pill rather than the whole bar.
+// Text is row-sized (text-2), not caption-sized — the bar is part of the menu, not a footnote to it
+function MenuBar({ edge, lead, children, onClick, action }: MenuBarProps & { edge: 'top' | 'bottom' }) {
+  const text = 'flex h-ctl min-w-0 items-center gap-1 px-2 text-left text-2';
   return (
-    <div className="mt-1 flex items-center gap-1 border-t border-line pt-1">
-      {onClick
-        ? <button type="button" onClick={onClick} className={cn(cls, 'rounded-md outline-none transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 [&_svg]:size-3 [&_svg]:shrink-0')}><span className="truncate">{children}</span></button>
-        : <div className={cls}><span className="truncate">{children}</span></div>}
-      {action && (
-        <button
-          type="button"
-          aria-label={action.label}
-          title={action.label}
-          onClick={action.onClick}
-          className="flex size-ctl shrink-0 items-center justify-center rounded-md text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 [&_svg]:size-icon"
-        >
-          {action.icon}
-        </button>
-      )}
+    <div className={cn('flex items-center gap-1 border-line', edge === 'top' ? 'mb-1 border-b pb-1' : 'mt-1 border-t pt-1')}>
+      {lead && <BarButton {...lead} />}
+      {children !== undefined && (onClick
+        ? (
+          <button type="button" onClick={onClick} className={cn(text, 'rounded-md text-fg-2 outline-none transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1')}>
+            <span className="truncate">{children}</span>
+            <ChevronRight className="size-3 shrink-0 text-fg-3" strokeWidth={1.75} />
+          </button>
+        )
+        : <div className={cn(text, 'text-fg-1')}><span className="truncate">{children}</span></div>)}
+      <span className="min-w-0 flex-1" />
+      {action && <BarButton {...action} />}
     </div>
+  );
+}
+
+// Navigation bar of a sub-page: back on the left, title in the middle, one action on the right
+export function MenuHeader(p: MenuBarProps) { return <MenuBar edge="top" {...p} />; }
+// Footer of a menu: a note or an entry on the left, one action on the right
+export function MenuFooter(p: MenuBarProps) { return <MenuBar edge="bottom" {...p} />; }
+
+function BarButton({ label, icon, onClick }: FooterAction) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="flex size-ctl shrink-0 items-center justify-center rounded-md text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 [&_svg]:size-icon"
+    >
+      {icon}
+    </button>
   );
 }

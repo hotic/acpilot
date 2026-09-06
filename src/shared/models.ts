@@ -69,6 +69,16 @@ export function groupModels(options: SessionOption[]): ModelFamily[] {
   return [...map.values()];
 }
 
+// Family name an option belongs to; flat lists (Grok's monolithic names) yield the name itself
+export const familyOf = (o: SessionOption): string => parseModelName(o.name).family;
+
+// Drop the options whose family is hidden; the current value always stays reachable, and a list that would hide everything shows everything
+export function visibleOptions(options: SessionOption[], hidden: string[] | undefined, current?: string): SessionOption[] {
+  if (!hidden?.length) return options;
+  const kept = options.filter(o => o.id === current || !hidden.includes(familyOf(o)));
+  return kept.length ? kept : options;
+}
+
 // Find a variant: exact match first; otherwise drop 1M → Fast → both in turn, finally fall back to the first variant at that effort
 export function findVariant(f: ModelFamily, effort: string, fast: boolean, long: boolean): ModelVariant | undefined {
   const hit = (fa: boolean, lo: boolean) => f.variants.find(v => v.effort === effort && v.fast === fa && v.long === lo);

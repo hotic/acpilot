@@ -51,29 +51,43 @@ export function IconButton({ className, children, ...rest }: ButtonHTMLAttribute
 }
 
 // Selector that opens a menu (session title / mode / model / agent): --ctl tall, --r-md radius, truncatable text, trailing arrow.
-// Sets data-open while open to keep the pressed look
+// Sets data-open while open to keep the pressed look.
+// Two looks (modeled on Cursor's toolbar): solid is the filled pill the eye lands on first — one per toolbar, the mode; quiet is text until hovered, for everything else.
+// Splitting the hierarchy this way keeps a long mode name from reading as "buttons crowding buttons" when it pushes its neighbours
+type ChipVariant = 'quiet' | 'solid';
+
+const CHIP: Record<ChipVariant, string> = {
+  quiet: 'text-fg-2 hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 data-[open]:bg-active data-[open]:text-fg-1',
+  solid: 'bg-chip text-fg-1 hover:bg-chip-hover focus-visible:bg-chip-hover data-[open]:bg-chip-hover',
+};
+
 export interface ChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   ref?: Ref<HTMLButtonElement>;
+  variant?: ChipVariant;
   caret?: boolean;
-  // Small mark before the text (e.g. agent vendor mark), --icon sized
+  // Small mark before the text (agent vendor mark / mode glyph), --icon sized
   icon?: ReactNode;
+  // Faint trailing text after the label (a model's params), truncates together with it
+  meta?: string;
+  // What survives below the sm container tier (the toolbar of a 380 sidebar has ~324px): 'icon' keeps just the icon, 'text' keeps just the label;
+  // the caret goes first either way (as in Devin's own composer, which has none). The title keeps the full name. Needs an @container ancestor
+  narrow?: 'icon' | 'text';
   children: ReactNode;
 }
 
-export function Chip({ className, children, caret = true, icon, ...rest }: ChipProps) {
+export function Chip({ className, children, variant = 'quiet', caret = true, icon, meta, narrow, ...rest }: ChipProps) {
   return (
     <button
       type="button"
-      className={cn(
-        'inline-flex h-ctl min-w-0 items-center gap-1 rounded-md px-2 text-3 text-fg-2 transition-colors',
-        'hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 data-[open]:bg-active data-[open]:text-fg-1',
-        className,
-      )}
+      className={cn('inline-flex h-ctl min-w-0 items-center gap-1 rounded-md px-2 text-3 transition-colors', CHIP[variant], className)}
       {...rest}
     >
-      {icon && <span className="flex shrink-0 items-center text-fg-3">{icon}</span>}
-      <span className="truncate">{children}</span>
-      {caret && <ChevronDown className="size-3 shrink-0 text-fg-3" strokeWidth={1.75} />}
+      {icon && <span className={cn('flex shrink-0 items-center [&_svg]:size-icon', variant === 'quiet' && 'text-fg-3')}>{icon}</span>}
+      <span className={cn('truncate', narrow === 'icon' && '@max-sm:hidden')}>
+        {children}
+        {meta && <span className="text-fg-3"> {meta}</span>}
+      </span>
+      {caret && <ChevronDown className={cn('size-3 shrink-0 text-fg-3', narrow && '@max-sm:hidden')} strokeWidth={1.75} />}
     </button>
   );
 }

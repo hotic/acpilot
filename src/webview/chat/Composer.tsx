@@ -1,18 +1,21 @@
 import { useCallback, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react';
 import { ChevronLeft, Plus, Shrink } from 'lucide-react';
-import type { AccountInfo, AgentInfo, ConfigControl, Draft, PinMap, SessionControls, Turn, Usage } from '@shared/transcript';
+import type { AccountInfo, AgentInfo, ConfigControl, Draft, SessionControls, Turn, Usage } from '@shared/transcript';
 import type { AddAccountVia, FileHit } from '@shared/protocol';
-import { findVariant, groupModels, variantLabel, type ModelFamily } from '@shared/models';
+import type { HiddenMap } from '@shared/settings';
+import { findVariant, groupModels, variantLabel, visibleOptions, type ModelFamily, type ModelVariant } from '@shared/models';
 import { useAppearance } from '../appearance';
 import { cn } from '../ui/cn';
-import { Button, Chip, IconButton } from '../ui/Button';
-import { Menu, MenuFooter, MenuList, Popover, type MenuItem } from '../ui/Popover';
+import { Chip, IconButton } from '../ui/Button';
+import { RadioPills, SwitchRow } from '../ui/Field';
+import { Menu, MenuFooter, MenuHeader, MenuList, Popover, type MenuItem } from '../ui/Popover';
 import { WorkingBeam } from '../effects/WorkingBeam';
 import { SendButton } from '../effects/SendButton';
 import { AgentMark } from './AgentMark';
 import { DraftChips } from './Attachments';
 import { collectDrafts, hasPayload } from './drafts';
 import { MentionList, mentionAt, useMentionHits } from './Mention';
+import { modeIcon } from './modeIcons';
 import { estimateUsage, type UsageSegment } from './usageBreakdown';
 
 export interface ComposerProps {
@@ -26,8 +29,8 @@ export interface ComposerProps {
   accountId?: string;
   controls: SessionControls;
   turns: Turn[];
-  // Options pinned for the current agent: configOption id → value
-  pins?: PinMap[string];
+  // Option families hidden for the current agent (settings page): configOption id → family names
+  hidden?: HiddenMap[string];
   usage?: Usage;
   canCompact?: boolean;
   // Workspace root: dropped and mentioned files are labeled relative to it
@@ -39,7 +42,6 @@ export interface ComposerProps {
   onStop: () => void;
   onSetMode: (id: string) => void;
   onSetConfig: (configId: string, value: string) => void;
-  onPinOption: (configId: string, value: string, pinned: boolean) => void;
   onSelectAgent: (id: AgentInfo['id']) => void;
   onSelectAccount: (id: string) => void;
   onAddAccount: (agent: AgentInfo['id'], via: AddAccountVia) => void;
@@ -47,8 +49,7 @@ export interface ComposerProps {
   onCompact: () => void;
 }
 
-// Only offer pinning / search once the option count passes these thresholds; short lists are scannable at a glance
-const PIN_FROM = 8;
+// Only offer search once the option count passes this threshold; short lists are scannable at a glance
 const SEARCH_FROM = 12;
 
 // Composer has three layers: attachment chips (when any), the input area, and a toolbar row below.
@@ -183,25 +184,42 @@ export function Composer(p: ComposerProps) {
         )}
       />
       {mentionOpen && <MentionList anchor={fieldRef} hits={hits} active={active} empty={span!.query.length > 0} onHover={setActive} onPick={pick} />}
-      <div className="flex items-center gap-1 px-2 pt-1 pb-2">
+      {/* The row is a container: below the sm tier (a 380 sidebar leaves ~324 here) the mode and agent chips collapse to icon + caret so the model name keeps its room —
+          the same move Cursor makes in a narrow sidebar; the editor panel is wide enough for the names */}
+      <div className="@container flex items-center gap-1 px-2 pt-1 pb-2">
         <div className="flex min-w-0 flex-1 items-center gap-1">
+          {/* Mode is the one solid chip and never truncates; single-line rows with a glyph each, the description rides along as a tooltip */}
           {p.controls.modes.length > 0 && (
             <Menu
               side="top"
-              items={p.controls.modes.map(m => ({ id: m.id, label: m.name, description: m.description, checked: m.id === p.controls.modeId }))}
+              width="sm"
+              items={p.controls.modes.map(m => {
+                const Icon = modeIcon(m);
+                return { id: m.id, label: m.name, hint: m.description, icon: <Icon strokeWidth={1.75} />, checked: m.id === p.controls.modeId };
+              })}
               onSelect={p.onSetMode}
               onOpenChange={onOpenChange}
             >
-              {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} onClick={toggle} title="模式">{mode?.name ?? '模式'}</Chip>}
+              {({ open, toggle, ref }) => {
+                const Icon = mode ? modeIcon(mode) : undefined;
+                return (
+                  <Chip
+                    ref={ref} variant="solid" className="shrink-0" narrow="icon" data-open={open || undefined} onClick={toggle}
+                    title={mode ? [mode.name, mode.description].filter(Boolean).join(' · ') : '模式'} icon={Icon && <Icon strokeWidth={1.75} />}
+                  >
+                    {mode?.name ?? '模式'}
+                  </Chip>
+                );
+              }}
             </Menu>
           )}
           {p.controls.options.map(c => (
-            <OptionControl key={c.id} control={c} pinned={p.pins?.[c.id] ?? []} onSelect={v => p.onSetConfig(c.id, v)} onPin={(v, on) => p.onPinOption(c.id, v, on)} onOpenChange={onOpenChange} />
+            <OptionControl key={c.id} control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
           ))}
         </div>
         {p.usage && <ContextRing usage={p.usage} turns={p.turns} canCompact={!!p.canCompact && !dim} onCompact={p.onCompact} onOpenChange={onOpenChange} />}
         <Popover
-          side="top" align="end" role="menu" onOpenChange={onOpenChange}
+          side="top" align="end" width="md" role="menu" onOpenChange={onOpenChange}
           content={close => (
             <AgentPanel
               agent={p.agent} agents={p.agents} accounts={p.accounts?.filter(a => a.agent === p.agent.id) ?? []} accountId={p.accountId} close={close}
@@ -211,7 +229,7 @@ export function Composer(p: ComposerProps) {
         >
           {({ open, toggle, ref }) => (
             <Chip
-              ref={ref} data-open={open || undefined} onClick={toggle} className="shrink-0"
+              ref={ref} data-open={open || undefined} onClick={toggle} className="shrink-0" narrow="icon"
               title={account ? `${p.agent.name} · ${account.label}` : p.agent.name}
               icon={<AgentMark id={p.agent.id} name={p.agent.name} />}
             >
@@ -233,105 +251,98 @@ export function Composer(p: ComposerProps) {
 
 interface OptionMenuProps {
   control: ConfigControl;
-  pinned: string[];
   onSelect: (value: string) => void;
-  onPin: (value: string, pinned: boolean) => void;
   onOpenChange: (open: boolean) => void;
 }
 
-// A single configOption: names that decompose into a "family × params" structure (Devin's 210 models) become two Chips, otherwise one flat menu
-function OptionControl(props: OptionMenuProps) {
-  const families = useMemo(() => groupModels(props.control.options), [props.control.options]);
-  return families.length < props.control.options.length ? <ModelChips {...props} families={families} /> : <OptionMenu {...props} />;
+// A single configOption, minus the families hidden in the settings: names that decompose into a "family × params" structure (Devin's 210 models)
+// get the model panel, otherwise one flat menu
+function OptionControl({ control, hidden, ...rest }: OptionMenuProps & { hidden?: string[] }) {
+  const shown = useMemo(() => ({ ...control, options: visibleOptions(control.options, hidden, control.value) }), [control, hidden]);
+  const families = useMemo(() => groupModels(shown.options), [shown.options]);
+  return families.length < shown.options.length ? <ModelControl {...rest} control={shown} families={families} /> : <OptionMenu {...rest} control={shown} />;
 }
 
-// The model Chip lists families (searchable / pinnable, pinning targets families); the params Chip lists that family's reasoning levels (radio) plus Fast / 1M (toggles) —
-// modeled on Devin's own model panel, with the right-hand detail pane flattened into the second Chip's menu. Switching families tries to keep the current params; if there's no matching tier it falls back to the family's first tier
-function ModelChips({ control: c, families, pinned, onSelect, onPin, onOpenChange }: OptionMenuProps & { families: ModelFamily[] }) {
+// One chip for the whole model choice, "family + params" with the params faint (as in Cursor's toolbar and Devin's own composer). It opens one panel:
+// the searchable family list with the current family's params as a small form underneath — Devin's detail pane, laid out vertically because
+// a 380 sidebar has no room beside the list. Picking a family closes the panel; changing params keeps it open.
+// Switching families tries to keep the current params; if there's no matching tier it falls back to the family's first tier
+function ModelControl({ control: c, families, onSelect, onOpenChange }: OptionMenuProps & { families: ModelFamily[] }) {
   const cur = families.find(f => f.variants.some(v => v.id === c.value));
   const curVar = cur?.variants.find(v => v.id === c.value);
-  const pinnable = families.length >= PIN_FROM;
-  const isPinned = (f: ModelFamily) => f.variants.some(v => pinned.includes(v.id));
-  const grouped = pinnable && families.some(isPinned);
-  const toItem = (f: ModelFamily): MenuItem => ({
-    id: f.name, label: f.name, checked: f === cur,
-    meta: f === cur && curVar && f.variants.length > 1 ? variantLabel(curVar, f) : undefined,
-    section: grouped ? (isPinned(f) ? '常用' : '全部') : undefined,
-    pinned: isPinned(f),
-    // Pinning a family pins the tier it's currently using (or its first tier if it isn't the current family); unpinning removes every pinned tier of it
-    onPin: pinnable
-      ? on => { if (on) onPin((f === cur ? curVar : undefined)?.id ?? f.variants[0]!.id, true); else for (const v of f.variants) if (pinned.includes(v.id)) onPin(v.id, false); }
-      : undefined,
-  });
-  const items = grouped ? [...families.filter(isPinned), ...families.filter(f => !isPinned(f))].map(toItem) : families.map(toItem);
-  const pickFamily = (name: string) => {
-    const f = families.find(x => x.name === name);
-    if (!f) return;
-    onSelect(((curVar && findVariant(f, curVar.effort, curVar.fast, curVar.long)) ?? f.variants[0]!).id);
-  };
-
-  const params: MenuItem[] = [];
-  if (cur && curVar) {
-    const exact = (fast: boolean, long: boolean) => cur.variants.find(v => v.effort === curVar.effort && v.fast === fast && v.long === long);
-    const both = cur.efforts.length > 1 && (cur.hasFast || cur.hasLong);
-    if (cur.efforts.length > 1) for (const e of cur.efforts) params.push({ id: `e:${e}`, label: e || 'Standard', checked: e === curVar.effort, section: both ? '推理强度' : undefined });
-    if (cur.hasFast) params.push({ id: 'fast', label: 'Fast', kind: 'checkbox', checked: curVar.fast, disabled: !exact(!curVar.fast, curVar.long), section: both ? '变体' : undefined });
-    if (cur.hasLong) params.push({ id: 'long', label: '1M', kind: 'checkbox', checked: curVar.long, disabled: !exact(curVar.fast, !curVar.long), section: both ? '变体' : undefined });
-  }
-  const onParam = (id: string) => {
-    if (!cur || !curVar) return;
-    const v = id.startsWith('e:')
-      ? findVariant(cur, id.slice(2), curVar.fast, curVar.long)
-      : cur.variants.find(x => x.effort === curVar.effort && x.fast === (id === 'fast' ? !curVar.fast : curVar.fast) && x.long === (id === 'long' ? !curVar.long : curVar.long));
-    if (v) onSelect(v.id);
-  };
-
+  // Params are worth showing when the family offers a choice, or its only variant carries a flag (a lone "Composer 2.5 Fast")
+  const meta = cur && curVar && (cur.variants.length > 1 || curVar.effort || curVar.fast || curVar.long) ? variantLabel(curVar, cur) : undefined;
   return (
-    <>
-      <Menu
-        side="top"
-        items={items}
-        searchable={families.length >= SEARCH_FROM}
-        onSelect={pickFamily}
-        onOpenChange={onOpenChange}
-        footer={pinnable && !pinned.length ? () => <MenuFooter>悬停一项，点 pin 钉为常用</MenuFooter> : undefined}
-      >
-        {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} onClick={toggle} title={c.name}>{cur?.name ?? c.options.find(o => o.id === c.value)?.name ?? c.name}</Chip>}
-      </Menu>
-      {cur && curVar && params.length > 0 && (
-        <Menu side="top" items={params} onSelect={onParam} onOpenChange={onOpenChange}>
-          {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} onClick={toggle} title="推理强度 / 变体">{variantLabel(curVar, cur)}</Chip>}
-        </Menu>
+    <Popover
+      side="top" width="md" role="menu" onOpenChange={onOpenChange}
+      content={close => <ModelPanel families={families} cur={cur} curVar={curVar} onSelect={onSelect} close={close} />}
+    >
+      {({ open, toggle, ref }) => (
+        <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={c.name} meta={meta}>
+          {cur?.name ?? c.options.find(o => o.id === c.value)?.name ?? c.name}
+        </Chip>
       )}
-    </>
+    </Popover>
   );
 }
 
-// Flat configOption menu: long lists are searchable and pinnable; pinned entries go into the pinned section at the top, the rest under the all section
-function OptionMenu({ control: c, pinned, onSelect, onPin, onOpenChange }: OptionMenuProps) {
-  const pinnable = c.options.length >= PIN_FROM;
-  const grouped = pinnable && pinned.length > 0;
-  const toItem = (o: ConfigControl['options'][number]): MenuItem => {
-    const isPinned = pinned.includes(o.id);
-    return {
-      id: o.id, label: o.name, description: o.description, checked: o.id === c.value,
-      section: grouped ? (isPinned ? '常用' : '全部') : undefined,
-      pinned: isPinned, onPin: pinnable ? on => onPin(o.id, on) : undefined,
-    };
+interface ModelPanelProps {
+  families: ModelFamily[];
+  cur?: ModelFamily;
+  curVar?: ModelVariant;
+  onSelect: (value: string) => void;
+  close: () => void;
+}
+
+function ModelPanel({ families, cur, curVar, onSelect, close }: ModelPanelProps) {
+  const items = families.map((f): MenuItem => ({ id: f.name, label: f.name, checked: f === cur }));
+  const pickFamily = (name: string) => {
+    const f = families.find(x => x.name === name);
+    if (f) onSelect(((curVar && findVariant(f, curVar.effort, curVar.fast, curVar.long)) ?? f.variants[0]!).id);
+    close();
   };
-  const items = grouped
-    ? [...c.options.filter(o => pinned.includes(o.id)), ...c.options.filter(o => !pinned.includes(o.id))].map(toItem)
-    : c.options.map(toItem);
   return (
-    <Menu
-      side="top"
+    <MenuList
       items={items}
-      searchable={c.options.length >= SEARCH_FROM}
-      onSelect={onSelect}
-      onOpenChange={onOpenChange}
-      footer={pinnable && !pinned.length ? () => <MenuFooter>悬停一项，点 pin 钉为常用</MenuFooter> : undefined}
-    >
-      {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} onClick={toggle} title={c.name}>{c.options.find(o => o.id === c.value)?.name ?? c.name}</Chip>}
+      searchable={families.length >= SEARCH_FROM}
+      onSelect={pickFamily}
+      footer={cur && curVar && cur.variants.length > 1 ? <ModelParams family={cur} variant={curVar} onSelect={onSelect} /> : undefined}
+    />
+  );
+}
+
+// Params of the current family as a small form under the list: reasoning levels as radio pills (every level visible, one click), Fast / 1M as switches.
+// A family whose only levels are Standard / Thinking gets a Thinking switch instead of two pills (what Cursor does). Every change applies immediately;
+// a flag whose combination the agent doesn't offer is disabled rather than hidden, so the shape of the form doesn't jump between variants
+function ModelParams({ family: f, variant: v, onSelect }: { family: ModelFamily; variant: ModelVariant; onSelect: (id: string) => void }) {
+  const at = (effort: string, fast: boolean, long: boolean) => f.variants.find(x => x.effort === effort && x.fast === fast && x.long === long);
+  const thinkingSwitch = f.efforts.length === 2 && f.efforts.includes('') && f.efforts.includes('Thinking');
+  // Level changes keep Fast / 1M when that tier has them, otherwise drop them (findVariant's fallback order)
+  const pickEffort = (e: string) => { const hit = findVariant(f, e, v.fast, v.long); if (hit) onSelect(hit.id); };
+  const flip = (key: 'fast' | 'long') => { const hit = at(v.effort, key === 'fast' ? !v.fast : v.fast, key === 'long' ? !v.long : v.long); if (hit) onSelect(hit.id); };
+  return (
+    <div className="mt-1 flex flex-col border-t border-line pt-1">
+      {f.efforts.length > 1 && !thinkingSwitch && (
+        <>
+          <div className="px-2 pb-0.5 text-3 text-fg-3">推理强度</div>
+          <RadioPills label="推理强度" options={f.efforts.map(e => ({ value: e, label: e || 'Standard' }))} value={v.effort} onChange={pickEffort} />
+        </>
+      )}
+      {thinkingSwitch && (
+        <SwitchRow label="Thinking" checked={v.effort === 'Thinking'} disabled={!findVariant(f, v.effort === 'Thinking' ? '' : 'Thinking', v.fast, v.long)} onChange={on => pickEffort(on ? 'Thinking' : '')} />
+      )}
+      {f.hasFast && <SwitchRow label="Fast" checked={v.fast} disabled={!at(v.effort, !v.fast, v.long)} onChange={() => flip('fast')} />}
+      {f.hasLong && <SwitchRow label="1M" checked={v.long} disabled={!at(v.effort, v.fast, !v.long)} onChange={() => flip('long')} />}
+    </div>
+  );
+}
+
+// Flat configOption menu; long lists are searchable
+function OptionMenu({ control: c, onSelect, onOpenChange }: OptionMenuProps) {
+  const items = c.options.map((o): MenuItem => ({ id: o.id, label: o.name, description: o.description, checked: o.id === c.value }));
+  return (
+    <Menu side="top" width="md" items={items} searchable={c.options.length >= SEARCH_FROM} onSelect={onSelect} onOpenChange={onOpenChange}>
+      {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={c.name}>{c.options.find(o => o.id === c.value)?.name ?? c.name}</Chip>}
     </Menu>
   );
 }
@@ -351,7 +362,7 @@ interface AgentPanelProps {
 
 // Agent menu (modeled on Devin): the options area lists agents only, one row each with vendor mark + name + check; ones not installed locally are greyed out.
 // Agents that go through the account layer show the current account in the footer (click to enter the accounts page) plus a "＋" (import from local login if never imported, otherwise go sign in a new one in the terminal).
-// Accounts page: one account per row (removable on hover); the footer becomes "back" and "＋"
+// Accounts page: a sub-page with a navigation bar on top (back · agent name · "＋"), one account per row (removable on hover), no footer
 function AgentPanel(p: AgentPanelProps) {
   const [view, setView] = useState<'agents' | 'accounts'>('agents');
   const current = p.accounts.find(a => a.id === p.accountId);
@@ -360,10 +371,10 @@ function AgentPanel(p: AgentPanelProps) {
   if (view === 'accounts') {
     return (
       <MenuList
-        items={p.accounts.map(a => ({ id: a.id, label: a.label, description: a.detail, checked: a.id === p.accountId, section: `${p.agent.name} 账号`, onRemove: () => p.onRemoveAccount(a.id) }))}
+        items={p.accounts.map(a => ({ id: a.id, label: a.label, description: a.detail, checked: a.id === p.accountId, onRemove: () => p.onRemoveAccount(a.id) }))}
         empty="还没有账号，点「＋」添加"
         onSelect={id => { p.onSelectAccount(id); p.close(); }}
-        footer={<MenuFooter onClick={() => setView('agents')} action={add}><ChevronLeft strokeWidth={1.75} />返回</MenuFooter>}
+        header={<MenuHeader lead={{ label: '返回', icon: <ChevronLeft strokeWidth={1.75} />, onClick: () => setView('agents') }} action={add}>{p.agent.name}</MenuHeader>}
       />
     );
   }
@@ -386,7 +397,7 @@ function ContextRing({ usage, turns, canCompact, onCompact, onOpenChange }: { us
   const segments = useMemo(() => estimateUsage(turns, usage), [turns, usage]);
   const r = 6, c = 2 * Math.PI * r;
   return (
-    <Popover side="top" align="end" onOpenChange={onOpenChange} content={close => <UsagePanel usage={usage} pct={pct} segments={segments} onCompact={canCompact ? () => { onCompact(); close(); } : undefined} />}>
+    <Popover side="top" align="end" width="lg" onOpenChange={onOpenChange} content={close => <UsagePanel usage={usage} pct={pct} segments={segments} onCompact={canCompact ? () => { onCompact(); close(); } : undefined} />}>
       {({ open, toggle, ref }) => (
         <button
           ref={ref}
@@ -415,25 +426,27 @@ const SEG_COLOR: Record<UsageSegment['id'], string> = {
   system: 'bg-chart-system',
 };
 
-// Breakdown panel (modeled on Cursor): a small compact button on the right of the header row; a stacked bar + legend rows, clicking anywhere selects that segment,
-// dims the others, and expands the selected row with a line of explanation. The breakdown is a local estimate, so all token counts are marked approximate
+// Breakdown panel (modeled on Cursor's context usage): title row with the compact button, one summary line (percent left, "~used / size" right), a thin stacked bar,
+// then legend rows — square swatch, label, right-aligned count. Clicking a segment or row selects it, dims the others, and expands the row with a line of explanation.
+// The breakdown is a local estimate, so the total carries a "~" and the counts are read as approximate
 function UsagePanel({ usage, pct, segments, onCompact }: { usage: Usage; pct: number; segments: UsageSegment[]; onCompact?: () => void }) {
   const [sel, setSel] = useState<UsageSegment['id']>();
   const toggle = (id: UsageSegment['id']) => setSel(s => (s === id ? undefined : id));
   return (
-    <div className="flex w-[240px] flex-col gap-2 p-2 tabular-nums">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-1 p-1 tabular-nums">
+      <div className="flex h-ctl items-center justify-between pl-2">
         <span className="text-2 font-medium text-fg-1">上下文</span>
-        <div className="flex items-center gap-1">
-          <span className="text-2 text-fg-2">{Math.round(pct * 100)}%</span>
-          {onCompact && (
-            <IconButton title="压缩上下文" aria-label="压缩上下文" onClick={onCompact}>
-              <Shrink strokeWidth={1.75} />
-            </IconButton>
-          )}
-        </div>
+        {onCompact && (
+          <IconButton title="压缩上下文" aria-label="压缩上下文" onClick={onCompact}>
+            <Shrink strokeWidth={1.75} />
+          </IconButton>
+        )}
       </div>
-      <div className="flex h-2 overflow-hidden rounded-sm bg-active">
+      <div className="flex items-baseline justify-between px-2 text-3">
+        <span className="text-fg-2">已用 {Math.round(pct * 100)}%</span>
+        <span className="text-fg-3">~{fmtTokens(usage.used)} / {fmtTokens(usage.size)}{usage.cost !== undefined ? ` · $${usage.cost.toFixed(2)}` : ''}</span>
+      </div>
+      <div className="mx-2 mb-1 flex h-1.5 overflow-hidden rounded-full bg-active">
         {segments.map(s =>
           s.tokens > 0 && (
             <button
@@ -454,21 +467,18 @@ function UsagePanel({ usage, pct, segments, onCompact }: { usage: Usage; pct: nu
               type="button"
               onClick={() => toggle(s.id)}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-hover focus-visible:bg-hover',
+                'flex min-h-row w-full items-center gap-2 rounded-md px-2 text-left text-3 transition-colors hover:bg-hover focus-visible:bg-hover',
                 sel && sel !== s.id && 'opacity-50',
               )}
             >
-              <span className={cn('size-2 shrink-0 rounded-full', SEG_COLOR[s.id])} />
-              <span className="flex-1 text-3 text-fg-2">{s.label}</span>
-              <span className="text-3 text-fg-3">约 {fmtTokens(s.tokens)}</span>
+              {/* Swatch sits in the standard lead slot so the hint below can indent to the label with pl-indent */}
+              <span className="flex w-lead shrink-0 justify-center"><span className={cn('size-2.5 rounded-xs', SEG_COLOR[s.id])} /></span>
+              <span className="flex-1 text-fg-1">{s.label}</span>
+              <span className="text-fg-2">{fmtTokens(s.tokens)}</span>
             </button>
-            {sel === s.id && <div className="px-1 pb-1 pl-indent text-3 text-fg-3">{s.hint}</div>}
+            {sel === s.id && <div className="ml-2 pl-indent pr-2 pb-1 text-3 text-fg-3">{s.hint}</div>}
           </div>
         ))}
-      </div>
-      <div className="flex justify-between text-3 text-fg-3">
-        <span>已用 {fmtTokens(usage.used)}{usage.cost !== undefined ? ` · 费用 $${usage.cost.toFixed(2)}` : ''}</span>
-        <span>上限 {fmtTokens(usage.size)}</span>
       </div>
     </div>
   );

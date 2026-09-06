@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FileHit, HostMsg, InitState, WebviewMsg } from '@shared/protocol';
-import type { AccountInfo, AgentInfo, PinMap, SessionSummary, SessionView } from '@shared/transcript';
+import type { AccountInfo, AgentInfo, SessionSummary, SessionView } from '@shared/transcript';
+import type { HiddenMap } from '@shared/settings';
 import { BASE_APPEARANCE, type Appearance } from './appearance';
 import { Shell, type ShellHandlers } from './chat/Shell';
 
@@ -32,7 +33,7 @@ export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [accounts, setAccounts] = useState<AccountInfo[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [pins, setPins] = useState<PinMap>({});
+  const [hidden, setHidden] = useState<HiddenMap>({});
   const [session, setSession] = useState<SessionView>();
   const theme = useVsCodeTheme();
 
@@ -40,12 +41,12 @@ export function App() {
     const onMsg = (e: MessageEvent<HostMsg>) => {
       const m = e.data;
       switch (m.type) {
-        case 'init': setInit(m.state); setAppearance(m.state.appearance); setAgents(m.state.agents); setSessions(m.state.sessions); setAccounts(m.state.accounts); setPins(m.state.pins); setSession(m.state.active); break;
+        case 'init': setInit(m.state); setAppearance(m.state.appearance); setAgents(m.state.agents); setSessions(m.state.sessions); setAccounts(m.state.accounts); setHidden(m.state.hidden); setSession(m.state.active); break;
         case 'appearance': setAppearance(m.appearance); break;
         case 'agents': setAgents(m.agents); break;
         case 'sessions': setSessions(m.sessions); break;
         case 'accounts': setAccounts(m.accounts); break;
-        case 'pins': setPins(m.pins); break;
+        case 'hidden': setHidden(m.hidden); break;
         case 'session': setSession(m.session); break;
         case 'files': settleFiles(m.seq, m.files); break;
         case 'toast': break;
@@ -63,7 +64,6 @@ export function App() {
     permission: (blockId, optionId) => post({ type: 'permission', blockId, optionId }),
     setMode: id => post({ type: 'setMode', id }),
     setConfig: (configId, value) => post({ type: 'setConfig', configId, value }),
-    pinOption: (agent, configId, value, pinned) => post({ type: 'pinOption', agent, configId, value, pinned }),
     selectAgent: id => post({ type: 'selectAgent', id }),
     selectSession: id => post({ type: 'selectSession', id }),
     newSession: () => post({ type: 'newSession' }),
@@ -91,7 +91,7 @@ export function App() {
       agents={agents}
       accounts={accounts}
       accountId={session?.accountId}
-      pins={pins}
+      hidden={hidden}
       title={session?.title ?? '新会话'}
       status={session?.status ?? 'starting'}
       error={session?.error}

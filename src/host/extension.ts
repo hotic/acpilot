@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import * as vscode from 'vscode';
 import { appearanceFromSettings, type Appearance, type AxisKey } from '@shared/appearance';
-import type { PinMap } from '@shared/transcript';
+import type { HiddenMap } from '@shared/settings';
 import { AgentRegistry, type CustomAgentSetting } from './acp/AgentRegistry';
 import { AccountManager } from './accounts/AccountManager';
 import { AccountStore, type SecretVault } from './accounts/AccountStore';
@@ -55,11 +55,7 @@ export async function activate(context: vscode.ExtensionContext) {
     toast,
     accounts,
     compaction: () => ({ atTokens: cfg().get<number>('compactAtTokens') ?? 300_000, auto: cfg().get<boolean>('autoCompact') ?? true }),
-    // Pinned options are written to user-level settings so they apply across workspaces
-    pins: {
-      get: () => cfg().get<PinMap>('pinnedOptions') ?? {},
-      set: pins => Promise.resolve(cfg().update('pinnedOptions', Object.keys(pins).length ? pins : undefined, vscode.ConfigurationTarget.Global)),
-    },
+    hidden: () => cfg().get<HiddenMap>('hiddenOptions') ?? {},
   });
   await manager.init();
 
@@ -93,7 +89,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('acpilot.appearance')) for (const b of bridges) b.pushAppearance();
       if (e.affectsConfiguration('acpilot.agents')) { activeRegistry = registry(); manager.setRegistry(activeRegistry); }
-      if (e.affectsConfiguration('acpilot.pinnedOptions')) manager.emitPins();
+      if (e.affectsConfiguration('acpilot.hiddenOptions')) manager.emitHidden();
     }),
     { dispose: () => { void manager.dispose(); for (const b of bridges) b.dispose(); } },
   );

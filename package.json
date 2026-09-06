@@ -5,6 +5,10 @@
   "version": "0.0.1",
   "publisher": "spark-nano",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hotic/acpilot.git"
+  },
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.28.2",
@@ -127,18 +131,16 @@
           "default": true,
           "description": "超阈值后自动发送 /compact（关掉就只能在上下文面板里手动压）"
         },
-        "acpilot.pinnedOptions": {
+        "acpilot.hiddenOptions": {
           "type": "object",
           "default": {},
           "scope": "application",
-          "markdownDescription": "钉住的选项（模型 / 推理层级…），菜单里进「常用」段：`{ \"<agent>\": { \"<configOption id>\": [\"<值>\", ...] } }`。在菜单里悬停一项点 pin 即可，一般不用手编",
+          "markdownDescription": "从菜单里隐藏的选项家族（模型 / 推理层级…）：`{ \"<agent>\": { \"<configOption id>\": [\"<家族名>\", ...] } }`。在 ACPilot 设置页的 agent 页里开关即可，一般不用手编",
           "additionalProperties": {
             "type": "object",
             "additionalProperties": {
               "type": "array",
-              "items": {
-                "type": "string"
-              }
+              "items": { "type": "string" }
             }
           }
         },
@@ -339,9 +341,5 @@
       "@vscode/vsce-sign",
       "keytar"
     ]
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/hotic/acpilot.git"
   }
 }

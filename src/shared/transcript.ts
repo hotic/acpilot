@@ -12,9 +12,6 @@ export interface AgentInfo {
   available?: boolean;
 }
 
-// Pinned options (acpilot.pinnedOptions): agent → configOption id → option values. Long lists (Devin's 210 models) are collapsed into "favorites" via this
-export type PinMap = Record<AgentId, Record<string, string[]>>;
-
 // Account: one login identity of an agent. Only metadata here; secrets live in the host's SecretStorage and never enter the webview
 export interface AccountInfo {
   id: string;

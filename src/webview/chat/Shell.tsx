@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Paperclip } from 'lucide-react';
-import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PinMap, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
+import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
+import type { HiddenMap } from '@shared/settings';
 import type { AddAccountVia, FileHit } from '@shared/protocol';
 import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
 import { ShellLayerContext } from '../ui/Popover';
@@ -23,8 +24,6 @@ export interface ShellHandlers {
   permission: (blockId: string, optionId: string) => void;
   setMode: (id: string) => void;
   setConfig: (configId: string, value: string) => void;
-  // Pin one value of a configOption, into the pinned section at the menu's top
-  pinOption: (agent: AgentInfo['id'], configId: string, value: string, pinned: boolean) => void;
   selectAgent: (id: AgentInfo['id']) => void;
   selectSession: (id: string) => void;
   newSession: () => void;
@@ -53,7 +52,8 @@ export interface ShellProps {
   // Accounts across all agents; the current session is bound to accountId
   accounts?: AccountInfo[];
   accountId?: string;
-  pins?: PinMap;
+  // Option families hidden from the composer menus (acpilot.hiddenOptions)
+  hidden?: HiddenMap;
   title: string;
   status: SessionStatus;
   error?: string;
@@ -187,7 +187,7 @@ export function Shell(p: ShellProps) {
                 accountId={p.accountId}
                 turns={p.turns}
                 controls={p.controls}
-                pins={p.pins?.[p.agent.id]}
+                hidden={p.hidden?.[p.agent.id]}
                 usage={p.usage}
                 canCompact={p.canCompact}
                 cwd={p.cwd ?? ''}
@@ -197,7 +197,6 @@ export function Shell(p: ShellProps) {
                 onStop={on.stop}
                 onSetMode={on.setMode}
                 onSetConfig={on.setConfig}
-                onPinOption={(configId, value, pinned) => on.pinOption(p.agent.id, configId, value, pinned)}
                 onSelectAgent={on.selectAgent}
                 onSelectAccount={on.selectAccount}
                 onAddAccount={on.addAccount}

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import type { PinMap } from '../src/shared/transcript';
+import type { HiddenMap } from '../src/shared/settings';
 import { AgentRegistry } from '../src/host/acp/AgentRegistry';
 import { SessionManager } from '../src/host/SessionManager';
 import { TranscriptStore } from '../src/host/store/TranscriptStore';
@@ -76,24 +76,33 @@ describe('SessionManager', () => {
     expect(m2.agents().find(a => a.id === 'ghost')?.available).toBe(false);
   });
 
-  it('pin option: writes back to pins storage and pushes pins events; unpinning to empty removes the key', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'acpilot-mgr-'));
-    let saved: PinMap = {};
-    const events: PinMap[] = [];
+  it('hidden options: read from the host as a plain copy and re-pushed on emitHidden', () => {
+    const hidden: HiddenMap = { devin: { model: ['GLM-5.2'] } };
+    const events: HiddenMap[] = [];
     const m = new SessionManager({
-      registry: new AgentRegistry(), store: new TranscriptStore(dir), log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'fake', runInTerminal: () => {}, toast: () => {},
-      pins: { get: () => saved, set: async p => { saved = p; } },
+      registry: new AgentRegistry(), store: new TranscriptStore(mkdtempSync(join(tmpdir(), 'acpilot-mgr-'))), log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'fake', runInTerminal: () => {}, toast: () => {},
+      hidden: () => hidden,
     });
-    m.subscribe(ev => { if (ev.type === 'pins') events.push(ev.pins); });
-    await m.handle({ type: 'pinOption', agent: 'devin', configId: 'model', value: 'swe-1-7-medium', pinned: true });
-    await m.handle({ type: 'pinOption', agent: 'devin', configId: 'model', value: 'claude-opus-5-high', pinned: true });
-    // a duplicate pin doesn't add a duplicate entry
-    await m.handle({ type: 'pinOption', agent: 'devin', configId: 'model', value: 'swe-1-7-medium', pinned: true });
-    expect(m.pins()).toEqual({ devin: { model: ['swe-1-7-medium', 'claude-opus-5-high'] } });
-    await m.handle({ type: 'pinOption', agent: 'devin', configId: 'model', value: 'swe-1-7-medium', pinned: false });
-    await m.handle({ type: 'pinOption', agent: 'devin', configId: 'model', value: 'claude-opus-5-high', pinned: false });
-    expect(m.pins()).toEqual({});
-    expect(events).toHaveLength(5);
-    expect(events.at(-1)).toEqual({});
+    m.subscribe(ev => { if (ev.type === 'hidden') events.push(ev.hidden); });
+    expect(m.hidden()).toEqual(hidden);
+    expect(m.hidden()).not.toBe(hidden);
+    m.emitHidden();
+    expect(events).toEqual([hidden]);
   });
+
+  it('knownControls: the configOptions of the agent’s latest session, also after the process is gone; nothing for an agent never opened', async () => {
+    const { m, dir } = manager();
+    await m.init();
+    expect(await m.knownControls('fake')).toEqual([]);
+    await m.newSession();
+    const live = await m.knownControls('fake');
+    expect(live.map(c => c.id)).toEqual(['model', 'effort']);
+    await m.dispose();
+    const m2 = new SessionManager({
+      registry: new AgentRegistry(), store: new TranscriptStore(dir), log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'fake', runInTerminal: () => {}, toast: () => {},
+    });
+    await m2.init();
+    expect((await m2.knownControls('fake')).map(c => c.id)).toEqual(['model', 'effort']);
+    expect(await m2.knownControls('ghost')).toEqual([]);
+  }, 20_000);
 });

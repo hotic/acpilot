@@ -1,5 +1,6 @@
-import type { AccountInfo, AgentId, AgentInfo, PinMap, SessionSummary, SessionView } from '@shared/transcript';
+import type { AccountInfo, AgentId, AgentInfo, ConfigControl, SessionSummary, SessionView } from '@shared/transcript';
 import type { AddAccountVia, WebviewMsg } from '@shared/protocol';
+import type { HiddenMap } from '@shared/settings';
 import { AgentRegistry } from './acp/AgentRegistry';
 import { AcpSession, type CompactionPolicy, type SessionRecord } from './acp/AcpSession';
 import type { AccountManager } from './accounts/AccountManager';
@@ -17,8 +18,8 @@ export interface ManagerDeps {
   // Account layer (optional): agents on the account layer bind an account when opening a session
   accounts?: AccountManager;
   compaction?: () => CompactionPolicy;
-  // Where pinned options live (in VS Code, the acpilot.pinnedOptions setting); if not given, nothing is persisted and pins don't survive
-  pins?: { get: () => PinMap; set: (pins: PinMap) => Promise<void> };
+  // Option families hidden from the composer menus (in VS Code, the acpilot.hiddenOptions setting, edited from the settings page)
+  hidden?: () => HiddenMap;
 }
 
 export type ManagerEvent =
@@ -26,7 +27,7 @@ export type ManagerEvent =
   | { type: 'sessions'; sessions: SessionSummary[] }
   | { type: 'session'; session: SessionView }
   | { type: 'accounts'; accounts: AccountInfo[] }
-  | { type: 'pins'; pins: PinMap };
+  | { type: 'hidden'; hidden: HiddenMap };
 
 // Master of all sessions: live processes, the summary list, the active item; every webview action enters here. No vscode import, so it stays testable
 const TRASH_TTL = 30_000;
@@ -63,10 +64,21 @@ export class SessionManager {
   accounts(): AccountInfo[] { return this.deps.accounts?.list() ?? []; }
 
   // VS Code's getConfiguration().get() returns a read-only Proxy that structuredClone / postMessage can't swallow; a JSON round-trip turns it into a plain object
-  pins(): PinMap { return JSON.parse(JSON.stringify(this.deps.pins?.get() ?? {})) as PinMap; }
+  hidden(): HiddenMap { return JSON.parse(JSON.stringify(this.deps.hidden?.() ?? {})) as HiddenMap; }
 
-  // If the setting was changed outside (user hand-edited settings.json), re-push a copy
-  emitPins() { this.emit({ type: 'pins', pins: this.pins() }); }
+  // The setting changed (settings page or a hand edit of settings.json): re-push a copy
+  emitHidden() { this.emit({ type: 'hidden', hidden: this.hidden() }); }
+
+  // The configOptions an agent offered most recently: from a live session when there is one, else from the newest stored record of that agent.
+  // This is what the settings page lists when it lets families be hidden, since options only ever come over ACP
+  async knownControls(agent: AgentId): Promise<ConfigControl[]> {
+    for (const s of this.index) {
+      if (s.agent !== agent) continue;
+      const options = this.live.get(s.id)?.view().controls.options ?? (await this.deps.store.load(s.id))?.controls?.options;
+      if (options?.length) return options;
+    }
+    return [];
+  }
 
   sessions(): SessionSummary[] {
     return this.index.map(s => {
@@ -179,7 +191,6 @@ export class SessionManager {
         case 'selectAccount': await this.selectAccount(msg.id); break;
         case 'addAccount': await this.addAccount(msg.agent, msg.via); break;
         case 'removeAccount': await this.deps.accounts?.remove(msg.id); break;
-        case 'pinOption': await this.pinOption(msg.agent, msg.configId, msg.value, msg.pinned); break;
         case 'compact': await s?.compact(); break;
         case 'retry': await s?.retry(); break;
         case 'retryTurn': await s?.retryTurn(); break;
@@ -273,18 +284,6 @@ export class SessionManager {
     if (!acc) return;
     const cur = this.current();
     if (cur?.agent === agent && (cur.view().status === 'auth_required' || !cur.accountId)) await this.newSession(agent, acc.id);
-  }
-
-  // Pin / unpin: write the whole map back to the setting, then push it to all webviews. Keys with empty arrays are cleaned up so settings.json collects no garbage
-  async pinOption(agent: AgentId, configId: string, value: string, pinned: boolean) {
-    if (!this.deps.pins) return;
-    const pins = this.pins();
-    const list = (pins[agent] ??= {})[configId] ?? [];
-    const next = pinned ? (list.includes(value) ? list : [...list, value]) : list.filter(v => v !== value);
-    if (next.length) pins[agent]![configId] = next; else delete pins[agent]![configId];
-    if (!Object.keys(pins[agent]!).length) delete pins[agent];
-    await this.deps.pins.set(pins);
-    this.emitPins();
   }
 
   // Login: prefer the agent's own authenticate; if that fails, run the registry's login command in a terminal

@@ -33,7 +33,7 @@ export function Header({ title, sessions, agents, activeSessionId, on, onToggleD
             <span className="min-w-0 flex-1 truncate text-2 font-medium text-fg-strong">{title}</span>
             {/* The icon is 6px smaller than the button box; the negative margin makes the right edge of the last icon bite into the page-margin line */}
             <div className="-mr-1.5 flex shrink-0 items-center gap-0.5">
-              <Popover side="bottom" align="end" panelClassName="w-[360px]" content={close => (
+              <Popover side="bottom" align="end" width="xl" content={close => (
                 <SessionList
                   sessions={sessions}
                   agents={agents}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findVariant, groupModels, parseModelName, variantLabel } from '../src/shared/models';
+import { findVariant, groupModels, parseModelName, variantLabel, visibleOptions } from '../src/shared/models';
 
 // Real name samples issued by Devin (measured via pnpm probe devin), covering all suffix combinations
 const DEVIN = [
@@ -76,5 +76,17 @@ describe('model name parsing', () => {
     expect(variantLabel(swe16.variants.find(v => v.fast)!, swe16)).toBe('Fast');
     expect(variantLabel(swe16.variants.find(v => !v.fast)!, swe16)).toBe('Standard');
     expect(variantLabel(adaptive.variants[0]!, adaptive)).toBe('Standard');
+  });
+
+  it('hidden families: every variant of a hidden family goes, the current value stays, hiding everything hides nothing', () => {
+    const all = opts(DEVIN);
+    const shown = visibleOptions(all, ['GLM-5.2', 'Adaptive'], 'claude-opus-5-max');
+    expect(shown.some(o => o.name.startsWith('GLM-5.2'))).toBe(false);
+    expect(shown.some(o => o.name === 'Adaptive')).toBe(false);
+    expect(shown).toHaveLength(all.length - 5);
+    // the family in use is hidden, but its selected variant is still offered
+    expect(visibleOptions(all, ['Claude Opus 5'], 'claude-opus-5-max').filter(o => o.name.startsWith('Claude Opus 5 ')).map(o => o.name)).toEqual(['Claude Opus 5 Max']);
+    expect(visibleOptions(all, groupModels(all).map(f => f.name))).toBe(all);
+    expect(visibleOptions(all, undefined)).toBe(all);
   });
 });
