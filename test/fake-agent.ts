@@ -20,7 +20,11 @@ const app = acp.agent({ name: 'fake-agent' })
     authMethods: [{ id: 'fake.login', name: 'Fake login', description: 'run fake login' }],
   }))
   .onRequest(acp.methods.agent.session.new, ({ params }) => {
-    if (params.cwd.includes('needs-auth') && !authed) throw acp.RequestError.authRequired();
+    if (params.cwd.includes('needs-auth') && !authed) {
+      // Mimic Kimi: the reason goes to stderr as an ndjson log line, the -32000 itself carries nothing
+      process.stderr.write(`${JSON.stringify({ level: 'info', msg: 'acp: auth readiness probe failed, trying the OAuth summary', error: 'provider managed:fake has no credential configured' })}\n`);
+      throw acp.RequestError.authRequired();
+    }
     const sessionId = `s${++seq}`;
     sessions.add(sessionId);
     return {

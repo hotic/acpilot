@@ -282,9 +282,12 @@ describe('AcpSession', () => {
     await s.start();
     expect(s.view().status).toBe('auth_required');
     expect(s.view().authMethods?.[0]?.id).toBe('fake.login');
+    // The reason the CLI logged to stderr right before -32000 is surfaced instead of a bare "log in"
+    expect(s.view().error).toBe('provider managed:fake has no credential configured');
     await s.authenticate();
     await s.retry();
     expect(s.view().status).toBe('ready');
+    expect(s.view().error).toBeUndefined();
     s.dispose();
   });
 });

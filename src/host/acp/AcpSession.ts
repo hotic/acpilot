@@ -73,6 +73,9 @@ export class AcpSession {
   private autoApprove = false;
   // Usage at the end of the last auto-compaction: don't compact again until it has grown back a fair bit, so a "won't shrink" case doesn't fire every turn
   private compactedAt?: number;
+  // The last auth-related line the CLI wrote to stderr since the session was (re)opened. -32000 carries no reason, but the CLI usually logs one right before
+  // (Kimi: "provider managed:kimi-code has no credential configured"), and that is what the Notice should show instead of a generic "log in"
+  private authHint?: string;
 
   constructor(record: SessionRecord, private deps: SessionDeps) {
     this.id = record.id;
@@ -127,6 +130,7 @@ export class AcpSession {
   async start(): Promise<void> {
     this.status = 'starting';
     this.error = undefined;
+    this.authHint = undefined;
     this.deps.onChange(this);
     try {
       await this.connect();
@@ -155,7 +159,11 @@ export class AcpSession {
     this.proc = await AgentProcess.spawn(def, bin, this.cwd, {
       onUpdate: n => this.onUpdate(n),
       onPermission: (req, signal) => this.onPermission(req, signal),
-      onStderr: line => this.log(`stderr: ${line}`),
+      onStderr: line => {
+        this.log(`stderr: ${line}`);
+        const hint = authHintOf(line);
+        if (hint) this.authHint = hint;
+      },
       onExit: (code, signal) => {
         this.log(`exit code=${code} signal=${signal}`);
         if (this.status !== 'closed') {
@@ -239,8 +247,9 @@ export class AcpSession {
   private fail(e: unknown) {
     if (isAuth(e)) {
       this.status = 'auth_required';
-      // When an account credential can't be handed over, keep the reason for the Notice to display; a plain "not logged in yet" needs no explanation
-      this.error = e instanceof AccountAuthError ? e.message : undefined;
+      // When an account credential can't be handed over, keep the reason for the Notice to display; otherwise fall back to what the CLI said on stderr,
+      // and a plain "not logged in yet" with no hint needs no explanation
+      this.error = e instanceof AccountAuthError ? e.message : this.authHint;
       this.log(`需要登录${this.error ? `：${this.error}` : ''}`);
     } else {
       this.status = 'error';
@@ -261,6 +270,8 @@ export class AcpSession {
   async retry(): Promise<void> {
     if (this.proc?.alive && this.status === 'auth_required') {
       this.status = 'starting';
+      this.error = undefined;
+      this.authHint = undefined;
       this.deps.onChange(this);
       try { await this.openSession(); } catch (e) { this.fail(e); }
       this.touch();
@@ -472,6 +483,25 @@ function bestAllow(options: acp.PermissionOption[]): string {
 function isAuth(e: unknown): boolean {
   if (e instanceof AccountAuthError) return true;
   return e instanceof acp.RequestError ? e.code === -32000 : /auth/i.test(msg(e)) && /required|login|unauthor/i.test(msg(e));
+}
+
+const AUTH_WORDS = /auth|credential|login|logged|unauthor/i;
+
+// Pull a human-readable reason out of one stderr line when it is about authentication. Structured logs (Kimi writes ndjson: {"msg":"acp: auth readiness probe failed…","error":"provider … has no credential configured"})
+// yield their error field; plain lines are kept as-is. Anything not about auth yields undefined
+function authHintOf(line: string): string | undefined {
+  const text = line.trim();
+  if (!text) return undefined;
+  if (text.startsWith('{')) {
+    try {
+      const j = JSON.parse(text) as Record<string, unknown>;
+      const m = typeof j.msg === 'string' ? j.msg : typeof j.message === 'string' ? j.message : '';
+      const err = typeof j.error === 'string' ? j.error : typeof j.err === 'string' ? j.err : undefined;
+      if (!AUTH_WORDS.test(`${m} ${err ?? ''}`)) return undefined;
+      return err ?? (m || undefined);
+    } catch { /* not JSON, fall through to plain text */ }
+  }
+  return AUTH_WORDS.test(text) ? text : undefined;
 }
 
 // The peer forgot this session: Devin reports errorKind=session_not_found (empty sessions are swept when the process exits); fall back to matching the message text
