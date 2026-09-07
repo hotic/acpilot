@@ -19,7 +19,7 @@ export interface AgentDef {
 
 export const BUILTIN_AGENTS: AgentDef[] = [
   {
-    id: 'grok', name: 'Grok',
+    id: 'grok', name: 'Grok Build',
     command: 'grok', args: ['agent', 'stdio'],
     candidates: ['~/.grok/bin/grok', '~/.local/bin/grok', '/opt/homebrew/bin/grok', '/usr/local/bin/grok'],
     login: { command: 'grok', args: ['login'] },

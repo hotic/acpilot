@@ -112,7 +112,7 @@ export function App() {
   }), []);
 
   if (!init || !settings) return null;
-  const agent = agents.find(a => a.id === session?.agent) ?? agents[0] ?? { id: 'grok', name: 'Grok' };
+  const agent = agents.find(a => a.id === session?.agent) ?? agents[0] ?? { id: 'grok', name: 'Grok Build' };
   // A locale change re-renders through a fresh dictionary: t() reads module state, so the tree remounts on key
   if (view === 'settings') {
     return (
