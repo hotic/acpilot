@@ -49,7 +49,7 @@ export class WebviewBridge implements vscode.Disposable {
       this.post({
         type: 'init',
         state: {
-          host: this.host, appearance: this.env.appearance(), agents: this.manager.agents(), accounts: this.manager.accounts(), hidden: this.manager.hidden(),
+          host: this.host, appearance: this.env.appearance(), agents: this.manager.agents(), accounts: this.manager.accounts(), accountActions: this.manager.accountActions(), hidden: this.manager.hidden(),
           sessions: this.manager.sessions(), active: this.manager.active(), blobBase: this.webview.asWebviewUri(vscode.Uri.file(this.env.sessionsDir)).toString(),
           settings: this.env.settings.view(), locale: this.env.settings.locale(), home: this.env.home(), cwd: this.env.cwd(),
         },

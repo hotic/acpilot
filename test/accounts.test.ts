@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AgentRegistry } from '../src/host/acp/AgentRegistry';
 import { AcpSession } from '../src/host/acp/AcpSession';
 import type { AgentProcess } from '../src/host/acp/AgentProcess';
@@ -107,19 +107,81 @@ describe('Devin credentials file and auth status parsing', () => {
 
 function setup() {
   const dir = tmp();
+  const cwd = join(dir, 'needs-auth');
+  mkdirSync(cwd);
   const provider = new FakeProvider();
-  const store = new AccountStore(join(dir, 'accounts.json'), new MemoryVault());
+  const vault = new MemoryVault();
+  const store = new AccountStore(join(dir, 'accounts.json'), vault);
   const toasts: string[] = [];
   const accounts = new AccountManager({ store, providers: [provider], log: () => {}, runInTerminal: () => {}, toast: (_l, t) => toasts.push(t) });
   const registry = new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE] } });
   const m = new SessionManager({
-    registry, store: new TranscriptStore(join(dir, 'sessions')), log: () => {}, cwd: () => '/tmp/acpilot-needs-auth', defaultAgent: () => 'fake',
+    registry, store: new TranscriptStore(join(dir, 'sessions')), log: () => {}, cwd: () => cwd, defaultAgent: () => 'fake',
     runInTerminal: () => {}, toast: (_l, t) => toasts.push(t), accounts,
   });
-  return { m, accounts, store, provider, toasts, registry };
+  return { m, accounts, store, provider, toasts, registry, dir, vault };
 }
 
 describe('account layer wired into sessions', () => {
+  it('publishes import progress immediately and ignores repeated clicks until it finishes', async () => {
+    const { m, provider } = setup();
+    let complete!: (draft: AccountDraft | undefined) => void;
+    const importing = vi.spyOn(provider, 'importLocal').mockImplementation(() => new Promise(resolve => { complete = resolve; }));
+    const events: unknown[] = [];
+    m.subscribe(ev => { if (ev.type === 'accountActions') events.push(ev.actions); });
+    const first = m.handle({ type: 'addAccount', agent: 'fake', via: 'import' });
+    expect(events).toEqual([[{ agent: 'fake', via: 'import', status: 'pending' }]]);
+    await m.handle({ type: 'addAccount', agent: 'fake', via: 'import' });
+    expect(importing).toHaveBeenCalledTimes(1);
+    complete(provider.importDraft);
+    await first;
+    expect(events.at(-1)).toEqual([{ agent: 'fake', via: 'import', status: 'success' }]);
+    await m.dispose();
+  });
+
+  it('reports missing local login and import failures, and allows another attempt', async () => {
+    const { m, provider } = setup();
+    const importing = vi.spyOn(provider, 'importLocal');
+    importing.mockResolvedValueOnce(undefined);
+    await m.handle({ type: 'addAccount', agent: 'fake', via: 'import' });
+    expect(m.accountActions()).toEqual([{ agent: 'fake', via: 'import', status: 'missing' }]);
+    importing.mockRejectedValueOnce(new Error('keychain unavailable'));
+    await m.handle({ type: 'addAccount', agent: 'fake', via: 'import' });
+    expect(m.accountActions()).toEqual([{ agent: 'fake', via: 'import', status: 'error', error: 'keychain unavailable' }]);
+    await m.handle({ type: 'addAccount', agent: 'fake', via: 'import' });
+    expect(m.accountActions()).toEqual([{ agent: 'fake', via: 'import', status: 'success' }]);
+    await m.dispose();
+  });
+
+  it('reload keeps the imported account binding and authenticates the replacement process', async () => {
+    const { m, dir, vault, registry } = setup();
+    await m.init();
+    await m.newSession();
+    await m.handle({ type: 'addAccount', agent: 'fake', via: 'import' });
+    const record = m.active()!;
+    await m.dispose();
+    // Empty Devin sessions can disappear when the process exits; the fake's gone cwd models that response.
+    const transcripts = new TranscriptStore(join(dir, 'sessions'));
+    const saved = (await transcripts.load(record.id))!;
+    const cwd = join(dir, 'needs-auth-gone');
+    mkdirSync(cwd);
+    await transcripts.flush({ ...saved, cwd });
+    const store = new AccountStore(join(dir, 'accounts.json'), vault);
+    await store.load();
+    const authenticate = vi.spyOn(FakeProvider.prototype, 'authenticate');
+    const accounts = new AccountManager({ store, providers: [new FakeProvider()], log: () => {}, runInTerminal: () => {}, toast: () => {} });
+    const restored = new SessionManager({ registry, store: transcripts, accounts, log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'fake', runInTerminal: () => {}, toast: () => {} });
+    try {
+      await restored.init();
+      await restored.ensureActive();
+      expect(authenticate).toHaveBeenCalledTimes(1);
+      expect(restored.active()).toMatchObject({ id: record.id, accountId: record.accountId, status: 'ready' });
+    } finally {
+      authenticate.mockRestore();
+      await restored.dispose();
+    }
+  });
+
   it('no account → auth_required and the agent flagged accounts; after import a reopened session is ready and bound to the account; switching accounts opens a new session and changes the default', async () => {
     const { m, accounts, store } = setup();
     await m.init();

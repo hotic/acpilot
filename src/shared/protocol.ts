@@ -13,6 +13,7 @@ export interface InitState {
   appearance: Appearance;
   agents: AgentInfo[];
   accounts: AccountInfo[];
+  accountActions?: AccountAction[];
   hidden: HiddenMap;
   sessions: SessionSummary[];
   active?: SessionView;
@@ -48,6 +49,7 @@ export type HostMsg =
   | { type: 'sessions'; sessions: SessionSummary[] }
   | { type: 'session'; session: SessionView }
   | { type: 'accounts'; accounts: AccountInfo[] }
+  | { type: 'accountActions'; actions: AccountAction[] }
   | { type: 'hidden'; hidden: HiddenMap }
   // The settings view plus the resolved locale (a language change swaps both at once)
   | { type: 'settings'; settings: SettingsView; locale: Locale }
@@ -61,6 +63,14 @@ export type HostMsg =
 // How an account comes in: import reads the CLI's own local login; login runs an isolated login in the terminal that leaves the local login untouched;
 // auto is the "+" in the menu: import the local login if it hasn't been imported yet, otherwise log in a new one in the terminal
 export type AddAccountVia = 'import' | 'login' | 'auto';
+
+// Host-owned progress survives webview remounts and prevents duplicate imports across panels.
+export interface AccountAction {
+  agent: AgentId;
+  via: AddAccountVia;
+  status: 'pending' | 'success' | 'missing' | 'cancelled' | 'error';
+  error?: string;
+}
 
 export type WebviewMsg =
   | { type: 'ready' }

@@ -50,6 +50,7 @@ export class AccountManager {
     if (!draft) { this.deps.toast('info', `本机没有 ${agent} 的登录记录，先在终端登录或用「添加账号」`); return undefined; }
     const a = await this.deps.store.add(agent, draft);
     this.deps.log(`账号导入：${agent} ${a.label}`);
+    this.deps.toast('info', `已导入本机登录 ${a.label}`);
     this.emit();
     return a;
   }

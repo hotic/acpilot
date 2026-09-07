@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Paperclip } from 'lucide-react';
 import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
 import type { HiddenMap } from '@shared/settings';
-import type { AddAccountVia, FileHit } from '@shared/protocol';
+import type { AccountAction, AddAccountVia, FileHit } from '@shared/protocol';
 import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
 import { ShellLayerContext } from '../ui/Popover';
 import { cn } from '../ui/cn';
@@ -53,6 +53,7 @@ export interface ShellProps {
   // Accounts across all agents; the current session is bound to accountId
   accounts?: AccountInfo[];
   accountId?: string;
+  accountAction?: AccountAction;
   // Option families hidden from the composer menus (acpilot.hiddenOptions)
   hidden?: HiddenMap;
   title: string;
@@ -179,6 +180,7 @@ export function Shell(p: ShellProps) {
               <Notice
                 status={p.status} error={p.error} agent={p.agent} authMethods={p.authMethods}
                 accounts={p.accounts?.filter(x => x.agent === p.agent.id)} accountId={p.accountId}
+                accountAction={p.accountAction}
                 onLogin={on.login} onRetry={on.retry} onNewSession={on.newSession}
                 onSelectAccount={on.selectAccount} onAddAccount={via => on.addAccount(p.agent.id, via)}
               />

@@ -1,5 +1,5 @@
 import type { AccountInfo, AgentId, AgentInfo, ConfigControl, SessionSummary, SessionView } from '@shared/transcript';
-import type { AddAccountVia, WebviewMsg } from '@shared/protocol';
+import type { AccountAction, AddAccountVia, WebviewMsg } from '@shared/protocol';
 import type { HiddenMap } from '@shared/settings';
 import type { AgentRuntimeInfo } from '@shared/inventory';
 import { AgentRegistry } from './acp/AgentRegistry';
@@ -28,6 +28,7 @@ export type ManagerEvent =
   | { type: 'sessions'; sessions: SessionSummary[] }
   | { type: 'session'; session: SessionView }
   | { type: 'accounts'; accounts: AccountInfo[] }
+  | { type: 'accountActions'; actions: AccountAction[] }
   | { type: 'hidden'; hidden: HiddenMap };
 
 // Master of all sessions: live processes, the summary list, the active item; every webview action enters here. No vscode import, so it stays testable
@@ -38,6 +39,7 @@ export class SessionManager {
   private index: SessionSummary[] = [];
   private trash = new Map<string, { summary: SessionSummary; timer: NodeJS.Timeout }>();
   private listeners = new Set<(ev: ManagerEvent) => void>();
+  private accountActionState = new Map<AgentId, AccountAction>();
   activeId?: string;
 
   constructor(private deps: ManagerDeps) {
@@ -63,6 +65,13 @@ export class SessionManager {
   }
 
   accounts(): AccountInfo[] { return this.deps.accounts?.list() ?? []; }
+
+  accountActions(): AccountAction[] { return [...this.accountActionState.values()]; }
+
+  private setAccountAction(action: AccountAction) {
+    this.accountActionState.set(action.agent, action);
+    this.emit({ type: 'accountActions', actions: this.accountActions() });
+  }
 
   // Version / MCP capabilities of an agent's live session (from its initialize response); undefined when nothing of that agent is running
   runtimeInfo(agent: AgentId): AgentRuntimeInfo | undefined {
@@ -290,11 +299,21 @@ export class SessionManager {
   // Add an account: importing a local login is usable immediately; terminal login waits for the write in the background. If the current session is stuck on login, reopen it with the new account once added
   async addAccount(agent: AgentId, via: AddAccountVia) {
     const accounts = this.deps.accounts;
-    if (!accounts) return;
-    const acc = via === 'import' ? await accounts.import(agent) : via === 'login' ? await accounts.login(agent) : await accounts.add(agent);
-    if (!acc) return;
-    const cur = this.current();
-    if (cur?.agent === agent && (cur.view().status === 'auth_required' || !cur.accountId)) await this.newSession(agent, acc.id);
+    if (!accounts || this.accountActionState.get(agent)?.status === 'pending') return;
+    this.setAccountAction({ agent, via, status: 'pending' });
+    try {
+      const acc = via === 'import' ? await accounts.import(agent) : via === 'login' ? await accounts.login(agent) : await accounts.add(agent);
+      if (!acc) {
+        this.setAccountAction({ agent, via, status: via === 'import' ? 'missing' : 'cancelled' });
+        return;
+      }
+      const cur = this.current();
+      if (cur?.agent === agent && (cur.view().status === 'auth_required' || !cur.accountId)) await this.newSession(agent, acc.id);
+      this.setAccountAction({ agent, via, status: 'success' });
+    } catch (e) {
+      this.setAccountAction({ agent, via, status: 'error', error: e instanceof Error ? e.message : String(e) });
+      throw e;
+    }
   }
 
   // Login: prefer the agent's own authenticate; if that fails, run the registry's login command in a terminal
