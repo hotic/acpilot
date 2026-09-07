@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 import { cn } from './cn';
 
-// Form controls that live inside menus (the model panel's params): a switch row and a row of radio pills.
-// Both are neutral like every other button — the on state is the inverted solid shared with the primary button, not an accent color
+// Neutral form controls for menu footers: switch rows and segmented single-select groups.
 
 export interface SwitchRowProps {
   label: ReactNode;
@@ -37,11 +36,10 @@ export interface RadioPillsProps<V extends string> {
   onChange: (value: V) => void;
 }
 
-// Single-select as a wrapping row of pills: every level visible, one click to switch (a nested menu would cost two). The checked pill gets the pressed look.
-// No inset: a pill's background starts where a menu row's hover background does, so its text lines up with the row text and headings
+// Equal-width segments share one track; only the selected segment gets an inset fill.
 export function RadioPills<V extends string>({ label, options, value, onChange }: RadioPillsProps<V>) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1">
+    <div role="radiogroup" aria-label={label} className="grid min-w-fit flex-1 auto-cols-fr grid-flow-col gap-0.5 rounded-md bg-hover p-0.5">
       {options.map(o => (
         <button
           key={o.value}
@@ -51,8 +49,8 @@ export function RadioPills<V extends string>({ label, options, value, onChange }
           disabled={o.disabled}
           onClick={() => onChange(o.value)}
           className={cn(
-            'inline-flex h-ctl items-center rounded-md px-2 text-3 outline-none transition-colors disabled:text-fg-3 disabled:hover:bg-transparent',
-            o.value === value ? 'bg-active text-fg-1' : 'text-fg-2 hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1',
+            'inline-flex h-ctl-sm min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-sm px-1 text-3 outline-none transition-colors focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-fg-2 disabled:text-fg-3 disabled:opacity-50',
+            o.value === value ? 'bg-active text-fg-1' : 'text-fg-2 enabled:hover:bg-hover enabled:hover:text-fg-1',
           )}
         >
           {o.label}

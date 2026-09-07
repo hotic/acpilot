@@ -5,6 +5,7 @@ import type { FileHit } from '@shared/protocol';
 import type { HiddenMap } from '@shared/settings';
 import { findVariant, groupModels, modelBrand, variantLabel, visibleOptions, type ModelFamily, type ModelVariant } from '@shared/models';
 import { useAppearance } from '../appearance';
+import { t } from '../i18n';
 import { cn } from '../ui/cn';
 import { Chip, IconButton } from '../ui/Button';
 import { RadioPills, SwitchRow } from '../ui/Field';
@@ -311,10 +312,10 @@ function ModelParams({ family: f, variant: v, onSelect }: { family: ModelFamily;
   return (
     <div className="mt-1 flex flex-col border-t border-line pt-1">
       {f.efforts.length > 1 && !thinkingSwitch && (
-        <>
-          <div className="px-2 pb-0.5 text-3 text-fg-3">推理强度</div>
-          <RadioPills label="推理强度" options={f.efforts.map(e => ({ value: e, label: e || 'Standard' }))} value={v.effort} onChange={pickEffort} />
-        </>
+        <div className={cn('flex min-h-row gap-2 px-2 py-1', f.efforts.length > 3 ? 'flex-col' : 'flex-wrap items-center')}>
+          <span className="shrink-0 text-2 text-fg-2">{t('composer.effort')}</span>
+          <RadioPills label={t('composer.effort')} options={f.efforts.map(e => ({ value: e, label: e || 'Standard' }))} value={v.effort} onChange={pickEffort} />
+        </div>
       )}
       {thinkingSwitch && (
         <SwitchRow label="Thinking" checked={v.effort === 'Thinking'} disabled={!findVariant(f, v.effort === 'Thinking' ? '' : 'Thinking', v.fast, v.long)} onChange={on => pickEffort(on ? 'Thinking' : '')} />
