@@ -1,8 +1,19 @@
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R5 V4 */
 /* Hallmark · component: settings surface · genre: modern-minimal (in-app) · theme: ACPilot tokens (tokens.css), no new palette
  * states: default · hover · focus-visible · active · disabled · loading (shimmer scan row) · empty
  * Settings-only tokens; everything else comes from tokens.css. Type: section heading above the shell's 13px body scale.
  * Widths: content measure (editor host only), control column; switch geometry on the 4px grid. Plain CSS (no @utility) so it can be imported on its own */
 .acp-settings {
+  container: settings-shell / inline-size;
+  --settings-nav-w: 184px;
+  --settings-rail-w: 52px;
+  --section-gap: calc(var(--pad) + var(--gap));
+  /* Settings have two type sizes and one body leading, independent of chat captions. */
+  --text-2-lh: 20px;
+  --setting-row: 48px;
+  --setting-row-detail: 64px;
+  --setting-row-pad: 12px;
+  --setting-header-copy: 200px;
   --text-h: 15px;
   --text-h-lh: 22px;
   --content-w: 720px;
@@ -14,6 +25,32 @@
   --switch-knob: calc(var(--switch-h) - 2 * var(--switch-pad));
   --dot: 6px;
 }
+
+/* Navigation and the page header start on one baseline; their next rows start together as well. */
+.acp-settings-nav {
+  width: var(--settings-nav-w);
+  gap: var(--section-gap);
+  padding: var(--pad-y) var(--pad);
+}
+@container settings-shell (max-width: 600px) {
+  .acp-settings-nav { width: var(--settings-rail-w); padding-inline: 8px; }
+  .acp-settings-nav-item { justify-content: center; padding-inline: 0; }
+  .acp-settings-nav-label { display: none; }
+}
+
+/* All surfaces own the same inset. Only real row boundaries receive separators. */
+.acp-setting-row {
+  min-height: var(--setting-row);
+  padding: var(--setting-row-pad) var(--pad);
+  font-size: var(--text-2);
+  line-height: var(--text-2-lh);
+}
+.acp-setting-row[data-detail] { min-height: var(--setting-row-detail); }
+.acp-group > *, .acp-section-header { padding-inline: 0; }
+.acp-back-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+.acp-field-copy { flex: 1 1 var(--setting-header-copy); }
+.acp-section-copy { flex: 1 1 var(--setting-header-copy); }
+.acp-group + .acp-group { border-top: 1px solid var(--line); }
 
 /* Switch: monochrome like the send button's lit state (inverted solid when on); the knob slides by transform only */
 .acp-switch {

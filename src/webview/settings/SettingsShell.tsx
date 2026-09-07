@@ -11,7 +11,7 @@ import { LocaleContext, t } from '../i18n';
 import { PageRail, type SettingsPage } from './Nav';
 import { General } from './General';
 import { AgentPage } from './AgentPage';
-import { TopBar } from './controls';
+import { Page, PageHeader } from './controls';
 import './settings.css';
 
 // Every action the settings page sends to the host; the LAB implements these with a fake host, the real page with postMessage
@@ -50,14 +50,13 @@ export interface SettingsShellProps {
   on: SettingsHandlers;
 }
 
-// Settings surface, sidebar-shaped: a top bar (back · title · action) over a rail of page icons beside the current page.
-// The rail has no labels, so the title names the page after the surface: "Settings · Devin". The root doubles as the overlay layer for menus (Select), like the chat shell
+// Navigation and content are separate columns. The page heading shares the cards' content measure.
+// The root doubles as the overlay layer for menus, like the chat shell.
 export function SettingsShell(p: SettingsShellProps) {
   const root = useRef<HTMLDivElement>(null);
   const page = p.page;
   const agent = page.kind === 'agent' ? p.agents.find(a => a.id === page.id) : undefined;
-  const pageName = p.page.kind === 'general' ? t('settings.nav.general') : agent?.name;
-  const title = <>{t('settings.title')}{pageName && <span className="font-normal text-fg-3"> · {pageName}</span>}</>;
+  const title = agent ? t('settings.agent.title', { agent: agent.name }) : t('settings.general.title');
   const action = agent && (
     <IconButton title={t('common.refresh')} aria-label={t('common.refresh')} onClick={() => p.on.refreshInventory(agent.id)}>
       <RefreshCw strokeWidth={1.5} />
@@ -75,24 +74,26 @@ export function SettingsShell(p: SettingsShellProps) {
             data-agent={agent?.id ?? p.settings.defaultAgent}
             {...appearanceDataAttrs(p.appearance)}
           >
-            <TopBar title={title} onBack={p.onBack} action={action} />
             <div className="flex min-h-0 flex-1">
-              <PageRail agents={p.agents} page={p.page} onPage={p.onPage} />
-              <main className="min-w-0 flex-1 overflow-y-auto scroll-stable">
-                {p.page.kind === 'general' && <General settings={p.settings} agents={p.agents} on={p.on} />}
-                {agent && (
-                  <AgentPage
-                    key={agent.id}
-                    agent={agent}
-                    agents={p.agents}
-                    accounts={p.accounts.filter(a => a.agent === agent.id)}
-                    inventory={p.inventories[agent.id]}
-                    controls={p.controls[agent.id]}
-                    settings={p.settings}
-                    env={p.env}
-                    on={p.on}
-                  />
-                )}
+              <PageRail agents={p.agents} page={p.page} onPage={p.onPage} onBack={p.onBack} />
+              <main key={page.kind === 'agent' ? page.id : page.kind} className="min-w-0 flex-1 overflow-y-auto scroll-stable">
+                <Page>
+                  <PageHeader title={title} action={action} />
+                  {p.page.kind === 'general' && <General settings={p.settings} agents={p.agents} on={p.on} />}
+                  {agent && (
+                    <AgentPage
+                      key={agent.id}
+                      agent={agent}
+                      agents={p.agents}
+                      accounts={p.accounts.filter(a => a.agent === agent.id)}
+                      inventory={p.inventories[agent.id]}
+                      controls={p.controls[agent.id]}
+                      settings={p.settings}
+                      env={p.env}
+                      on={p.on}
+                    />
+                  )}
+                </Page>
               </main>
             </div>
           </div>

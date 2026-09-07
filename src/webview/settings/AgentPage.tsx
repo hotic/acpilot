@@ -7,7 +7,7 @@ import { groupModels, variantLabel, type ModelFamily } from '@shared/models';
 import { IconButton } from '../ui/Button';
 import { t } from '../i18n';
 import { ModelMark } from '../chat/ModelMark';
-import { Dot, FactRow, Group, ItemRow, Note, Page, PathText, Section, SectionAction, SectionHead, SourceHead, Switch, shortPath } from './controls';
+import { Dot, FactRow, Group, ItemRow, Note, PathText, Section, SectionAction, SectionDescription, SectionHead, SourceLink, Switch, shortPath } from './controls';
 import type { SettingsEnv, SettingsHandlers } from './SettingsShell';
 
 type AgentSection = 'models' | 'mcp' | 'skills' | 'rules' | 'config';
@@ -26,7 +26,7 @@ export interface AgentPageProps {
   on: SettingsHandlers;
 }
 
-// One agent: a card of facts (the top bar carries the name), accounts when it has an account layer, then five stacked sections: the option families
+// One agent: a card of facts (the page heading carries the name), accounts when it has an account layer, then five stacked sections: the option families
 // shown in the composer menus, and the extension inventory. Everything read from the CLI's own files is read-only here — rows open the file,
 // ACPilot never writes it. Only the ACPilot-injected MCP list and the option families have switches
 export function AgentPage({ agent, agents, accounts, inventory, controls, settings, env, on }: AgentPageProps) {
@@ -49,39 +49,40 @@ export function AgentPage({ agent, agents, accounts, inventory, controls, settin
   };
 
   return (
-    <Page>
+    <>
       <AgentFacts agent={agent} inventory={inventory} env={env} />
 
       {agent.accounts && (
-        <Section
-          title={t('settings.agent.accounts')}
-          desc={t('settings.agent.accounts.desc')}
-          action={<SectionAction icon={<Plus strokeWidth={1.75} />} onClick={() => on.addAccount(agent.id)}>{t('settings.agent.addAccount')}</SectionAction>}
-        >
-          {accounts.length === 0 && <Note>{t('settings.agent.accounts.none')}</Note>}
-          {accounts.map(a => (
-            <ItemRow
-              key={a.id}
-              lead={<KeyRound strokeWidth={1.5} />}
-              title={a.label}
-              desc={a.detail}
-              trailing={
-                <IconButton title={t('common.remove')} aria-label={t('common.removeNamed', { name: a.label })} onClick={() => on.removeAccount(a.id)} className="-mr-1.5 text-fg-3 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100">
-                  <X strokeWidth={1.5} />
-                </IconButton>
-              }
-            />
-          ))}
-        </Section>
+        <div className="flex flex-col gap-2">
+          <SectionHead action={<SectionAction icon={<Plus strokeWidth={1.75} />} onClick={() => on.addAccount(agent.id)}>{t('settings.agent.addAccount')}</SectionAction>}>
+            {t('settings.agent.accounts')}
+          </SectionHead>
+          <Section desc={t('settings.agent.accounts.desc')}>
+            {accounts.length === 0 && <Note>{t('settings.agent.accounts.none')}</Note>}
+            {accounts.map(a => (
+              <ItemRow
+                key={a.id}
+                lead={<KeyRound strokeWidth={1.5} />}
+                title={a.label}
+                desc={a.detail}
+                trailing={
+                  <IconButton title={t('common.remove')} aria-label={t('common.removeNamed', { name: a.label })} onClick={() => on.removeAccount(a.id)} className="-mr-1.5 text-fg-2 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100">
+                    <X strokeWidth={1.5} />
+                  </IconButton>
+                }
+              />
+            ))}
+          </Section>
+        </div>
       )}
 
       {SECTIONS.map(id => (
         <div key={id} className="flex flex-col gap-2">
           <SectionHead count={inventory ? counts[id] : undefined}>{t(`settings.tab.${id}` as const)}</SectionHead>
-          {sections[id]}
+          <div className="flex flex-col gap-pad">{sections[id]}</div>
         </div>
       ))}
-    </Page>
+    </>
   );
 }
 
@@ -91,15 +92,15 @@ function AgentFacts({ agent, inventory, env }: { agent: AgentInfo; inventory?: A
   const steer = inventory ? (inventory.steer ? t('settings.agent.steer') : t('settings.agent.noSteer')) : undefined;
   return (
     <Group>
-      <FactRow label={t('settings.fact.binary')} mono>
+      <FactRow label={t('settings.fact.binary')}>
         {inventory === undefined
           ? <span className="shimmer font-sans text-2">{t('settings.agent.probing')}</span>
           : inventory.binary
             ? <><Dot ok /><PathText path={inventory.binary} env={env} className="text-fg-1" /></>
-            : <><Dot ok={false} /><span className="truncate font-sans text-2 text-fg-3">{t('settings.agent.notInstalled', { command: agent.id })}</span></>}
+            : <><Dot ok={false} /><span className="truncate font-sans text-2 text-fg-2">{t('settings.agent.notInstalled', { command: agent.id })}</span></>}
       </FactRow>
-      <FactRow label={t('settings.fact.version')}>{version ?? <span className="text-fg-3">{t('settings.fact.noLive')}</span>}</FactRow>
-      <FactRow label={t('settings.fact.followUp')}>{steer ?? <span className="text-fg-3">—</span>}</FactRow>
+      <FactRow label={t('settings.fact.version')}>{version ?? <span className="text-fg-2">{t('settings.fact.noLive')}</span>}</FactRow>
+      <FactRow label={t('settings.fact.followUp')}>{steer ?? <span className="text-fg-2">—</span>}</FactRow>
     </Group>
   );
 }
@@ -127,13 +128,17 @@ function ModelsSection({ agent, controls, settings, on }: { agent: AgentInfo; co
   if (!controls?.length) return <Section desc={t('settings.models.desc', { agent: agent.name })}><Note>{t('settings.models.none', { agent: agent.name })}</Note></Section>;
   return (
     <>
-      {controls.map((c, i) => {
+      <SectionDescription>{t('settings.models.desc', { agent: agent.name })}</SectionDescription>
+      {controls.map(c => {
         const families = groupModels(c.options);
         const off = hidden[c.id] ?? [];
         // With a single configOption the section heading names it; several get one labelled group each
         const several = controls.length > 1;
+        // Translate standard categories; preserve names supplied by custom controls.
+        const title = c.category === 'model' ? t('settings.models.selection')
+          : c.category === 'thought_level' ? t('settings.models.thinking') : c.name;
         return (
-          <Section key={c.id} title={several ? c.name : undefined} count={several ? families.length - off.length : undefined} desc={i === 0 ? t('settings.models.desc', { agent: agent.name }) : undefined}>
+          <Section key={c.id} title={several ? title : undefined} count={several ? families.length - off.length : undefined}>
             {families.map(f => {
               const shown = !off.includes(f.name);
               return (
@@ -171,7 +176,7 @@ function Grouped<T>({ items, sourceOf, row, env, on, empty, loading }: { items: 
   }, [items, sourceOf]);
   if (loading) return <Note shimmer>{t('settings.loading')}</Note>;
   if (bySource.length === 0) return <Note>{empty}</Note>;
-  return <>{bySource.map(([source, list]) => <Group key={source}><SourceHead path={source} env={env} onOpen={on.openPath} />{list.map(row)}</Group>)}</>;
+  return <>{bySource.map(([source, list]) => <Group key={source}>{list.map(row)}<SourceLink path={source} env={env} onOpen={on.openPath} /></Group>)}</>;
 }
 
 // Does the list come as several cards (so the Section must not wrap them in one)?
@@ -207,11 +212,10 @@ function McpSection({ agent, agents, inventory, settings, env, on }: Omit<AgentP
     <>
       <Section
         title={t('settings.mcp.injected')}
-        desc={t('settings.mcp.injected.desc')}
+        desc={t(entries.length ? 'settings.mcp.injected.desc' : 'settings.mcp.injected.none')}
         action={<SectionAction icon={<Braces strokeWidth={1.5} />} onClick={() => on.openSettingsJson('acpilot.mcpServers')}>{t('settings.mcp.edit')}</SectionAction>}
       >
-        {entries.length === 0 && <Note>{t('settings.mcp.injected.none')}</Note>}
-        {entries.map(([name, s]) => {
+        {entries.length ? entries.map(([name, s]) => {
           const tr = mcpTransport(s);
           const ok = supported(tr);
           const off = s.enabled === false;
@@ -226,7 +230,7 @@ function McpSection({ agent, agents, inventory, settings, env, on }: Omit<AgentP
               trailing={<Switch checked={!off && ok && mcpAppliesTo(s, agent.id)} disabled={off || !ok} onChange={v => toggle(name, s, v)} label={`${name} · ${agent.name}`} />}
             />
           );
-        })}
+        }) : null}
       </Section>
 
       <Section title={t('settings.mcp.native')} desc={t('settings.mcp.native.desc', { agent: agent.name })} cards={asCards(inventory?.mcp.length)}>
@@ -263,9 +267,8 @@ function FilesSection({ kind, agent, files, env, on }: { kind: 'rules' | 'config
           key={f.path}
           lead={<Icon strokeWidth={1.5} />}
           title={shortPath(f.path, env)}
-          mono
           dim={!f.exists}
-          trailing={f.exists ? <span className="text-3 text-fg-3 tabular-nums">{fmtSize(f.size ?? 0)}</span> : <span className="text-3 text-fg-3">{t('settings.file.missing')}</span>}
+          trailing={f.exists ? <span className="text-2 text-fg-2 tabular-nums">{fmtSize(f.size ?? 0)}</span> : <span className="text-2 text-fg-2">{t('settings.file.missing')}</span>}
           onOpen={f.exists ? () => on.openPath(f.path) : undefined}
         />
       ))}

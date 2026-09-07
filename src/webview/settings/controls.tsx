@@ -1,39 +1,32 @@
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { createContext, useContext, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '../ui/cn';
 import { Card } from '../ui/Card';
 import { Chip, IconButton } from '../ui/Button';
 import { Menu, type MenuItem } from '../ui/Popover';
 import { t } from '../i18n';
 
-// Building blocks of the settings surface. Vertical rhythm: top bar → rail | page (title-less: the top bar names it) → SectionHeads, each stacking Sections,
-// each a labelled Group of rows. Controls sit at a row's right edge; labels and descriptions wrap on the left
+// Settings use a navigation column beside one content column. Page and section headings belong to the content.
 
-// The bar at the top of the surface, same anatomy as the chat Header: back at the left edge, title, one action at the right edge
-export function TopBar({ title, onBack, action }: { title: ReactNode; onBack?: () => void; action?: ReactNode }) {
+export function PageHeader({ title, action }: { title: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex h-hdr shrink-0 items-center gap-1 px-page shadow-[inset_0_-1px_0_0_var(--line)]">
-      {onBack && (
-        <IconButton onClick={onBack} title={t('common.back')} aria-label={t('common.back')} className="-ml-1.5">
-          <ChevronLeft strokeWidth={1.5} />
-        </IconButton>
-      )}
-      <span className="min-w-0 flex-1 truncate text-2 font-medium text-fg-strong">{title}</span>
-      {action && <div className="-mr-1.5 flex shrink-0 items-center gap-0.5">{action}</div>}
-    </div>
+    <header className="flex min-h-ctl items-center gap-pad">
+      <h1 className="m-0 min-w-0 flex-1 text-(length:--text-h) leading-(--text-h-lh) font-medium text-fg-1 [overflow-wrap:anywhere]">{title}</h1>
+      {action && <div className="-mr-1.5 flex shrink-0 items-center">{action}</div>}
+    </header>
   );
 }
 
 // Page body: one column of blocks; the editor host centres it at the content measure, the sidebar just fills
 export function Page({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('mx-auto flex w-full max-w-(--content-w) flex-col gap-pad px-page py-pad-y', className)}>{children}</div>;
+  return <div className={cn('mx-auto flex w-full max-w-(--content-w) flex-col gap-(--section-gap) px-page py-pad-y', className)}>{children}</div>;
 }
 
 // Heading of a top-level section, several of which stack on one page; the Section labels below sit one level under it
 export function SectionHead({ children, count, action, className }: { children: ReactNode; count?: number; action?: ReactNode; className?: string }) {
   return (
     <div className={cn('flex min-h-ctl items-center gap-gap', className)}>
-      <h2 className="m-0 flex min-w-0 flex-1 items-baseline gap-2 text-(length:--text-h) leading-(--text-h-lh) font-medium text-fg-strong">
+      <h2 className="m-0 flex min-w-0 flex-1 items-baseline gap-2 text-(length:--text-h) leading-(--text-h-lh) font-medium text-fg-1">
         <span className="truncate">{children}</span>
         {count !== undefined && <Count n={count} />}
       </h2>
@@ -43,7 +36,7 @@ export function SectionHead({ children, count, action, className }: { children: 
 }
 
 export function Count({ n, className }: { n: number; className?: string }) {
-  return <span className={cn('shrink-0 text-3 font-normal text-fg-3 tabular-nums', className)}>{n}</span>;
+  return <span className={cn('shrink-0 text-2 font-normal text-fg-2 tabular-nums', className)}>{n}</span>;
 }
 
 export interface SectionProps {
@@ -57,19 +50,40 @@ export interface SectionProps {
   children: ReactNode;
 }
 
-// A labelled group of rows: a faint label (and the one action) above the card, the description as a footnote under it
+// Section copy shares the card's outer edge; only content inside the card receives its inset.
+export function SectionDescription({ children }: { children: ReactNode }) {
+  return <p className="m-0 text-2 text-fg-2 [overflow-wrap:anywhere]">{children}</p>;
+}
+
+// Titled subgroups own one surface. Their lists inherit it and use separators instead of nested cards.
+const InsetGroupContext = createContext(false);
+
 export function Section({ title, desc, count, action, cards, children }: SectionProps) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      {(title !== undefined || action) && (
-        <div className={cn('flex items-center gap-gap pl-pad', action && 'min-h-ctl')}>
-          <span className="flex min-w-0 flex-1 items-baseline gap-2 text-3 text-fg-3"><span className="truncate">{title}</span>{count !== undefined && <Count n={count} />}</span>
-          {action}
-        </div>
-      )}
-      {cards ? <div className="flex flex-col gap-2">{children}</div> : <Group>{children}</Group>}
-      {desc && <p className="m-0 px-pad text-3 text-fg-3">{desc}</p>}
+  const inset = title !== undefined || !!action;
+  const hasContent = children !== null && children !== undefined;
+  const content = cards ? <div className={cn('flex flex-col', !inset && 'gap-pad')}>{children}</div> : <Group>{children}</Group>;
+  if (!inset) return (
+    <div className="flex flex-col gap-2">
+      {desc && <SectionDescription>{desc}</SectionDescription>}
+      {content}
     </div>
+  );
+  return (
+    <Card className="acp-section-panel flex flex-col px-pad shadow-none">
+      <div className="acp-setting-row acp-section-header flex flex-wrap items-center gap-gap" data-detail={!!desc || undefined}>
+        <div className="acp-section-copy min-w-0">
+          <h3 className="m-0 flex items-baseline gap-2 text-2 font-normal text-fg-1">
+            <span className="[overflow-wrap:anywhere]">{title}</span>
+            {count !== undefined && <Count n={count} />}
+          </h3>
+          {desc && <SectionDescription>{desc}</SectionDescription>}
+        </div>
+        {action}
+      </div>
+      {hasContent && <InsetGroupContext.Provider value={true}>
+        <div className="border-t border-line">{content}</div>
+      </InsetGroupContext.Provider>}
+    </Card>
   );
 }
 
@@ -82,35 +96,37 @@ export function SectionAction({ icon, onClick, children, title }: { icon?: React
 }
 
 export function Group({ className, children }: { className?: string; children: ReactNode }) {
-  return <Card className={cn('acp-group flex flex-col divide-y divide-line overflow-hidden', className)}>{children}</Card>;
+  const inset = useContext(InsetGroupContext);
+  const Container = inset ? 'div' : Card;
+  return <Container className={cn('acp-group flex flex-col divide-y divide-line overflow-hidden', !inset && 'px-pad shadow-none', className)}>{children}</Container>;
 }
 
 // One setting: label + description on the left, the control on the right. `stack` puts the control under the text (wide controls)
 export function Field({ label, desc, htmlFor, stack, children }: { label?: ReactNode; desc?: ReactNode; htmlFor?: string; stack?: boolean; children?: ReactNode }) {
   return (
-    <div className={cn('flex gap-pad px-pad py-3', stack ? 'flex-col' : 'items-center')}>
-      <div className="min-w-0 flex-1">
+    <div className={cn('acp-setting-row flex flex-wrap gap-pad', stack ? 'flex-col' : 'items-center')} data-detail={!!desc || undefined}>
+      <div className={cn('min-w-0', stack ? 'w-full' : 'acp-field-copy')}>
         {label !== undefined && <label htmlFor={htmlFor} className="block text-2 text-fg-1">{label}</label>}
-        {desc && <div className="mt-0.5 text-3 text-fg-3 [overflow-wrap:anywhere]">{desc}</div>}
+        {desc && <div className="text-2 text-fg-2 [overflow-wrap:anywhere]">{desc}</div>}
       </div>
-      {children !== undefined && <div className={cn('flex shrink-0 items-center gap-2', stack && 'self-start')}>{children}</div>}
+      {children !== undefined && <div className={cn('flex shrink-0 items-center gap-2', stack && 'w-full min-w-0')}>{children}</div>}
     </div>
   );
 }
 
-// A fact about the agent: name on the left, value at the right edge (mono for paths)
-export function FactRow({ label, mono, children }: { label: ReactNode; mono?: boolean; children: ReactNode }) {
+// A fact about the agent: name on the left, value at the right edge.
+export function FactRow({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex min-h-[calc(var(--ctl)+var(--pad))] items-center gap-pad px-pad py-1.5">
+    <div className="acp-setting-row flex items-center gap-pad">
       <span className="shrink-0 text-2 text-fg-2">{label}</span>
-      <span className={cn('flex min-w-0 flex-1 items-center justify-end gap-1.5 text-right text-2 text-fg-1', mono && 'font-mono text-mono')}>{children}</span>
+      <span className="flex min-w-0 flex-1 items-center justify-end gap-1.5 text-right text-2 text-fg-1">{children}</span>
     </div>
   );
 }
 
 // A faint single-line row inside a Group (empty states, notes)
 export function Note({ children, shimmer }: { children: ReactNode; shimmer?: boolean }) {
-  return <div className={cn('flex min-h-row items-center px-pad py-2 text-3 text-fg-3', shimmer && 'shimmer')}>{children}</div>;
+  return <div className={cn('acp-setting-row flex items-center text-2 text-fg-2', shimmer && 'shimmer')}>{children}</div>;
 }
 
 export interface Option<V extends string> { value: V; label: string; icon?: ReactNode; hint?: string; disabled?: boolean }
@@ -118,7 +134,7 @@ export interface Option<V extends string> { value: V; label: string; icon?: Reac
 // Two to four exclusive choices as a pill strip; the chosen one is filled, the rest are text until hovered
 export function Segmented<V extends string>({ options, value, onChange, label }: { options: Option<V>[]; value: V; onChange: (v: V) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex items-center gap-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex max-w-full flex-wrap items-center gap-0.5">
       {options.map(o => (
         <button
           key={o.value}
@@ -191,7 +207,7 @@ export function NumberField({ value, onCommit, min, step, unit, label }: { value
         onKeyDown={onKey}
         className="w-(--num-w) min-w-0 bg-transparent text-right tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
-      {unit && <span className="text-3 text-fg-3">{unit}</span>}
+      {unit && <span className="text-2 text-fg-2">{unit}</span>}
     </label>
   );
 }
@@ -214,7 +230,6 @@ export interface ItemRowProps {
   lead?: ReactNode;
   title: ReactNode;
   desc?: ReactNode;
-  mono?: boolean;
   trailing?: ReactNode;
   // Hover-revealed open button at the right edge (opens a file)
   onOpen?: () => void;
@@ -225,55 +240,52 @@ export interface ItemRowProps {
   className?: string;
 }
 
-// A list row: lead slot · text (title + optional second line) · trailing slot. Same anatomy as ui/Row; one control height plus a pad tall,
-// so one-line and two-line rows (and rows with a hidden open button) all land on the same height
-export function ItemRow({ lead, title, desc, mono, trailing, onOpen, onClick, dim, className }: ItemRowProps) {
+// Settings rows share typography and padding. Detail rows reserve two text lines; wrapped content can grow.
+export function ItemRow({ lead, title, desc, trailing, onOpen, onClick, dim, className }: ItemRowProps) {
   const Tag = onClick ? 'button' : 'div';
   return (
     <Tag
       {...(onClick ? { type: 'button' as const, onClick } : {})}
+      data-detail={!!desc || undefined}
       className={cn(
-        'group/row flex min-h-[calc(var(--ctl)+var(--pad))] w-full items-center gap-gap px-pad py-1.5 text-left',
+        'acp-setting-row group/row flex w-full items-center gap-gap text-left',
         onClick && 'transition-colors hover:bg-hover focus-visible:bg-hover',
         className,
       )}
     >
-      {lead !== undefined && <span className={cn('flex size-lead shrink-0 items-center justify-center text-fg-3 [&_svg]:size-icon', dim && 'opacity-60')}>{lead}</span>}
+      {lead !== undefined && <span className={cn('flex size-lead shrink-0 items-center justify-center text-fg-2 [&_svg]:size-icon', dim && 'opacity-60')}>{lead}</span>}
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className={cn('truncate text-2', dim ? 'text-fg-3' : 'text-fg-1', mono && 'font-mono text-mono')}>{title}</span>
-        {desc && <span className="truncate text-3 text-fg-3">{desc}</span>}
+        <span className={cn('truncate text-2', dim ? 'text-fg-2' : 'text-fg-1')}>{title}</span>
+        {desc && <span className="truncate text-2 text-fg-2">{desc}</span>}
       </span>
       {trailing && <span className="flex shrink-0 items-center gap-2">{trailing}</span>}
       {onOpen && (
-        <IconButton title={t('common.open')} aria-label={t('common.open')} onClick={onOpen} className="-mr-1.5 text-fg-3 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100">
+        <IconButton title={t('common.open')} aria-label={t('common.open')} onClick={onOpen} className="-mr-1.5 text-fg-2 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100">
           <ExternalLink strokeWidth={1.5} />
         </IconButton>
       )}
-      {onClick && <ChevronRight className="-mr-1 size-icon shrink-0 text-fg-3" strokeWidth={1.5} />}
+      {onClick && <ChevronRight className="-mr-1 size-icon shrink-0 text-fg-2" strokeWidth={1.5} />}
     </Tag>
   );
 }
 
-// Path shown in mono, clickable when onOpen is given
+// Paths use the same UI face and size as setting values; the full path stays in the tooltip.
 export function PathText({ path, env, onOpen, className }: { path: string; env: { home: string; cwd: string }; onOpen?: (path: string) => void; className?: string }) {
   const text = shortPath(path, env);
-  if (!onOpen) return <span title={path} className={cn('truncate font-mono text-mono text-fg-2', className)}>{text}</span>;
+  if (!onOpen) return <span title={path} className={cn('truncate text-2 text-fg-2', className)}>{text}</span>;
   return (
-    <button type="button" title={path} onClick={() => onOpen(path)} className={cn('min-w-0 truncate rounded-sm font-mono text-mono text-fg-2 underline decoration-line-strong underline-offset-2 transition-colors hover:text-fg-1 hover:decoration-fg-3 focus-visible:text-fg-1', className)}>
+    <button type="button" title={path} onClick={() => onOpen(path)} className={cn('min-w-0 truncate rounded-sm text-2 text-fg-2 underline decoration-line-strong underline-offset-2 transition-colors hover:text-fg-1 hover:decoration-fg-3 focus-visible:text-fg-1', className)}>
       {text}
     </button>
   );
 }
 
-// The file / directory a run of rows came from, as the head row of their card: a plain mono path with the open button revealed on hover
-export function SourceHead({ path, env, onOpen }: { path: string; env: { home: string; cwd: string }; onOpen: (path: string) => void }) {
+// The source is supporting metadata after the items, not another heading level.
+export function SourceLink({ path, env, onOpen }: { path: string; env: { home: string; cwd: string }; onOpen: (path: string) => void }) {
   return (
-    <div className="group/row flex min-h-row items-center gap-gap px-pad py-1">
-      <PathText path={path} env={env} className="text-fg-2" />
-      <span className="flex-1" />
-      <IconButton title={t('common.open')} aria-label={t('common.open')} onClick={() => onOpen(path)} className="-mr-1.5 size-lead text-fg-3 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 [&_svg]:size-icon">
-        <ExternalLink strokeWidth={1.5} />
-      </IconButton>
-    </div>
+    <button type="button" title={path} onClick={() => onOpen(path)} className="acp-setting-row flex w-full items-center gap-gap text-left text-2 text-fg-2 transition-colors hover:text-fg-1 focus-visible:text-fg-1 focus-visible:bg-hover">
+      <span className="min-w-0 flex-1 truncate">{shortPath(path, env)}</span>
+      <ExternalLink className="size-icon shrink-0" strokeWidth={1.5} />
+    </button>
   );
 }
