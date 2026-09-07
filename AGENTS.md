@@ -28,6 +28,8 @@ A chat shell for VS Code / Cursor that drives official agent CLIs (`grok agent s
 
 Hard-won facts about the ACP implementations we drive; check here before assuming the spec:
 
+- Model identity must preserve the ACP option ID and source/group identity, independently of the display name. Kimi's `kimi-code/k3` and `asgard/kimi-k3` both advertise `K3`; merging them by name routes selection to the first provider. Grok advertises custom config aliases such as `asgard` without source metadata, so `host/acp/modelSources.ts` reads custom endpoint declarations and `shared/modelSources.ts` annotates the options. Keep ACP select groups through normalization. New agent integrations must verify official/custom same-name selection, independent hiding, restoration, and config updates; unknown sources stay unclassified, and ambiguous duplicate parameter tuples remain separate by their original option IDs. Devin's genuine effort/Fast/1M variants still group normally.
+
 - Grok echoes our prompt back as `user_message_chunk`; ignore it while a turn is in flight, and suppress content updates during load/resume replay
 - Grok's first `tool_call` packet carries only `title` (e.g. `"read_file"`); kind/locations arrive in later `tool_call_update`s. A target inferred from the title is a fallback only — never overwrite rawInput/locations
 - The SDK's `ctx.request(method, params)` generic inference is fragile: when params is a separate variable, annotate it explicitly as `acp.XxxRequest` or it silently degrades to `unknown`

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { findVariant, groupModels, modelBrand, parseModelName, variantLabel, visibleOptions } from '../src/shared/models';
+import { applyModelSources } from '../src/shared/modelSources';
+import type { SessionOption } from '../src/shared/transcript';
+import { familyHidden, findVariant, groupModels, modelBrand, parseModelName, setFamilyVisible, variantLabel, visibleOptions } from '../src/shared/models';
 
 // Real name samples issued by Devin (measured via pnpm probe devin), covering all suffix combinations
 const DEVIN = [
@@ -11,6 +13,43 @@ const DEVIN = [
   'SWE-1.7 Max', 'SWE-1.7 Lightning Medium', 'SWE-1.6', 'SWE-1.6 Fast', 'Adaptive', 'Kimi K2.7',
 ];
 const opts = (names: string[]) => names.map(n => ({ id: n.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name: n }));
+
+// Real Kimi aliases: official models and the gateway may have identical display names.
+const KIMI: SessionOption[] = [
+  { id: 'kimi-code/k3', name: 'K3' },
+  { id: 'asgard/kimi-k3', name: 'K3' },
+  { id: 'asgard/deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+];
+
+applyModelSources('kimi', [{ id: 'model', name: 'Model', category: 'model', options: KIMI }]);
+
+describe('model sources', () => {
+  it('keeps selecting the gateway K3 on the gateway instead of taking the first official variant', () => {
+    const families = groupModels(KIMI);
+    expect(families).toHaveLength(3);
+    expect(new Set(families.map(f => f.key)).size).toBe(3);
+    const gateway = families.find(f => f.source === 'asgard' && f.name === 'K3')!;
+    expect(findVariant(gateway, '', false, false)?.id).toBe('asgard/kimi-k3');
+  });
+
+  it('hides one source independently and keeps a hidden current model reachable', () => {
+    const official = groupModels(KIMI)[0]!;
+    const hidden = setFamilyVisible(KIMI, [], official.key, false);
+    expect(visibleOptions(KIMI, hidden).map(o => o.id)).toEqual(['asgard/kimi-k3', 'asgard/deepseek-v4-flash']);
+    expect(visibleOptions(KIMI, hidden, 'kimi-code/k3')).toEqual(KIMI);
+  });
+
+  it('expands legacy name-only hiding when enabling one source, leaving the other source hidden', () => {
+    const [official, gateway] = groupModels(KIMI);
+    expect(familyHidden(official!, ['K3'])).toBe(true);
+    expect(familyHidden(gateway!, ['K3'])).toBe(true);
+    const hidden = setFamilyVisible(KIMI, ['K3'], gateway!.key, true);
+    expect(hidden).toEqual([official!.key]);
+    expect(visibleOptions(KIMI, hidden).map(o => o.id)).toContain('asgard/kimi-k3');
+    // A filtered menu still produces the same source-qualified identity.
+    expect(groupModels(visibleOptions(KIMI, hidden))[0]!.key).toBe(gateway!.key);
+  });
+});
 
 describe('model name parsing', () => {
   it('suffix split: effort / Thinking / No Thinking / Fast / 1M in various combinations', () => {

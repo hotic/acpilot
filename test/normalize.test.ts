@@ -111,7 +111,7 @@ describe('applyUpdate', () => {
       ],
     });
     expect(s.controls.options.map(o => o.id)).toEqual(['model', 'effort', 'custom']);
-    expect(s.controls.options[0]!.options).toEqual([{ id: 'a', name: 'A', description: 'Group 1' }, { id: 'b', name: 'B', description: 'Group 2' }]);
+    expect(s.controls.options[0]!.options).toEqual([{ id: 'a', name: 'A', description: 'Group 1', group: { id: 'g1', name: 'Group 1' } }, { id: 'b', name: 'B', description: 'Group 2', group: { id: 'g2', name: 'Group 2' } }]);
     expect(s.controls.options[0]!.value).toBe('b');
     expect(s.controls.modes.map(m => m.id)).toEqual(['agent', 'plan']);
     expect(s.controls.modeId).toBe('plan');

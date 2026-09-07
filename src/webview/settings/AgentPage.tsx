@@ -3,7 +3,7 @@ import { Braces, FileText, Globe, KeyRound, Plus, Server, SlidersHorizontal, Spa
 import type { AccountInfo, AgentInfo, ConfigControl } from '@shared/transcript';
 import type { AgentInventory, InventoryFile, InventoryMcp, InventorySkill } from '@shared/inventory';
 import { mcpAppliesTo, mcpTransport, type McpServerSetting, type McpTransport, type SettingsView } from '@shared/settings';
-import { groupModels, variantLabel, type ModelFamily } from '@shared/models';
+import { familyHidden, groupModels, setFamilyVisible, variantLabel, type ModelFamily } from '@shared/models';
 import { IconButton } from '../ui/Button';
 import { t } from '../i18n';
 import { ModelMark } from '../chat/ModelMark';
@@ -112,7 +112,7 @@ function ModelsSection({ agent, controls, settings, on }: { agent: AgentInfo; co
   const hidden = settings.hiddenOptions[agent.id] ?? {};
   const toggle = (c: ConfigControl, f: ModelFamily, show: boolean) => {
     const cur = hidden[c.id] ?? [];
-    const next = show ? cur.filter(n => n !== f.name) : [...cur, f.name];
+    const next = setFamilyVisible(c.options, cur, f.key, show);
     const forAgent = { ...hidden, [c.id]: next };
     if (!next.length) delete forAgent[c.id];
     const all = { ...settings.hiddenOptions, [agent.id]: forAgent };
@@ -137,23 +137,31 @@ function ModelsSection({ agent, controls, settings, on }: { agent: AgentInfo; co
         // Translate standard categories; preserve names supplied by custom controls.
         const title = c.category === 'model' ? t('settings.models.selection')
           : c.category === 'thought_level' ? t('settings.models.thinking') : c.name;
-        return (
-          <Section key={c.id} title={several ? title : undefined} count={several ? families.length - off.length : undefined}>
-            {families.map(f => {
-              const shown = !off.includes(f.name);
+        // Agent adapters classify model sources; unclassified ACP options retain their own group.
+        const groups = c.category === 'model' && families.some(f => f.sourceKind)
+          ? [
+              { key: 'official', title: t('settings.models.official'), families: families.filter(f => f.sourceKind === 'official') },
+              { key: 'custom', title: t('settings.models.custom'), families: families.filter(f => f.sourceKind === 'custom') },
+              { key: 'other', title, families: families.filter(f => !f.sourceKind) },
+            ].filter(g => g.families.length)
+          : [{ key: c.id, title: several ? title : undefined, families }];
+        return groups.map(g => (
+          <Section key={`${c.id}:${g.key}`} title={g.title} count={g.title ? g.families.filter(f => !familyHidden(f, off)).length : undefined}>
+            {g.families.map(f => {
+              const shown = !familyHidden(f, off);
               return (
                 <ItemRow
-                  key={f.name}
+                  key={f.key}
                   lead={<ModelMark family={f.name} />}
                   title={f.name}
-                  desc={summary(f)}
+                  desc={[f.source, summary(f)].filter(Boolean).join(' · ') || undefined}
                   dim={!shown}
-                  trailing={<Switch checked={shown} onChange={v => toggle(c, f, v)} label={`${f.name} · ${c.name}`} />}
+                  trailing={<Switch checked={shown} onChange={v => toggle(c, f, v)} label={`${f.name} · ${f.source ?? c.name}`} />}
                 />
               );
             })}
           </Section>
-        );
+        ));
       })}
     </>
   );

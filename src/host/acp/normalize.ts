@@ -213,7 +213,7 @@ export function applyConfigOptions(controls: SessionControls, options: acp.Sessi
 function flattenSelect(opts: acp.SessionConfigSelectOptions): SessionOption[] {
   const out: SessionOption[] = [];
   for (const o of opts) {
-    if ('group' in o) for (const x of o.options) out.push({ id: x.value, name: x.name, description: x.description ?? o.name });
+    if ('group' in o) for (const x of o.options) out.push({ id: x.value, name: x.name, description: x.description ?? o.name, group: { id: o.group, name: o.name } });
     else out.push({ id: o.value, name: o.name, description: o.description ?? undefined });
   }
   return out;

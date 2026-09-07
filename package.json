@@ -353,6 +353,7 @@
     "metal-fx": "1.0.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "smol-toml": "^1.8.0",
     "streamdown": "2.6.0",
     "thinking-orbs": "0.3.1"
   },

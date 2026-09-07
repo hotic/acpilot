@@ -34,7 +34,7 @@ export function mcpAppliesTo(s: McpServerSetting, agent: AgentId): boolean {
   return s.enabled !== false && (!s.agents || s.agents.includes(agent));
 }
 
-// Hidden option families (acpilot.hiddenOptions): agent → configOption id → family names (see models.ts) kept out of the composer menus.
+// Hidden option families (acpilot.hiddenOptions): agent → configOption id → source-qualified family keys (legacy family names remain readable; see models.ts) kept out of the composer menus.
 // Long lists (Devin's 210 models) are trimmed to what is actually used via this; the option currently selected is never hidden
 export type HiddenMap = Record<AgentId, Record<string, string[]>>;
 

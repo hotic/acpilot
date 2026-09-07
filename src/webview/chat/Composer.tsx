@@ -249,7 +249,7 @@ interface OptionMenuProps {
 function OptionControl({ control, hidden, ...rest }: OptionMenuProps & { hidden?: string[] }) {
   const shown = useMemo(() => ({ ...control, options: visibleOptions(control.options, hidden, control.value) }), [control, hidden]);
   const families = useMemo(() => groupModels(shown.options), [shown.options]);
-  return families.length < shown.options.length ? <ModelControl {...rest} control={shown} families={families} /> : <OptionMenu {...rest} control={shown} />;
+  return families.length < shown.options.length || families.some(f => f.source) ? <ModelControl {...rest} control={shown} families={families} /> : <OptionMenu {...rest} control={shown} />;
 }
 
 // One chip for the whole model choice, "family + params" with the params faint (as in Cursor's toolbar and Devin's own composer). It opens one panel:
@@ -260,7 +260,8 @@ function ModelControl({ control: c, families, onSelect, onOpenChange }: OptionMe
   const cur = families.find(f => f.variants.some(v => v.id === c.value));
   const curVar = cur?.variants.find(v => v.id === c.value);
   // Params are worth showing when the family offers a choice, or its only variant carries a flag (a lone "Composer 2.5 Fast")
-  const meta = cur && curVar && (cur.variants.length > 1 || curVar.effort || curVar.fast || curVar.long) ? variantLabel(curVar, cur) : undefined;
+  const params = cur && curVar && (cur.efforts.length > 1 || curVar.effort || curVar.fast || curVar.long) ? variantLabel(curVar, cur) : undefined;
+  const meta = [cur?.source, params].filter(Boolean).join(' · ') || undefined;
   return (
     <Popover
       side="top" align="end" width="md" role="menu" onOpenChange={onOpenChange}
@@ -284,9 +285,9 @@ interface ModelPanelProps {
 }
 
 function ModelPanel({ families, cur, curVar, onSelect, close }: ModelPanelProps) {
-  const items = families.map((f): MenuItem => ({ id: f.name, label: f.name, icon: <ModelMark family={f.name} />, checked: f === cur }));
-  const pickFamily = (name: string) => {
-    const f = families.find(x => x.name === name);
+  const items = families.map((f): MenuItem => ({ id: f.key, label: f.name, description: f.source, icon: <ModelMark family={f.name} />, checked: f === cur }));
+  const pickFamily = (key: string) => {
+    const f = families.find(x => x.key === key);
     if (f) onSelect(((curVar && findVariant(f, curVar.effort, curVar.fast, curVar.long)) ?? f.variants[0]!).id);
     close();
   };

@@ -247,6 +247,8 @@ export const zhCN = {
   'settings.tab.models': '模型',
   'settings.models.desc': '选择在输入框菜单中显示的选项。关闭后隐藏，当前使用的选项仍会保留。',
   'settings.models.selection': '模型选择',
+  'settings.models.official': '官方模型',
+  'settings.models.custom': '自定义配置',
   'settings.models.thinking': '思考设置',
   'settings.models.none': '新建 {agent} 会话后显示可用选项。',
   'settings.tab.mcp': 'MCP',

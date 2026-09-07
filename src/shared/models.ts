@@ -18,7 +18,11 @@ export interface ModelVariant {
 }
 
 export interface ModelFamily {
+  // Namespaced identity keeps equal display names from different providers separate.
+  key: string;
   name: string;
+  source?: string;
+  sourceKind?: 'official' | 'custom';
   variants: ModelVariant[];
   // Effort labels sorted by strength (deduplicated)
   efforts: string[];
@@ -53,10 +57,24 @@ export function parseModelName(name: string): Omit<ModelVariant, 'id' | 'name'> 
 
 export function groupModels(options: SessionOption[]): ModelFamily[] {
   const map = new Map<string, ModelFamily>();
+  // With no provider/group metadata, equal parameter tuples are ambiguous, not interchangeable.
+  const tuples = new Set<string>();
+  const ambiguous = new Set<string>();
   for (const o of options) {
     const p = parseModelName(o.name);
-    let f = map.get(p.family);
-    if (!f) { f = { name: p.family, variants: [], efforts: [], hasFast: false, hasLong: false }; map.set(p.family, f); }
+    const base = JSON.stringify([o.source?.id ?? o.group?.id, p.family]);
+    const tuple = JSON.stringify([base, p.effort, p.fast, p.long]);
+    if (tuples.has(tuple)) ambiguous.add(base);
+    tuples.add(tuple);
+  }
+  for (const o of options) {
+    const p = parseModelName(o.name);
+    const namespace = o.source?.id ?? o.group?.id;
+    const separate = ambiguous.has(JSON.stringify([namespace, p.family]));
+    const source = o.source?.name ?? o.group?.name ?? (separate ? o.id : undefined);
+    const key = separate ? JSON.stringify([namespace ?? null, p.family, o.id]) : namespace ? JSON.stringify([namespace, p.family]) : p.family;
+    let f = map.get(key);
+    if (!f) { f = { key, name: p.family, source, sourceKind: o.source?.kind, variants: [], efforts: [], hasFast: false, hasLong: false }; map.set(key, f); }
     f.variants.push({ id: o.id, name: o.name, effort: p.effort, fast: p.fast, long: p.long });
   }
   const rank = (e: string) => { const i = EFFORT_ORDER.indexOf(e); return i < 0 ? EFFORT_ORDER.length : i; };
@@ -72,10 +90,24 @@ export function groupModels(options: SessionOption[]): ModelFamily[] {
 // Family name an option belongs to; flat lists (Grok's monolithic names) yield the name itself
 export const familyOf = (o: SessionOption): string => parseModelName(o.name).family;
 
+export const familyHidden = (f: ModelFamily, hidden: string[]): boolean => hidden.includes(f.key) || hidden.includes(f.name);
+
+// Expand legacy name-only preferences before toggling one source, preserving its siblings.
+export function setFamilyVisible(options: SessionOption[], hidden: string[], key: string, show: boolean): string[] {
+  const families = groupModels(options);
+  const next = new Set(hidden);
+  for (const f of families) {
+    if (hidden.includes(f.name)) { next.delete(f.name); next.add(f.key); }
+  }
+  if (show) next.delete(key); else next.add(key);
+  return [...next];
+}
+
 // Drop the options whose family is hidden; the current value always stays reachable, and a list that would hide everything shows everything
 export function visibleOptions(options: SessionOption[], hidden: string[] | undefined, current?: string): SessionOption[] {
   if (!hidden?.length) return options;
-  const kept = options.filter(o => o.id === current || !hidden.includes(familyOf(o)));
+  const hiddenIds = new Set(groupModels(options).filter(f => familyHidden(f, hidden)).flatMap(f => f.variants.map(v => v.id)));
+  const kept = options.filter(o => o.id === current || !hiddenIds.has(o.id));
   return kept.length ? kept : options;
 }
 

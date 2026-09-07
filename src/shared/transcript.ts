@@ -29,6 +29,10 @@ export interface SessionOption {
   id: string;
   name: string;
   description?: string;
+  // ACP group identity survives flattening; it need not represent a provider.
+  group?: { id: string; name: string };
+  // Verified by an agent adapter, never inferred from a display name.
+  source?: { id: string; name: string; kind: 'official' | 'custom' };
 }
 
 export interface ConfigControl {

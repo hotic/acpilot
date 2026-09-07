@@ -232,6 +232,8 @@ export const en = {
   'settings.tab.models': 'Models',
   'settings.models.desc': 'Choose which options appear in the composer menus. Hidden options stay available while in use.',
   'settings.models.selection': 'Model selection',
+  'settings.models.official': 'Official models',
+  'settings.models.custom': 'Custom configuration',
   'settings.models.thinking': 'Thinking settings',
   'settings.models.none': 'Start a {agent} session to see available options.',
   'settings.tab.mcp': 'MCP',

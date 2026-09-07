@@ -5,6 +5,8 @@ import type { AgentRuntimeInfo } from '@shared/inventory';
 import type { AgentRegistry } from './AgentRegistry';
 import { AgentProcess } from './AgentProcess';
 import { CompactionCompletion, isCompactCommand } from './compaction';
+import { applyModelSources, type ModelSources } from '@shared/modelSources';
+import { readModelSources } from './modelSources';
 import { describeDrafts, preparePrompt, restoreDrafts, type BlobStore, type PreparedPrompt } from './attachments';
 import { activityOf, applyUpdate, endTurn, failTurn, initControls, applyConfigOptions, type NormalizeState } from './normalize';
 
@@ -93,6 +95,7 @@ export class AcpSession {
   // The last auth-related line the CLI wrote to stderr since the session was (re)opened. -32000 carries no reason, but the CLI usually logs one right before
   // (Kimi: "provider managed:kimi-code has no credential configured"), and that is what the Notice should show instead of a generic "log in"
   private authHint?: string;
+  private modelSources: ModelSources = {};
 
   constructor(record: SessionRecord, private deps: SessionDeps) {
     this.id = record.id;
@@ -145,6 +148,7 @@ export class AcpSession {
   }
 
   private touch() {
+    applyModelSources(this.agent, this.state.controls.options, this.modelSources);
     this.updatedAt = new Date().toISOString();
     this.deps.onChange(this);
   }
@@ -176,6 +180,7 @@ export class AcpSession {
 
   private async connect() {
     const def = this.deps.registry.get(this.agent);
+    this.modelSources = await readModelSources(this.agent, this.cwd);
     const bin = await this.deps.registry.resolveBinary(this.agent);
     if (!bin) throw new Error(`找不到 ${def.command}，请先安装 ${def.name} CLI`);
     this.log(`spawn ${bin} ${def.args.join(' ')} (cwd ${this.cwd})${this.accountId ? ` account ${this.accountId.slice(0, 8)}` : ''}`);
