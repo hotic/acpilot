@@ -12,7 +12,8 @@ interface Preview {
   name?: string;
 }
 
-// Composer drafts: one wrapping row above the textarea. Images are square thumbnails (click to preview), text / files are icon + name pills; hovering shows the remove button
+// Composer attachments use compact, equal-height labels. Image previews stay
+// inline with file icons; names truncate only when the composer runs out of room.
 export function DraftChips({ drafts, onRemove }: { drafts: Draft[]; onRemove: (index: number) => void }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   if (!drafts.length) return null;
@@ -20,9 +21,12 @@ export function DraftChips({ drafts, onRemove }: { drafts: Draft[]; onRemove: (i
     <div className="flex flex-wrap gap-1 px-2 pt-2">
       {drafts.map((d, i) => (
         <Removable key={i} label={t('common.removeNamed', { name: d.name ?? t('common.image') })} onRemove={() => onRemove(i)}>
-          {d.kind === 'image'
-            ? <Thumb src={`data:${d.mimeType};base64,${d.data}`} name={d.name} onPreview={src => setPreview({ src, name: d.name })} />
-            : <Pill icon={d.kind === 'file' && imageMimeOf(d.name) ? <ImageIcon strokeWidth={1.5} /> : <FileText strokeWidth={1.5} />} name={d.name} />}
+          <AttachmentTag
+            name={d.name}
+            image={d.kind === 'image' || (d.kind === 'file' && !!imageMimeOf(d.name))}
+            src={d.kind === 'image' ? `data:${d.mimeType};base64,${d.data}` : undefined}
+            onPreview={src => setPreview({ src, name: d.name })}
+          />
         </Removable>
       ))}
       {preview && <Lightbox src={preview.src} name={preview.name} onClose={() => setPreview(null)} />}
@@ -30,43 +34,58 @@ export function DraftChips({ drafts, onRemove }: { drafts: Draft[]; onRemove: (i
   );
 }
 
-// Attachments of a sent user turn, same visual language; image payloads load from the session's blob directory (blobUrl) and open in the
-// Lightbox on click, a placeholder tile stands in when there is nothing to load (no blobBase in the LAB, or the blob never made it to disk)
+// Sent attachments reuse the composer labels. Images load from the session's blob
+// directory; unavailable blobs retain an image icon and name without a preview action.
 export function TurnAttachments({ attachments, blobUrl }: { attachments: Attachment[]; blobUrl?: (blob: string) => string }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   return (
-    <div className="scroll-thin flex shrink-0 gap-gap overflow-x-auto">
-      {attachments.map((a, i) => a.kind === 'image'
-        ? blobUrl && a.blob
-          ? <Thumb key={i} src={blobUrl(a.blob)} name={a.name} onPreview={src => setPreview({ src, name: a.name })} />
-          : <span key={i} role="img" aria-label={a.name ?? t('common.image')} title={a.name} className="flex size-thumb shrink-0 items-center justify-center rounded-md bg-hover text-fg-3 [&_svg]:size-icon-ctl"><ImageIcon strokeWidth={1.5} /></span>
-        : <Pill key={i} icon={<FileText strokeWidth={1.5} />} name={a.name} title={a.kind === 'file' ? a.uri : undefined} />)}
+    <div className="scroll-thin flex shrink-0 gap-1 overflow-x-auto">
+      {attachments.map((a, i) => (
+        <AttachmentTag
+          key={i}
+          name={a.name}
+          image={a.kind === 'image' || (a.kind === 'file' && !!imageMimeOf(a.name))}
+          src={a.kind === 'image' && blobUrl && a.blob ? blobUrl(a.blob) : undefined}
+          title={a.kind === 'file' ? a.uri : undefined}
+          onPreview={src => setPreview({ src, name: a.name })}
+        />
+      ))}
       {preview && <Lightbox src={preview.src} name={preview.name} onClose={() => setPreview(null)} />}
     </div>
   );
 }
 
-function Thumb({ src, name, onPreview }: { src: string; name?: string; onPreview: (src: string) => void }) {
+function AttachmentTag({ name = 'image.png', src, image, title, onPreview }: {
+  name?: string;
+  src?: string;
+  image: boolean;
+  title?: string;
+  onPreview: (src: string) => void;
+}) {
+  const Tag = src ? 'button' : 'span';
   return (
-    <button type="button" aria-label={t('common.previewImage', { name: name ?? t('common.image') })} title={name} onClick={() => onPreview(src)} className="block size-thumb shrink-0 cursor-zoom-in rounded-md outline-none hover:ring-1 hover:ring-line-strong focus-visible:ring-1 focus-visible:ring-focus active:bg-active">
-      <img src={src} alt={name ?? t('common.image')} className="size-thumb rounded-md bg-hover object-cover" />
-    </button>
-  );
-}
-
-function Pill({ icon, name, title }: { icon: ReactNode; name: string; title?: string }) {
-  return (
-    <span title={title ?? name} className="inline-flex h-ctl max-w-full min-w-0 items-center gap-1 rounded-md bg-chip px-2 text-3 text-fg-2 [&_svg]:size-icon [&_svg]:shrink-0 [&_svg]:text-fg-3">
-      {icon}
-      <span className="truncate font-mono text-mono">{name}</span>
-    </span>
+    <Tag
+      type={src ? 'button' : undefined}
+      title={title ?? name}
+      aria-label={src ? t('common.previewImage', { name }) : undefined}
+      onClick={src ? () => onPreview(src) : undefined}
+      className={cn(
+        'inline-flex h-ctl-sm max-w-full min-w-0 shrink-0 items-center gap-1 rounded-sm bg-chip px-2 text-3 font-medium text-fg-2 [&_svg]:size-icon [&_svg]:shrink-0 [&_svg]:text-fg-3',
+        src && 'cursor-zoom-in outline-none hover:bg-chip-hover focus-visible:ring-1 focus-visible:ring-focus active:bg-active',
+      )}
+    >
+      {src
+        ? <img src={src} alt="" className="size-icon-ctl shrink-0 rounded-xs object-cover" />
+        : image ? <ImageIcon strokeWidth={1.5} /> : <FileText strokeWidth={1.5} />}
+      <span className="truncate">{name}</span>
+    </Tag>
   );
 }
 
 // Wraps a chip with a remove button in its top-right corner, shown on hover / focus
 function Removable({ label, onRemove, children }: { label: string; onRemove: () => void; children: ReactNode }) {
   return (
-    <span className="group/chip relative inline-flex max-w-full">
+    <span className="group/chip relative inline-flex max-w-full min-w-0">
       {children}
       <button
         type="button"
