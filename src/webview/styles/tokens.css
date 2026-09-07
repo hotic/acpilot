@@ -90,8 +90,10 @@
   --gap: 8px;
   --msg-gap: 18px;
   --hdr: 52px;
-  /* Attachment thumbnail: square tile in the composer; sent images cap at three of these tall */
+  /* Attachment thumbnail: the same square tile in drafts and sent messages */
   --thumb: 56px;
+  /* Sticky prompts leave room for the reply, even in a short sidebar. */
+  --user-message-max: min(240px, 40cqh);
 
   /* Three radius levels: inline (inline code / progress bar) / control (button / Chip / menu item / row hover) / container (composer / card / overlay / code block / bubble).
      --r-xs is for tiny swatches only (legend squares) and does not follow the radius axis */
@@ -174,6 +176,7 @@
   --bg-2: #2c2c2c;
   --bg-code: #262626;
 }
+[data-theme="light"][data-surface-host="editor"],
 [data-theme="light"] [data-surface-host="editor"] {
   --bg-0: var(--vscode-editor-background, #ffffff);
   --bg-1: #f6f6f7;
@@ -387,6 +390,15 @@
   &::-webkit-scrollbar-thumb { border-width: 2px; }
 }
 @utility term-follow { overflow-anchor: none; }
+
+/* User cards stick within an exchange; use an opaque surface so replies cannot
+   bleed through the translucent chip color. Long prompt text scrolls independently. */
+.thread-scroll { container-type: size; }
+.user-message { max-height: var(--user-message-max); }
+.user-message-card {
+  background-color: var(--bg-0);
+  background-image: linear-gradient(var(--chip), var(--chip));
+}
 
 @keyframes acp-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes acp-enter { from { opacity: 0; transform: translateY(var(--enter-y)); } }

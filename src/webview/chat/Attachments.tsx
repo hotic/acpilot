@@ -35,11 +35,11 @@ export function DraftChips({ drafts, onRemove }: { drafts: Draft[]; onRemove: (i
 export function TurnAttachments({ attachments, blobUrl }: { attachments: Attachment[]; blobUrl?: (blob: string) => string }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="scroll-thin flex shrink-0 gap-gap overflow-x-auto">
       {attachments.map((a, i) => a.kind === 'image'
         ? blobUrl && a.blob
-          ? <SentImage key={i} src={blobUrl(a.blob)} name={a.name} onPreview={src => setPreview({ src, name: a.name })} />
-          : <span key={i} className="flex size-thumb items-center justify-center rounded-md bg-hover text-fg-3 [&_svg]:size-icon-ctl"><ImageIcon strokeWidth={1.5} /></span>
+          ? <Thumb key={i} src={blobUrl(a.blob)} name={a.name} onPreview={src => setPreview({ src, name: a.name })} />
+          : <span key={i} role="img" aria-label={a.name ?? t('common.image')} title={a.name} className="flex size-thumb shrink-0 items-center justify-center rounded-md bg-hover text-fg-3 [&_svg]:size-icon-ctl"><ImageIcon strokeWidth={1.5} /></span>
         : <Pill key={i} icon={<FileText strokeWidth={1.5} />} name={a.name} title={a.kind === 'file' ? a.uri : undefined} />)}
       {preview && <Lightbox src={preview.src} name={preview.name} onClose={() => setPreview(null)} />}
     </div>
@@ -48,16 +48,8 @@ export function TurnAttachments({ attachments, blobUrl }: { attachments: Attachm
 
 function Thumb({ src, name, onPreview }: { src: string; name?: string; onPreview: (src: string) => void }) {
   return (
-    <button type="button" aria-label={t('common.previewImage', { name: name ?? t('common.image') })} title={name} onClick={() => onPreview(src)} className="block cursor-zoom-in rounded-md outline-none focus-visible:ring-1 focus-visible:ring-focus">
+    <button type="button" aria-label={t('common.previewImage', { name: name ?? t('common.image') })} title={name} onClick={() => onPreview(src)} className="block size-thumb shrink-0 cursor-zoom-in rounded-md outline-none hover:ring-1 hover:ring-line-strong focus-visible:ring-1 focus-visible:ring-focus active:bg-active">
       <img src={src} alt={name ?? t('common.image')} className="size-thumb rounded-md bg-hover object-cover" />
-    </button>
-  );
-}
-
-function SentImage({ src, name, onPreview }: { src: string; name?: string; onPreview: (src: string) => void }) {
-  return (
-    <button type="button" aria-label={t('common.previewImage', { name: name ?? t('common.image') })} title={name} onClick={() => onPreview(src)} className="block max-w-full cursor-zoom-in rounded-md outline-none focus-visible:ring-1 focus-visible:ring-focus">
-      <img src={src} alt={name ?? t('common.image')} className="max-h-[calc(3*var(--thumb))] max-w-full rounded-md object-contain" />
     </button>
   );
 }

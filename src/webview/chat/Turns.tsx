@@ -28,15 +28,14 @@ export function UserMessage({ turn, index, blobUrl }: { turn: UserTurn; index: n
   return (
     <div
       className={cn(
-        'enter flex flex-col gap-gap text-1 text-fg-1 [overflow-wrap:anywhere]',
-        userMessage === 'bubble' && 'self-end max-w-[88%] rounded-lg bg-chip px-3 py-[9px]',
-        userMessage === 'block' && 'rounded-lg bg-chip px-3 py-[9px]',
-        userMessage === 'plain' && 'font-medium',
+        'user-message sticky top-0 z-10 flex w-full shrink-0 flex-col gap-gap text-1 text-fg-1 [overflow-wrap:anywhere]',
+        userMessage !== 'plain' && 'user-message-card rounded-lg px-pad py-gap',
+        userMessage === 'bubble' && 'self-end max-w-[88%]',
+        userMessage === 'plain' && 'bg-bg-0 py-gap font-medium',
       )}
-      style={{ '--i': index } as CSSProperties}
     >
       {turn.attachments?.length ? <TurnAttachments attachments={turn.attachments} blobUrl={blobUrl} /> : null}
-      {turn.text && <div className="whitespace-pre-wrap">{turn.text}</div>}
+      {turn.text && <div className="scroll-thin min-h-0 overflow-y-auto whitespace-pre-wrap">{turn.text}</div>}
     </div>
   );
 }

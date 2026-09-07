@@ -243,17 +243,28 @@ function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: Thre
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
   }, [turns, running]);
 
+  // Each user message sticks only within its own exchange. Automatic commands belong
+  // to the preceding exchange so compaction does not replace the user's context.
   let i = 0;
+  const exchanges: { key: number; messages: ReactNode[] }[] = [];
+  turns.forEach((turn, ti) => {
+    const index = Math.min(i, STAGGER_CAP);
+    i += turn.role === 'agent' ? turn.blocks.length + 1 : 1;
+    if (!exchanges.length || (turn.role === 'user' && !turn.auto)) {
+      exchanges.push({ key: ti, messages: [] });
+    }
+    exchanges[exchanges.length - 1]!.messages.push(turn.role === 'user'
+      ? <UserMessage key={ti} turn={turn} index={index} blobUrl={blobUrl} />
+      : <AgentMessage key={ti} turn={turn} index={index} running={running && ti === turns.length - 1} onPermission={onPermission} />);
+  });
   return (
-    <div ref={ref} className="scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto px-page pt-pad-y">
-      <div key={replayKey} className={cn('mx-auto flex flex-col gap-msg pb-gap', wide && 'max-w-[720px]')}>
-        {turns.map((t, ti) => {
-          const idx = Math.min(i, STAGGER_CAP);
-          i += t.role === 'agent' ? t.blocks.length + 1 : 1;
-          return t.role === 'user'
-            ? <UserMessage key={ti} turn={t} index={idx} blobUrl={blobUrl} />
-            : <AgentMessage key={ti} turn={t} index={idx} running={running && ti === turns.length - 1} onPermission={onPermission} />;
-        })}
+    <div ref={ref} className="thread-scroll scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto px-page">
+      <div key={replayKey} className={cn('mx-auto flex flex-col gap-msg pt-pad-y pb-gap', wide && 'max-w-[720px]')}>
+        {exchanges.map(exchange => (
+          <section key={exchange.key} className="flex min-w-0 flex-col gap-msg">
+            {exchange.messages}
+          </section>
+        ))}
       </div>
     </div>
   );
