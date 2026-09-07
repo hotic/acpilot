@@ -1,6 +1,23 @@
-# ACPilot
+<p align="center">
+  <img src="media/icon.png" alt="ACPilot logo" width="128" height="128">
+</p>
 
-English | [简体中文](README.zh.md)
+<h1 align="center">ACPilot</h1>
+
+<p align="center">
+  A home for coding agents in VS Code / Cursor.<br>
+  Grok, Devin, Kimi Code, and more — connected through ACP.
+</p>
+
+<p align="center">
+  <strong>English</strong> · <a href="README.zh.md">简体中文</a>
+</p>
+
+<p align="center">
+  <a href="#usage">Getting started</a> · <a href="#development">Development</a>
+</p>
+
+## Overview
 
 A chat shell that lives in the VS Code / Cursor secondary sidebar and drives official agent CLIs over [ACP](https://agentclientprotocol.com) (JSON-RPC over stdio):
 

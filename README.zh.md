@@ -1,6 +1,23 @@
-# ACPilot
+<p align="center">
+  <img src="media/icon.png" alt="ACPilot 标志" width="128" height="128">
+</p>
 
-[English](README.md) | 简体中文
+<h1 align="center">ACPilot</h1>
+
+<p align="center">
+  在 VS Code / Cursor 里，与编程 Agent 一起工作。<br>
+  通过 ACP 连接 Grok、Devin、Kimi Code，以及更多 Agent。
+</p>
+
+<p align="center">
+  <a href="README.md">English</a> · <strong>简体中文</strong>
+</p>
+
+<p align="center">
+  <a href="#使用">开始使用</a> · <a href="#开发">参与开发</a>
+</p>
+
+## 简介
 
 一个聊天壳，装在 VS Code / Cursor 的副侧栏里，通过 [ACP](https://agentclientprotocol.com)（JSON-RPC over stdio）驱动官方 agent CLI：
 
@@ -11,7 +28,7 @@
 
 壳只管界面、会话组织、权限审批、账号与上下文预算；模型调用、Agent 执行、上下文压缩本身全部留给 CLI。
 
-## 用
+## 使用
 
 1. 装好 CLI（Grok / Kimi 在自己的终端里登录；Devin 见下）
 2. 打开副侧栏的 ACPilot 视图，下方工具行切 agent / 模式 / 模型
