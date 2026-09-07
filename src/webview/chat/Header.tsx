@@ -1,4 +1,4 @@
-import { ChevronDown, History, Menu as MenuIcon, Plus, Settings2, UserRound } from 'lucide-react';
+import { History, Menu as MenuIcon, Plus, Settings2, UserRound } from 'lucide-react';
 import type { AccountInfo, AgentInfo, SessionSummary } from '@shared/transcript';
 import { useAppearance } from '../appearance';
 import { IconButton } from '../ui/Button';
@@ -69,27 +69,22 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
             <span className="min-w-0 flex-1 truncate text-2 font-medium text-fg-strong">{title}</span>
             {/* The icon is 6px smaller than the button box; the negative margin makes the right edge of the last icon bite into the page-margin line */}
             <div className="-mr-1.5 flex shrink-0 items-center gap-0.5">
-              {/* Split new-session: the plus goes with the configured default agent, the caret opens an agent picker */}
-              <div className="flex items-center">
-                <IconButton onClick={() => on.newSession()} title="新会话" aria-label="新会话">
-                  <Plus strokeWidth={1.5} />
-                </IconButton>
-                <Menu
-                  side="bottom" align="end" width="sm"
-                  items={agents.map(a => ({ id: a.id, label: a.name, icon: <AgentMark id={a.id} name={a.name} />, disabled: a.available === false }))}
-                  onSelect={id => on.newSession(id)}
-                >
-                  {({ open, toggle, ref }) => (
-                    <IconButton
-                      ref={ref} data-open={open || undefined} onClick={toggle}
-                      title="选择新会话的 Agent" aria-label="选择新会话的 Agent"
-                      className="-ml-1.5 data-[open]:bg-active data-[open]:text-fg-1"
-                    >
-                      <ChevronDown strokeWidth={1.5} />
-                    </IconButton>
-                  )}
-                </Menu>
-              </div>
+              {/* New sessions start after choosing an agent from the plus menu. */}
+              <Menu
+                side="bottom" align="end" width="sm"
+                items={agents.map(a => ({ id: a.id, label: a.name, icon: <AgentMark id={a.id} name={a.name} />, disabled: a.available === false }))}
+                onSelect={id => on.newSession(id)}
+              >
+                {({ open, toggle, ref }) => (
+                  <IconButton
+                    ref={ref} data-open={open || undefined} onClick={toggle}
+                    title="新会话" aria-label="新会话" aria-haspopup="menu" aria-expanded={open}
+                    className="data-[open]:bg-active data-[open]:text-fg-1"
+                  >
+                    <Plus strokeWidth={1.5} />
+                  </IconButton>
+                )}
+              </Menu>
               <Popover side="bottom" align="end" width="xl" content={close => (
                 <SessionList
                   sessions={sessions}
