@@ -31,8 +31,8 @@ describe('Codex process folding', () => {
 
   it('selects the actual pending action despite stale activity or later completed calls', () => {
     const turn: AgentTurn = { role: 'agent', blocks: [run, read], activity: { kind: 'think', label: 'Thinking' } };
-    expect(foldActivity(turn)).toEqual({ kind: 'execute', label: 'Run…', target: 'pnpm test', mono: true });
-    expect(foldActivity({ role: 'agent', blocks: [{ ...run, status: 'completed' }], activity: turn.activity }).label).toBe('Thinking');
+    expect(foldActivity(turn)).toEqual({ kind: 'execute', label: 'Run…', target: 'pnpm test', mono: true, active: true });
+    expect(foldActivity({ role: 'agent', blocks: [{ ...run, status: 'completed' }], activity: turn.activity }).label).toBe('Run');
     expect(foldActivity({ role: 'agent', blocks: [{ type: 'compaction', id: 'c', status: 'in_progress' }] }).label).toBe('Compacting context');
   });
 
@@ -53,8 +53,8 @@ describe('Codex process folding', () => {
   it('follows the locale: zh-CN renders the same labels in Chinese', () => {
     setLocale('zh-CN');
     const turn: AgentTurn = { role: 'agent', blocks: [run], startedAt: 1000, endedAt: 287000 };
-    expect(elapsedLabel(turn)).toBe('用时 4分钟 46秒');
-    expect(toolVerb({ ...run, status: 'failed' })).toBe('Run失败');
+    expect(elapsedLabel(turn)).toBe('用时 4 分钟 46 秒');
+    expect(toolVerb({ ...run, status: 'failed' })).toBe('运行失败');
     expect(foldActivity({ role: 'agent', blocks: [{ type: 'compaction', id: 'c', status: 'in_progress' }] }).label).toBe('正在压缩上下文');
   });
 });

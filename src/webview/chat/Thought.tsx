@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Brain } from 'lucide-react';
 import type { ThoughtBlock } from '@shared/transcript';
 import { useAppearance } from '../appearance';
+import { t } from '../i18n';
 import { Disclosure } from '../ui/Disclosure';
 import { Orb } from '../effects/Orb';
 import { cn } from '../ui/cn';
 
-// Thought: one row, "Thinking" plus the seconds one shade fainter; while running the seconds tick live, frozen once done. Expanding shows grey body text.
+// Thought row: localized verb plus faint seconds. Live seconds tick from startedAt; durationSec freezes them when the block seals.
 // The Orb appears only here (while streaming); the lead slot takes space only when tool rows also have one, keeping every row in the same message left-aligned
 export function Thought({ block }: { block: ThoughtBlock }) {
   const { thought, toolLine } = useAppearance();
@@ -16,8 +17,10 @@ export function Thought({ block }: { block: ThoughtBlock }) {
     : toolLine === 'text' ? undefined : <Brain className="size-icon" strokeWidth={1.5} />;
   return (
     <Disclosure lead={lead} body={<p className="m-0 text-2 text-fg-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{block.text}</p>}>
-      <span className={cn(block.streaming && thought === 'shimmer' && 'shimmer')}>Thinking</span>
-      {sec !== undefined && <span className="text-fg-3 tabular-nums">{sec}s</span>}
+      <span className={cn(block.streaming && thought === 'shimmer' && 'shimmer')}>
+        {block.streaming ? t('host.thinking') : t('thought.label')}
+      </span>
+      {sec !== undefined && <span className="text-fg-3 tabular-nums">{t('turns.elapsed.s', { s: sec })}</span>}
     </Disclosure>
   );
 }

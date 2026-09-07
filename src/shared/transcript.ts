@@ -104,6 +104,8 @@ export interface ToolCallBlock {
   verb: string;
   target?: string;
   targetMono?: boolean;
+  // Preserve ACP file references independently of the compact heading target.
+  locations?: { path: string; line?: number }[];
   status: ToolStatus;
   meta?: string;
   diffStat?: { add: number; del: number };

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { Check, ChevronRight, Compass, FoldVertical, Hand, Pencil, TriangleAlert, X } from 'lucide-react';
 import { IconButton } from '../ui/Button';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
@@ -7,6 +7,7 @@ import { t } from '../i18n';
 import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { Disclosure } from '../ui/Disclosure';
 import { Orb } from '../effects/Orb';
+import { WaitingDots } from '../effects/WaitingDots';
 import { cn } from '../ui/cn';
 import { TOOL_ICON } from './icons';
 import { Thought } from './Thought';
@@ -19,8 +20,11 @@ import { TurnAttachments } from './Attachments';
 import { elapsedLabel, foldActivity, splitCodexBlocks } from './folding';
 
 // User message: color block / right-aligned bubble / plain text; ones ACPilot sends automatically (/compact) render as a note line, not a bubble.
-// Attachments (image thumbnails / file pills) sit above the text inside the same bubble
-export function UserMessage({ turn, index, blobUrl, onEdit, editDisabled }: { turn: UserTurn; index: number; blobUrl?: (blob: string) => string; onEdit?: () => void; editDisabled?: boolean }) {
+// Attachments (image thumbnails / file pills) sit above the text inside the same bubble.
+// With `onEdit` the whole card opens the editor on click (as Cursor does); the pencil is a hover-only hint in the corner, not a row of its own,
+// so the card stays as tall as its text. Clicks that land on an attachment or that end a text selection leave the card alone.
+// Sticking within the exchange is the caller's job (`HistoryMessage` wraps it), so the editor can take the card's place without a layout jump
+export function UserMessage({ turn, index, blobUrl, onEdit }: { turn: UserTurn; index: number; blobUrl?: (blob: string) => string; onEdit?: () => void }) {
   const { userMessage } = useAppearance();
   if (turn.auto) {
     return (
@@ -29,18 +33,32 @@ export function UserMessage({ turn, index, blobUrl, onEdit, editDisabled }: { tu
       </div>
     );
   }
+  const onClick = onEdit && ((e: MouseEvent<HTMLDivElement>) => {
+    if ((e.target as Element).closest('button, a')) return;
+    if (window.getSelection()?.isCollapsed === false) return;
+    onEdit();
+  });
   return (
     <div
+      onClick={onClick}
       className={cn(
-        'user-message sticky top-0 z-10 flex w-full shrink-0 flex-col gap-gap text-1 text-fg-1 [overflow-wrap:anywhere]',
+        'user-message group relative flex w-full shrink-0 flex-col gap-gap text-1 text-fg-1 [overflow-wrap:anywhere]',
         userMessage !== 'plain' && 'user-message-card rounded-lg px-pad py-gap',
         userMessage === 'bubble' && 'self-end max-w-[88%]',
         userMessage === 'plain' && 'bg-bg-0 py-gap font-medium',
+        onEdit && 'user-message-editable cursor-text',
       )}
     >
       {turn.attachments?.length ? <TurnAttachments attachments={turn.attachments} blobUrl={blobUrl} /> : null}
       {turn.text && <div className="scroll-thin min-h-0 overflow-y-auto whitespace-pre-wrap">{turn.text}</div>}
-      {onEdit && <div className="flex justify-end"><IconButton title={t('history.edit')} aria-label={t('history.edit')} disabled={editDisabled} onClick={onEdit}><Pencil /></IconButton></div>}
+      {onEdit && (
+        <IconButton
+          title={t('history.edit')} aria-label={t('history.edit')} onClick={onEdit}
+          className="absolute right-1 bottom-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        >
+          <Pencil />
+        </IconButton>
+      )}
     </div>
   );
 }
@@ -125,7 +143,7 @@ function isBusy(b: AgentBlock): boolean {
 // Approval waits use a static icon; motion remains reserved for thinking.
 function Activity({ label, awaitingApproval }: { label: string; awaitingApproval?: boolean }) {
   return (
-    <Row lead={awaitingApproval ? <Hand className="size-icon" strokeWidth={1.5} /> : <Orb kind="think" />} className="font-medium">
+    <Row lead={awaitingApproval ? <Hand className="size-icon" strokeWidth={1.5} /> : <WaitingDots />} className="font-medium">
       <RowLabel>{label.split(' ')[0]}</RowLabel>
       <RowTarget mono className="font-normal">{label.split(' ').slice(1).join(' ')}</RowTarget>
     </Row>
@@ -247,10 +265,12 @@ function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBl
   const lead = !running || toolLine === 'text' ? undefined
     : activity.kind === 'think' && thought === 'orb' ? <Orb kind="think" />
     : <Icon className="size-icon" strokeWidth={1.5} />;
-  const label = running ? activity.label : elapsedLabel(turn);
+  const label = running ? activity.label : outcomeOf(turn) ?? t('turns.done');
+  const elapsed = !running && turn.startedAt !== undefined && turn.endedAt !== undefined ? elapsedLabel(turn) : undefined;
   const awaitingApproval = turn.blocks.some(b => b.type === 'permission');
   const heading = <>
-    <RowLabel className={running && !awaitingApproval ? 'shimmer' : undefined}>{label}</RowLabel>
+    <RowLabel className={running && activity.active && !awaitingApproval ? 'shimmer' : undefined}>{label}</RowLabel>
+    {elapsed && <span className="text-fg-3">{elapsed}</span>}
     {running && activity.target && <RowTarget mono={activity.mono}>{activity.target}</RowTarget>}
   </>;
   if (blocks.length === 0) return <Row lead={lead}>{heading}</Row>;

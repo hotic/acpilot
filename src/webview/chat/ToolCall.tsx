@@ -1,6 +1,7 @@
 import { Check, FileText, Globe, X } from 'lucide-react';
 import type { ToolCallBlock } from '@shared/transcript';
 import { useAppearance } from '../appearance';
+import { t } from '../i18n';
 import { Disclosure } from '../ui/Disclosure';
 import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { cn } from '../ui/cn';
@@ -8,6 +9,7 @@ import { TOOL_ICON } from './icons';
 import { CodeSurface, DiffBlock } from './CodeBlock';
 import { TerminalOutput } from './Terminal';
 import { toolVerb } from './folding';
+import { isLineCount, toolFiles } from './toolDetails';
 
 // One tool call = one expandable row, command execution included (Codex-style: the command sits on the row, the output is a card below).
 // Three modes: text only / with icon / icon + meta. No Orb while running: icon mode uses the same static icon as the completed state, with the verb shimmering.
@@ -16,6 +18,7 @@ export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; gro
   const { toolLine } = useAppearance();
   const running = block.status === 'in_progress' || block.status === 'pending';
   const execute = block.kind === 'execute';
+  const files = toolFiles(block);
   const Icon = TOOL_ICON[block.kind];
 
   const lead = toolLine === 'text' ? undefined : <Icon className="size-icon" strokeWidth={1.5} />;
@@ -31,9 +34,22 @@ export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; gro
     : undefined;
 
   const label = <>
-    <RowLabel className={running ? 'shimmer' : undefined}>{grouped ? toolVerb(block) : block.verb}</RowLabel>
-    {block.target && <RowTarget mono={block.targetMono}>{block.target}</RowTarget>}
+    <RowLabel className={running ? 'shimmer' : undefined}>{toolVerb(block)}</RowLabel>
+    {block.target && !(block.kind === 'read' && files.length) && <RowTarget mono={block.targetMono}>{block.target}</RowTarget>}
   </>;
+  // File references remain visible when the process opens; raw output has its own toggle.
+  // A count-only read response has no content to inspect beyond these references.
+  if (files.length) return (
+    <div className="flex flex-col">
+      <Row lead={lead} trailing={trailing}>{label}</Row>
+      <ResultList items={files} kind={block.kind} />
+      {block.content && block.content.type !== 'list' && !isLineCount(block) && (
+        <Disclosure indent={false} body={<ToolBody block={block} />}>
+          <RowLabel className="text-fg-3">{t('tool.output')}</RowLabel>
+        </Disclosure>
+      )}
+    </div>
+  );
   // A history row without details has no second disclosure to open.
   if (grouped && !block.content) return <Row lead={lead} trailing={trailing}>{label}</Row>;
 

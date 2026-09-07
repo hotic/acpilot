@@ -247,6 +247,13 @@ function toolBlock(tc: acp.ToolCall): ToolCallBlock {
 function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
   if (u.kind) { b.kind = u.kind; b.verb = verbOf(u.kind); }
   if (u.status) b.status = u.status;
+  if (u.locations) b.locations = u.locations.map(l => ({ path: l.path, ...(l.line != null ? { line: l.line } : {}) }));
+  // Some ACP tools supply a path in rawInput instead of locations.
+  const raw = u.rawInput as Record<string, unknown> | undefined;
+  if (!b.locations?.length && (b.kind === 'read' || b.kind === 'edit')) {
+    const path = [raw?.path, raw?.file_path, raw?.filePath].find((v): v is string => typeof v === 'string' && !!v);
+    if (path) b.locations = [{ path }];
+  }
   // A target inferred from the title is only a fallback while there is no target yet; don't overwrite what rawInput / locations provided
   const target = pickTarget(u, b.kind);
   if (target && (!target.fromTitle || !b.target)) { b.target = target.text; b.targetMono = target.mono; }
@@ -274,6 +281,10 @@ function pickTarget(u: acp.ToolCall | acp.ToolCallUpdate, kind: ToolKind): { tex
   }
   const loc = u.locations?.[0]?.path;
   if (loc) return { text: basename(loc), mono: false };
+  if (kind === 'read' || kind === 'edit') {
+    const path = [raw?.path, raw?.file_path, raw?.filePath].find((v): v is string => typeof v === 'string' && !!v);
+    if (path) return { text: basename(path), mono: false };
+  }
   if (u.title) return { text: stripVerb(u.title), mono: false, fromTitle: true };
   return undefined;
 }

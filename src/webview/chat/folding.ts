@@ -21,7 +21,8 @@ const FOLD_KEY: Record<ToolCallBlock['status'], MsgKey> = {
 };
 
 export function toolVerb(block: ToolCallBlock): string {
-  return t(FOLD_KEY[block.status], { verb: block.verb });
+  // Stored verbs use the host locale at creation time; render from semantic kind.
+  return t(FOLD_KEY[block.status], { verb: t(`verb.${block.kind}`) });
 }
 
 export interface FoldActivity {
@@ -29,6 +30,7 @@ export interface FoldActivity {
   label: string;
   target?: string;
   mono?: boolean;
+  active?: boolean;
 }
 
 export function foldActivity(turn: AgentTurn): FoldActivity {
@@ -37,23 +39,19 @@ export function foldActivity(turn: AgentTurn): FoldActivity {
   for (let i = turn.blocks.length - 1; i >= 0; i--) {
     const b = turn.blocks[i]!;
     if (b.type === 'tool_call' && (b.status === 'pending' || b.status === 'in_progress')) {
-      return { kind: b.kind, label: toolVerb(b), target: b.target, mono: b.targetMono };
+      return { kind: b.kind, label: toolVerb(b), target: b.target, mono: b.targetMono, active: true };
     }
     if (b.type === 'compaction' && b.status === 'in_progress') return { kind: 'compaction', label: t('turns.compacting') };
   }
-  const activity = turn.activity;
-  if (activity) {
-    const space = activity.label.indexOf(' ');
-    return {
-      kind: activity.kind,
-      label: space < 0 ? activity.label : activity.label.slice(0, space),
-      target: space < 0 ? undefined : activity.label.slice(space + 1),
-    };
+  // Read current transcript state before a cached, already-localized activity label.
+  // Completed tools stay visible between notifications without claiming they still run.
+  for (let i = turn.blocks.length - 1; i >= 0; i--) {
+    const b = turn.blocks[i]!;
+    if (b.type === 'text' && b.streaming) return { kind: 'other', label: t('host.replying'), active: true };
+    if (b.type === 'thought' && b.streaming) return { kind: 'think', label: t('host.thinking'), active: true };
+    if (b.type === 'tool_call') return { kind: b.kind, label: toolVerb(b), target: b.target, mono: b.targetMono };
   }
-  const last = turn.blocks[turn.blocks.length - 1];
-  return last?.type === 'text' && last.streaming
-    ? { kind: 'other', label: t('host.replying') }
-    : { kind: 'think', label: t('host.thinking') };
+  return { kind: 'other', label: t('host.working'), active: true };
 }
 
 export function elapsedLabel(turn: AgentTurn): string {
