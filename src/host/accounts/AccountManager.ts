@@ -1,4 +1,4 @@
-import type { AccountInfo, AgentId } from '@shared/transcript';
+import type { AccountInfo, AccountQuota, AgentId } from '@shared/transcript';
 import type { AgentProcess } from '../acp/AgentProcess';
 import type { AccountStore } from './AccountStore';
 import type { AccountProvider } from './types';
@@ -15,11 +15,16 @@ export interface AccountManagerDeps {
 
 // A terminal login gets this long; past the timeout it's treated as abandoned
 const LOGIN_TIMEOUT = 10 * 60_000;
+// A quota fetched this recently is served from memory when the webview asks again (opening the menu must not hammer the vendor)
+const QUOTA_MAX_AGE = 30_000;
 
-// Account master: who supports the account layer, the list, import / login / removal, plus the two hooks for AcpSession (spawn env, authenticate)
+// Account master: who supports the account layer, the list, import / login / removal, plus the two hooks for AcpSession (spawn env, authenticate).
+// Quotas live only here (memory): fetched after hand-off and after each turn of a bound session, and on request from the webview
 export class AccountManager {
   private providers = new Map<AgentId, AccountProvider>();
   private listeners = new Set<(accounts: AccountInfo[]) => void>();
+  private quotas = new Map<string, AccountQuota>();
+  private fetching = new Map<string, Promise<void>>();
 
   constructor(private deps: AccountManagerDeps) {
     for (const p of deps.providers) this.providers.set(p.agent, p);
@@ -27,11 +32,49 @@ export class AccountManager {
 
   supports(agent: AgentId): boolean { return this.providers.has(agent); }
 
-  list(): AccountInfo[] { return this.deps.store.list(); }
+  list(): AccountInfo[] { return this.deps.store.list().map(a => this.withQuota(a)); }
 
-  get(id: string): AccountInfo | undefined { return this.deps.store.get(id); }
+  get(id: string): AccountInfo | undefined {
+    const a = this.deps.store.get(id);
+    return a && this.withQuota(a);
+  }
 
   defaultFor(agent: AgentId): AccountInfo | undefined { return this.deps.store.defaultFor(agent); }
+
+  private withQuota(a: AccountInfo): AccountInfo {
+    const quota = this.quotas.get(a.id);
+    return quota ? { ...a, quota } : a;
+  }
+
+  // Refresh one account's quota; concurrent callers share the in-flight request, and a recent result is reused unless `force`.
+  // Failures are logged, never thrown: a quota is decoration, not a precondition
+  refreshQuota(id: string, force = false): Promise<void> {
+    const inflight = this.fetching.get(id);
+    if (inflight) return inflight;
+    const a = this.deps.store.get(id);
+    const p = a && this.providers.get(a.agent);
+    if (!a || !p?.quota) return Promise.resolve();
+    const have = this.quotas.get(id);
+    if (!force && have && Date.now() - Date.parse(have.fetchedAt) < QUOTA_MAX_AGE) return Promise.resolve();
+    const run = (async () => {
+      try {
+        const cred = await this.deps.store.credential(id);
+        if (!cred) return;
+        const quota = await p.quota!(cred);
+        if (quota) this.quotas.set(id, quota); else this.quotas.delete(id);
+        this.emit();
+      } catch (e) {
+        this.deps.log(`quota ${a.label}: ${e instanceof Error ? e.message : String(e)}`);
+      } finally { this.fetching.delete(id); }
+    })();
+    this.fetching.set(id, run);
+    return run;
+  }
+
+  // Refresh every account (of one agent, or all); used at startup and when the webview opens an account list
+  async refreshQuotas(agent?: AgentId, force = false): Promise<void> {
+    await Promise.all(this.deps.store.list(agent).map(a => this.refreshQuota(a.id, force)));
+  }
 
   subscribe(fn: (accounts: AccountInfo[]) => void): () => void {
     this.listeners.add(fn);
@@ -89,6 +132,7 @@ export class AccountManager {
 
   async remove(id: string) {
     await this.deps.store.remove(id);
+    this.quotas.delete(id);
     this.emit();
   }
 
@@ -110,5 +154,7 @@ export class AccountManager {
     if (!cred) throw new Error(t('host.credentialGone', { label: this.get(accountId)?.label ?? accountId }));
     await p.authenticate(proc, cred);
     await this.touch(accountId);
+    // The key just proved itself; the allowance behind it is worth knowing right away (not awaited: the session must not wait on the vendor)
+    void this.refreshQuota(accountId);
   }
 }

@@ -43,6 +43,8 @@ export interface ShellHandlers {
   selectAccount: (id: string) => void;
   addAccount: (agent: AgentInfo['id'], via: AddAccountVia) => void;
   removeAccount: (id: string) => void;
+  // An account list opened: re-read the quotas of that agent's accounts
+  refreshQuota?: (agent: AgentInfo['id']) => void;
   compact: () => void;
   login: (methodId?: string) => void;
   retry: () => void;

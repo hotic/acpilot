@@ -12,6 +12,19 @@ export interface AgentInfo {
   available?: boolean;
 }
 
+// One allowance window as the vendor reports it (Devin: daily / weekly; a plan may hide either). remaining is 0..1, resetsAt an ISO timestamp
+export interface QuotaWindow {
+  id: string;
+  remaining: number;
+  resetsAt?: string;
+}
+
+// Usage allowance of an account, fetched from the vendor by the account provider; in memory only, refreshed after turns and on demand
+export interface AccountQuota {
+  windows: QuotaWindow[];
+  fetchedAt: string;
+}
+
 // Account: one login identity of an agent. Only metadata here; secrets live in the host's SecretStorage and never enter the webview
 export interface AccountInfo {
   id: string;
@@ -21,6 +34,7 @@ export interface AccountInfo {
   detail?: string;
   addedAt: string;
   lastUsedAt?: string;
+  quota?: AccountQuota;
 }
 
 // Session-level options: modes come from modes.availableModes of session/new; the rest (model / reasoning level / …) are select-type configOptions —

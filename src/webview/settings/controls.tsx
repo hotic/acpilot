@@ -230,6 +230,8 @@ export interface ItemRowProps {
   lead?: ReactNode;
   title: ReactNode;
   desc?: ReactNode;
+  // A line under title / desc spanning the text column (quota bars); not truncated
+  extra?: ReactNode;
   trailing?: ReactNode;
   // Hover-revealed open button at the right edge (opens a file)
   onOpen?: () => void;
@@ -241,7 +243,7 @@ export interface ItemRowProps {
 }
 
 // Settings rows share typography and padding. Detail rows reserve two text lines; wrapped content can grow.
-export function ItemRow({ lead, title, desc, trailing, onOpen, onClick, dim, className }: ItemRowProps) {
+export function ItemRow({ lead, title, desc, extra, trailing, onOpen, onClick, dim, className }: ItemRowProps) {
   const Tag = onClick ? 'button' : 'div';
   return (
     <Tag
@@ -257,6 +259,7 @@ export function ItemRow({ lead, title, desc, trailing, onOpen, onClick, dim, cla
       <span className="flex min-w-0 flex-1 flex-col">
         <span className={cn('truncate text-2', dim ? 'text-fg-2' : 'text-fg-1')}>{title}</span>
         {desc && <span className="truncate text-2 text-fg-2">{desc}</span>}
+        {extra}
       </span>
       {trailing && <span className="flex shrink-0 items-center gap-2">{trailing}</span>}
       {onOpen && (

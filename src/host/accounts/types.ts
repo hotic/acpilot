@@ -1,4 +1,4 @@
-import type { AgentId } from '@shared/transcript';
+import type { AccountQuota, AgentId } from '@shared/transcript';
 import type { AgentProcess } from '../acp/AgentProcess';
 
 // Credential = secret + non-secret companion fields (service URL, etc.). The secret appears only in SecretStorage and in the ACP authenticate request
@@ -33,4 +33,6 @@ export interface AccountProvider {
   spawnEnv?(cred: AccountCredential): Record<string, string>;
   // Hand the credential to the agent after initialize and before session/new
   authenticate?(proc: AgentProcess, cred: AccountCredential): Promise<void>;
+  // Ask the vendor how much allowance the credential has left; undefined when the plan has no windowed quota
+  quota?(cred: AccountCredential): Promise<AccountQuota | undefined>;
 }

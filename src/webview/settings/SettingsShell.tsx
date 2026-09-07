@@ -23,6 +23,8 @@ export interface SettingsHandlers {
   selectAccount: (id: string) => void;
   addAccount: (agent: AgentId) => void;
   removeAccount: (id: string) => void;
+  // An agent page with accounts opened: re-read their quotas
+  refreshQuota?: (agent: AgentId) => void;
 }
 
 export interface SettingsEnv {

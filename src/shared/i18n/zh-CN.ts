@@ -71,6 +71,17 @@ export const zhCN = {
   'composer.stop': '停止',
   'composer.attachFailed': '读取附件失败：{error}',
 
+  // Account quota bars (Devin: daily / weekly windows)
+  'quota.window.daily': '日',
+  'quota.window.weekly': '周',
+  'quota.left': '剩余 {pct}%',
+  'quota.hint': '{window}额度 · 剩余 {pct}% · {time}后重置',
+  'quota.hintNoReset': '{window}额度 · 剩余 {pct}%',
+  'quota.aria': '{window}额度剩余 {pct}%',
+  'quota.time.minutes': '{n} 分钟',
+  'quota.time.hours': '{n} 小时',
+  'quota.time.days': '{n} 天',
+
   // Context usage panel
   'usage.title': '上下文',
   'usage.compact': '压缩上下文',

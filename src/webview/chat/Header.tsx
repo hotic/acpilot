@@ -4,6 +4,7 @@ import { useAppearance } from '../appearance';
 import { t } from '../i18n';
 import { IconButton } from '../ui/Button';
 import { Menu, Popover } from '../ui/Popover';
+import { quotaSummary } from '../ui/QuotaBars';
 import { AgentMark } from './AgentMark';
 import { AgentPanel } from './AgentPanel';
 import { SessionList } from './SessionList';
@@ -18,7 +19,7 @@ export interface HeaderProps {
   accounts?: AccountInfo[];
   accountId?: string;
   activeSessionId?: string;
-  on: Pick<ShellHandlers, 'selectSession' | 'newSession' | 'renameSession' | 'deleteSession' | 'pinSession' | 'selectAgent' | 'selectAccount' | 'addAccount' | 'removeAccount'>;
+  on: Pick<ShellHandlers, 'selectSession' | 'newSession' | 'renameSession' | 'deleteSession' | 'pinSession' | 'selectAgent' | 'selectAccount' | 'addAccount' | 'removeAccount' | 'refreshQuota'>;
   onToggleDrawer?: () => void;
   // Swaps the chat for the settings page (webview-local view state)
   onOpenSettings?: () => void;
@@ -30,6 +31,8 @@ export interface HeaderProps {
 export function Header({ title, sessions, agent, agents, accounts, accountId, activeSessionId, on, onToggleDrawer, onOpenSettings }: HeaderProps) {
   const { sessions: mode } = useAppearance();
   const account = accounts?.find(a => a.id === accountId);
+  // Tooltip: agent · account, with the remaining allowance appended once known ("Devin · s@x.io · Weekly 94%")
+  const accountTitle = account ? [agent.name, account.label, account.quota && quotaSummary(account.quota)].filter(Boolean).join(' · ') : agent.name;
   const settingsButton = onOpenSettings && (
     <IconButton onClick={onOpenSettings} title={t('session.settings')} aria-label={t('session.settings')}>
       <Settings2 strokeWidth={1.5} />
@@ -40,12 +43,13 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
       <AgentPanel
         agent={agent} agents={agents} accounts={accounts?.filter(a => a.agent === agent.id) ?? []} accountId={accountId} close={close}
         onSelectAgent={on.selectAgent} onSelectAccount={on.selectAccount} onAddAccount={on.addAccount} onRemoveAccount={on.removeAccount}
+        onRefreshQuota={on.refreshQuota}
       />
     )}>
       {({ open, toggle, ref }) => (
         <IconButton
           ref={ref} data-open={open || undefined} onClick={toggle}
-          title={account ? `${agent.name} · ${account.label}` : agent.name} aria-label={t('common.account')}
+          title={accountTitle} aria-label={t('common.account')}
           className="data-[open]:bg-active data-[open]:text-fg-1"
         >
           <UserRound strokeWidth={1.5} />

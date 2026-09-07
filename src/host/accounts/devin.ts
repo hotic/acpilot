@@ -4,6 +4,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
+import type { AccountQuota, QuotaWindow } from '@shared/transcript';
 import type { AgentProcess } from '../acp/AgentProcess';
 import type { AccountCredential, AccountDraft, AccountProvider, LoginFlow } from './types';
 import { t } from '../i18n';
@@ -14,9 +15,15 @@ import { t } from '../i18n';
 // The browser login method (devin-browser) authenticates only the current process; the key is neither returned nor persisted, so a durable account can only come from the toml:
 // import a local login, or run `devin auth login` once inside an isolated XDG directory and collect the toml.
 // Identity (email / plan) comes from `devin auth status` reading the toml temporarily written into the isolated directory.
+// Quota is not on the ACP wire (`/usage` is a TUI-only command): the CLI reads it from the Windsurf seat-management service, a Connect RPC that
+// also answers JSON. `planStatus` carries daily / weekly remaining percent + reset times; `planInfo.hideDailyQuota` / `hideWeeklyQuota` say which
+// windows the plan actually has (Max: weekly only; Pro: both). The three client fields in `metadata` are required or the server answers 400
 
 const TOML_KEYS = ['api_server_url', 'devin_webapp_host', 'devin_api_url'] as const;
 const SECRET_KEY = 'windsurf_api_key';
+const DEFAULT_API_SERVER = 'https://server.codeium.com';
+const USER_STATUS_PATH = '/exa.seat_management_pb.SeatManagementService/GetUserStatus';
+const QUOTA_TIMEOUT = 10_000;
 
 export class DevinAccountProvider implements AccountProvider {
   readonly agent = 'devin';
@@ -71,6 +78,37 @@ export class DevinAccountProvider implements AccountProvider {
     const req: acp.AuthenticateRequest = { methodId, _meta: meta };
     await proc.agent.request(acp.methods.agent.authenticate, req);
   }
+
+  async quota(cred: AccountCredential): Promise<AccountQuota | undefined> {
+    const base = (cred.meta?.api_server_url || DEFAULT_API_SERVER).replace(/\/$/, '');
+    const res = await fetch(base + USER_STATUS_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'connect-protocol-version': '1' },
+      body: JSON.stringify({ metadata: { apiKey: cred.secret, ideName: 'acpilot', ideVersion: '0.0.1', extensionVersion: '0.0.1' } }),
+      signal: AbortSignal.timeout(QUOTA_TIMEOUT),
+    });
+    if (!res.ok) throw new Error(`GetUserStatus ${res.status}`);
+    return parseUserStatus(await res.json());
+  }
+}
+
+// GetUserStatus (JSON encoding) → the windows the plan exposes. Percentages arrive as whole numbers, reset times as unix seconds in strings (int64).
+// proto3 JSON omits zero-valued fields, so on a quota-billed plan a missing percent is an exhausted window (0%), not a missing one; only
+// `hideDailyQuota` / `hideWeeklyQuota` (or a plan not billed by quota) remove a window
+export function parseUserStatus(json: unknown): AccountQuota | undefined {
+  const status = (json as { userStatus?: { planStatus?: Record<string, unknown> } } | undefined)?.userStatus?.planStatus;
+  if (!status) return undefined;
+  const info = (status.planInfo ?? {}) as Record<string, unknown>;
+  const quotaBilled = info.billingStrategy === 'BILLING_STRATEGY_QUOTA';
+  const windows: QuotaWindow[] = [];
+  const add = (id: string, hidden: unknown, pct: unknown, reset: unknown) => {
+    if (hidden === true || (typeof pct !== 'number' && !quotaBilled)) return;
+    const unix = Number(reset);
+    windows.push({ id, remaining: Math.min(1, Math.max(0, (typeof pct === 'number' ? pct : 0) / 100)), resetsAt: Number.isFinite(unix) && unix > 0 ? new Date(unix * 1000).toISOString() : undefined });
+  };
+  add('daily', info.hideDailyQuota, status.dailyQuotaRemainingPercent, status.dailyQuotaResetAtUnix);
+  add('weekly', info.hideWeeklyQuota, status.weeklyQuotaRemainingPercent, status.weeklyQuotaResetAtUnix);
+  return windows.length ? { windows, fetchedAt: new Date().toISOString() } : undefined;
 }
 
 export function dataHome(): string {

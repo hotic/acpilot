@@ -115,6 +115,7 @@ export function App() {
     selectAccount: id => post({ type: 'selectAccount', id }),
     addAccount: (agent, via) => post({ type: 'addAccount', agent, via }),
     removeAccount: id => post({ type: 'removeAccount', id }),
+    refreshQuota: agent => post({ type: 'refreshQuota', agent }),
     compact: () => post({ type: 'compact' }),
     login: methodId => post({ type: 'login', methodId }),
     retry: () => post({ type: 'retry' }),
@@ -130,6 +131,7 @@ export function App() {
     selectAccount: id => post({ type: 'selectAccount', id }),
     addAccount: agent => post({ type: 'addAccount', agent, via: 'auto' }),
     removeAccount: id => post({ type: 'removeAccount', id }),
+    refreshQuota: agent => post({ type: 'refreshQuota', agent }),
   }), []);
 
   if (!init || !settings) return null;

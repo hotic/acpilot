@@ -134,6 +134,8 @@ export interface MenuItem {
   icon?: ReactNode;
   // Faint small text at the row's end (e.g. the current family's params), before the check
   meta?: string;
+  // A line under the label / description, spanning the text column (an account's quota bars); makes the row taller like description does
+  extra?: ReactNode;
   checked?: boolean;
   // radio (default): single-select with a check; checkbox: toggle row where checked means on
   kind?: 'radio' | 'checkbox';
@@ -213,7 +215,7 @@ export function MenuList({ items, onSelect, searchable, empty, header, footer }:
     }
   };
 
-  const twoLine = shown.some(it => it.description);
+  const twoLine = shown.some(it => it.description || it.extra);
   return (
     <div ref={ref} onKeyDown={onKey} className="flex min-w-[160px] flex-col">
       {header}
@@ -259,6 +261,7 @@ export function MenuList({ items, onSelect, searchable, empty, header, footer }:
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate">{it.label}</span>
                   {it.description && <span className="truncate text-3 text-fg-3">{it.description}</span>}
+                  {it.extra}
                 </span>
                 {it.meta && <span className="shrink-0 text-3 text-fg-3">{it.meta}</span>}
                 {it.checked && <Check className="size-icon shrink-0 text-fg-1" strokeWidth={2} />}

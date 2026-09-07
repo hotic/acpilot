@@ -41,6 +41,8 @@ export class SessionManager {
   private trash = new Map<string, { summary: SessionSummary; timer: NodeJS.Timeout }>();
   private listeners = new Set<(ev: ManagerEvent) => void>();
   private accountActionState = new Map<AgentId, AccountAction>();
+  // Sessions seen running at the last onChange; a running → idle edge is the moment to re-read the account's quota
+  private wasRunning = new Set<string>();
   activeId?: string;
 
   constructor(private deps: ManagerDeps) {
@@ -51,6 +53,7 @@ export class SessionManager {
     this.index = await this.deps.store.loadIndex();
     this.activeId = this.index[0]?.id;
     await this.deps.registry.probeAll();
+    void this.deps.accounts?.refreshQuotas();
   }
 
   get registry(): AgentRegistry { return this.deps.registry; }
@@ -136,6 +139,8 @@ export class SessionManager {
     void this.deps.store.saveIndex(this.index);
     if (s.id === this.activeId) this.emit({ type: 'session', session: s.view() });
     this.emitSessions();
+    if (s.isRunning) this.wasRunning.add(s.id);
+    else if (this.wasRunning.delete(s.id) && s.accountId) void this.deps.accounts?.refreshQuota(s.accountId, true);
   };
 
   private sessionDeps() {
@@ -224,6 +229,7 @@ export class SessionManager {
         case 'selectAccount': await this.selectAccount(msg.id); break;
         case 'addAccount': await this.addAccount(msg.agent, msg.via); break;
         case 'removeAccount': await this.deps.accounts?.remove(msg.id); break;
+        case 'refreshQuota': await this.deps.accounts?.refreshQuotas(msg.agent); break;
         case 'compact': await s?.compact(); break;
         case 'retry': await s?.retry(); break;
         case 'retryTurn': await s?.retryTurn(); break;
@@ -273,6 +279,7 @@ export class SessionManager {
   async deleteSession(id: string) {
     const live = this.live.get(id);
     if (live) { await this.deps.store.flush(live.toRecord()); live.dispose(); this.live.delete(id); }
+    this.wasRunning.delete(id);
     const sum = this.index.find(s => s.id === id);
     this.index = this.index.filter(s => s.id !== id);
     await this.deps.store.saveIndex(this.index);

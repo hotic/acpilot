@@ -10,22 +10,29 @@ import type { AgentProcess } from '../src/host/acp/AgentProcess';
 import { AccountManager } from '../src/host/accounts/AccountManager';
 import { AccountStore, MemoryVault } from '../src/host/accounts/AccountStore';
 import type { AccountCredential, AccountDraft, AccountProvider, LoginFlow } from '../src/host/accounts/types';
-import { DevinAccountProvider, parseStatus, readCredentials, tomlOf } from '../src/host/accounts/devin';
+import { DevinAccountProvider, parseStatus, parseUserStatus, readCredentials, tomlOf } from '../src/host/accounts/devin';
 import { SessionManager } from '../src/host/SessionManager';
 import { TranscriptStore } from '../src/host/store/TranscriptStore';
 
 const FAKE = fileURLToPath(new URL('./fake-agent.ts', import.meta.url));
 const TSX = fileURLToPath(new URL('../node_modules/.bin/tsx', import.meta.url));
 
-// Fake provider: puts the key into authenticate's _meta.api_key like Devin does; import always returns one account
+// Fake provider: puts the key into authenticate's _meta.api_key like Devin does; import always returns one account.
+// Quota: one weekly window whose remaining share drops on every read, so refreshes are observable
 class FakeProvider implements AccountProvider {
   readonly agent = 'fake';
   importDraft: AccountDraft | undefined = { label: 'one@example.com', detail: 'Max', secret: 'good-key' };
+  quotaReads = 0;
   async importLocal() { return this.importDraft; }
   async login(): Promise<LoginFlow> { throw new Error('not in test'); }
   async authenticate(proc: AgentProcess, cred: AccountCredential) {
     const req: acp.AuthenticateRequest = { methodId: 'fake.login', _meta: { api_key: cred.secret } };
     await proc.agent.request(acp.methods.agent.authenticate, req);
+  }
+  async quota(cred: AccountCredential) {
+    if (cred.secret !== 'good-key') throw new Error('invalid api key');
+    this.quotaReads++;
+    return { windows: [{ id: 'weekly', remaining: 1 - this.quotaReads / 10, resetsAt: '2026-09-14T00:00:00.000Z' }], fetchedAt: new Date().toISOString() };
   }
 }
 
@@ -102,6 +109,27 @@ describe('Devin credentials file and auth status parsing', () => {
     const out = 'Logged in (via Devin).\n\nUser:\n  Name:              Someone\n  Email:             someone@example.com\n\nAccount:\n  Tier:              Devin Max\n  Plan:              Max\n';
     expect(parseStatus(out)).toEqual({ label: 'someone@example.com', detail: 'Devin Max · Someone' });
     expect(parseStatus('Not logged in.')).toBeUndefined();
+  });
+
+  // Shape of GetUserStatus in JSON encoding as the seat-management service returned it for a Max seat (2026-09): whole-number percents,
+  // int64 reset times as strings, hideDailyQuota on the plan
+  it('GetUserStatus → windows the plan exposes: Max hides daily, Pro has both, credit plans have none', () => {
+    const max = { userStatus: { planStatus: { planInfo: { planName: 'Max', billingStrategy: 'BILLING_STRATEGY_QUOTA', hideDailyQuota: true },
+      dailyQuotaRemainingPercent: 100, weeklyQuotaRemainingPercent: 94, dailyQuotaResetAtUnix: '1788854400', weeklyQuotaResetAtUnix: '1789286400' } } };
+    const q = parseUserStatus(max)!;
+    expect(q.windows).toEqual([{ id: 'weekly', remaining: 0.94, resetsAt: '2026-09-13T08:00:00.000Z' }]);
+    expect(Date.parse(q.fetchedAt)).not.toBeNaN();
+    // Pro: both windows; the weekly one is exhausted, which proto3 JSON expresses by omitting the zero-valued percent (and reset time)
+    const pro = { userStatus: { planStatus: { planInfo: { planName: 'Pro', billingStrategy: 'BILLING_STRATEGY_QUOTA' }, dailyQuotaRemainingPercent: 37, dailyQuotaResetAtUnix: '1788854400' } } };
+    expect(parseUserStatus(pro)!.windows).toEqual([
+      { id: 'daily', remaining: 0.37, resetsAt: '2026-09-08T08:00:00.000Z' },
+      { id: 'weekly', remaining: 0, resetsAt: undefined },
+    ]);
+    // Not billed by quota and no percents at all → nothing to show; an explicit zero on such a plan still counts
+    expect(parseUserStatus({ userStatus: { planStatus: { planInfo: { billingStrategy: 'BILLING_STRATEGY_CREDITS' } } } })).toBeUndefined();
+    expect(parseUserStatus({ userStatus: { planStatus: { planInfo: {}, weeklyQuotaRemainingPercent: 0 } } })!.windows).toEqual([{ id: 'weekly', remaining: 0, resetsAt: undefined }]);
+    expect(parseUserStatus({})).toBeUndefined();
+    expect(parseUserStatus(undefined)).toBeUndefined();
   });
 });
 
@@ -218,6 +246,33 @@ describe('account layer wired into sessions', () => {
     expect(m.active()).toMatchObject({ status: 'ready', accountId: two.id });
     expect(accounts.defaultFor('fake')?.id).toBe(two.id);
     expect(m.sessions().find(s => s.id === first)?.accountId).toBe(one!.id);
+    await m.dispose();
+  }, 20_000);
+
+  it('quota: fetched after the hand-off and again when a turn ends, served from memory when asked again soon after, dropped with the account; a bad key only logs', async () => {
+    const { m, accounts, store, provider } = setup();
+    const pushed: number[] = [];
+    m.subscribe(ev => { if (ev.type === 'accounts') pushed.push(ev.accounts[0]?.quota?.windows[0]?.remaining ?? -1); });
+    await m.init();
+    await m.newSession();
+    await m.handle({ type: 'addAccount', agent: 'fake', via: 'import' });
+    // the session is ready before the vendor answers; the quota lands on the account list afterwards
+    await vi.waitFor(() => expect(accounts.list()[0]?.quota?.windows).toEqual([{ id: 'weekly', remaining: 0.9, resetsAt: '2026-09-14T00:00:00.000Z' }]));
+    expect(pushed).toContain(0.9);
+    // the webview asking right away costs no request
+    await m.handle({ type: 'refreshQuota', agent: 'fake' });
+    expect(provider.quotaReads).toBe(1);
+    // a finished turn forces a re-read
+    await m.handle({ type: 'send', text: 'hi' });
+    await vi.waitFor(() => expect(accounts.list()[0]?.quota?.windows[0]?.remaining).toBe(0.8));
+    expect(m.active()?.accountId).toBe(accounts.list()[0]!.id);
+    // an account whose key the vendor rejects has no quota, and nothing is thrown
+    const bad = await store.add('fake', { label: 'bad@example.com', secret: 'bad-key' });
+    await accounts.refreshQuota(bad.id, true);
+    expect(accounts.get(bad.id)?.quota).toBeUndefined();
+    const good = accounts.list()[0]!.id;
+    await m.handle({ type: 'removeAccount', id: good });
+    expect(accounts.list().some(a => a.quota)).toBe(false);
     await m.dispose();
   }, 20_000);
 

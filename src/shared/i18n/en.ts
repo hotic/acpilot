@@ -65,6 +65,16 @@ export const en = {
   'composer.stop': 'Stop',
   'composer.attachFailed': 'Could not read attachments: {error}',
 
+  'quota.window.daily': 'Daily',
+  'quota.window.weekly': 'Weekly',
+  'quota.left': '{pct}% left',
+  'quota.hint': '{window} allowance · {pct}% left · resets in {time}',
+  'quota.hintNoReset': '{window} allowance · {pct}% left',
+  'quota.aria': '{window} allowance {pct}% left',
+  'quota.time.minutes': '{n} min',
+  'quota.time.hours': '{n} h',
+  'quota.time.days': '{n} d',
+
   'usage.title': 'Context',
   'usage.compact': 'Compact context',
   'usage.usedPct': 'Context {pct}% used',

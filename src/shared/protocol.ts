@@ -108,6 +108,8 @@ export type WebviewMsg =
   | { type: 'selectAccount'; id: string }
   | { type: 'addAccount'; agent: AgentId; via: AddAccountVia }
   | { type: 'removeAccount'; id: string }
+  // An account list came into view: refresh the quotas of that agent's accounts (recent ones are served from memory)
+  | { type: 'refreshQuota'; agent: AgentId }
   | { type: 'compact' }
   | { type: 'login'; methodId?: string }
   | { type: 'retry' }

@@ -5,6 +5,7 @@ import type { AgentInventory, InventoryFile, InventoryMcp, InventorySkill } from
 import { mcpAppliesTo, mcpTransport, type McpServerSetting, type McpTransport, type SettingsView } from '@shared/settings';
 import { familyHidden, groupModels, setFamilyVisible, variantLabel, type ModelFamily } from '@shared/models';
 import { IconButton } from '../ui/Button';
+import { QuotaBars } from '../ui/QuotaBars';
 import { t } from '../i18n';
 import { ModelMark } from '../chat/ModelMark';
 import { Dot, FactRow, Group, ItemRow, Note, PathText, Section, SectionAction, SectionDescription, SectionHead, SourceLink, Switch, shortPath } from './controls';
@@ -31,6 +32,8 @@ export interface AgentPageProps {
 // ACPilot never writes it. Only the ACPilot-injected MCP list and the option families have switches
 export function AgentPage({ agent, agents, accounts, inventory, controls, settings, env, on }: AgentPageProps) {
   useEffect(() => { if (!inventory) on.refreshInventory(agent.id); }, [agent.id, inventory, on]);
+  // Quotas on the account rows are re-read each time the page is opened (recent ones come back from the host's memory)
+  useEffect(() => { if (agent.accounts) on.refreshQuota?.(agent.id); }, [agent.id, agent.accounts, on]);
 
   const injected = useMemo(() => Object.entries(settings.mcpServers).filter(([, s]) => s.enabled !== false), [settings.mcpServers]);
   const counts: Record<AgentSection, number> = {
@@ -65,6 +68,7 @@ export function AgentPage({ agent, agents, accounts, inventory, controls, settin
                 lead={<KeyRound strokeWidth={1.5} />}
                 title={a.label}
                 desc={a.detail}
+                extra={a.quota && <QuotaBars quota={a.quota} className="max-w-(--setting-header-copy)" />}
                 trailing={
                   <IconButton title={t('common.remove')} aria-label={t('common.removeNamed', { name: a.label })} onClick={() => on.removeAccount(a.id)} className="-mr-1.5 text-fg-2 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100">
                     <X strokeWidth={1.5} />
