@@ -95,7 +95,10 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('acpilot.showLog', () => log.show()),
     vscode.commands.registerCommand('acpilot.openInEditor', () => {
       const panel = vscode.window.createWebviewPanel('acpilot.editor', 'ACPilot', vscode.ViewColumn.Active, { retainContextWhenHidden: true });
-      panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.svg');
+      panel.iconPath = {
+        light: vscode.Uri.joinPath(context.extensionUri, 'media', 'icon-light.svg'),
+        dark: vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.svg'),
+      };
       const b = attach(panel.webview, 'editor');
       const sub = manager.subscribe(ev => { if (ev.type === 'session') panel.title = ev.session.title; });
       panel.onDidDispose(() => { sub(); bridges.delete(b); b.dispose(); });

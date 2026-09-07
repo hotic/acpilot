@@ -1,9 +1,10 @@
 {
   "name": "acpilot",
   "displayName": "ACPilot",
-  "description": "One chat shell for official agent CLIs (Grok, Devin, Kimi Code) over ACP.",
+  "description": "VS Code / Cursor chat shell for official agent CLIs (Grok, Devin, Kimi Code) over ACP",
   "version": "0.0.1",
-  "publisher": "spark-nano",
+  "publisher": "hotic",
+  "icon": "media/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
