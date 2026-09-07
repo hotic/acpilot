@@ -56,7 +56,7 @@ export type SettingKey = 'language' | 'defaultAgent' | 'followUp' | 'autoCompact
 
 export const DEFAULT_SETTINGS: SettingsView = {
   language: 'auto',
-  locale: 'zh-CN',
+  locale: 'en',
   defaultAgent: 'grok',
   followUp: 'queue',
   autoCompact: true,

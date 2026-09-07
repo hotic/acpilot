@@ -1,4 +1,6 @@
 import type { AgentBlock, AgentTurn, TextBlock, ToolCallBlock, ToolKind } from '@shared/transcript';
+import type { MsgKey } from '@shared/i18n';
+import { t } from '../i18n';
 
 // ACP has no final/commentary distinction: only the trailing text stays outside the process fold.
 // If another action arrives, that text becomes process history on the next render.
@@ -10,14 +12,16 @@ export function splitCodexBlocks(blocks: AgentBlock[]) {
   return { process: content.slice(0, end), reply: content.slice(end) as TextBlock[], permissions };
 }
 
+const FOLD_KEY: Record<ToolCallBlock['status'], MsgKey> = {
+  pending: 'fold.pending',
+  in_progress: 'fold.pending',
+  completed: 'fold.done',
+  failed: 'fold.failed',
+  cancelled: 'fold.cancelled',
+};
+
 export function toolVerb(block: ToolCallBlock): string {
-  switch (block.status) {
-    case 'pending':
-    case 'in_progress': return `正在${block.verb}`;
-    case 'completed': return `已${block.verb}`;
-    case 'failed': return `${block.verb}失败`;
-    case 'cancelled': return `已取消${block.verb}`;
-  }
+  return t(FOLD_KEY[block.status], { verb: block.verb });
 }
 
 export interface FoldActivity {
@@ -28,14 +32,14 @@ export interface FoldActivity {
 }
 
 export function foldActivity(turn: AgentTurn): FoldActivity {
-  if (turn.blocks.some(b => b.type === 'permission')) return { kind: 'other', label: '等待批准' };
+  if (turn.blocks.some(b => b.type === 'permission')) return { kind: 'other', label: t('host.awaitingApproval') };
   // Concurrent calls can finish out of order; a newer completed call must not hide an active one.
   for (let i = turn.blocks.length - 1; i >= 0; i--) {
     const b = turn.blocks[i]!;
     if (b.type === 'tool_call' && (b.status === 'pending' || b.status === 'in_progress')) {
       return { kind: b.kind, label: toolVerb(b), target: b.target, mono: b.targetMono };
     }
-    if (b.type === 'compaction' && b.status === 'in_progress') return { kind: 'compaction', label: '正在压缩上下文' };
+    if (b.type === 'compaction' && b.status === 'in_progress') return { kind: 'compaction', label: t('turns.compacting') };
   }
   const activity = turn.activity;
   if (activity) {
@@ -48,15 +52,18 @@ export function foldActivity(turn: AgentTurn): FoldActivity {
   }
   const last = turn.blocks[turn.blocks.length - 1];
   return last?.type === 'text' && last.streaming
-    ? { kind: 'other', label: '正在回复' }
-    : { kind: 'think', label: '正在思考' };
+    ? { kind: 'other', label: t('host.replying') }
+    : { kind: 'think', label: t('host.thinking') };
 }
 
 export function elapsedLabel(turn: AgentTurn): string {
   // Thought durations omit tool execution and waiting, so they cannot substitute for turn timing.
-  if (turn.startedAt === undefined || turn.endedAt === undefined) return '已完成';
+  if (turn.startedAt === undefined || turn.endedAt === undefined) return t('turns.done');
   const seconds = Math.max(0, Math.round((turn.endedAt - turn.startedAt) / 1000));
   const minutes = Math.floor(seconds / 60);
   const rest = seconds % 60;
-  return `用时 ${minutes ? `${minutes}分钟${rest ? ` ${rest}秒` : ''}` : `${rest}秒`}`;
+  const dur = minutes
+    ? (rest ? t('turns.elapsed.ms', { m: minutes, s: rest }) : t('turns.elapsed.m', { m: minutes }))
+    : t('turns.elapsed.s', { s: rest });
+  return t('turns.elapsed', { t: dur });
 }

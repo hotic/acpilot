@@ -5,6 +5,7 @@ import { Card } from '../ui/Card';
 import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { Collapse } from '../ui/Collapse';
 import { cn } from '../ui/cn';
+import { t } from '../i18n';
 import { PlanEntries } from './Plan';
 
 // The live to-do list, pinned above the composer the way Codex / Cursor do it: the latest plan of the session, one row showing the entry being worked on
@@ -29,7 +30,7 @@ export function PlanBar({ turns, running }: { turns: Turn[]; running: boolean })
             <ChevronRight className="size-3 transition-transform group-data-[open]:rotate-90" strokeWidth={1.75} />
           </>}
         >
-          <RowLabel className={cn(running && current && 'shimmer')}>计划</RowLabel>
+          <RowLabel className={cn(running && current && 'shimmer')}>{t('plan.title')}</RowLabel>
           {current && <RowTarget>{current.title}</RowTarget>}
         </Row>
         <Collapse open={open}>

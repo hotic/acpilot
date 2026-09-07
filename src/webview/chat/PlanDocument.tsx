@@ -1,10 +1,12 @@
 import { createContext, useContext, useId, useState } from 'react';
 import { ArrowLeft, ArrowUpRight, ChevronDown, FileText } from 'lucide-react';
 import type { ConfigControl, PermissionBlock, PlanDocumentBlock, SessionControls } from '@shared/transcript';
+import type { MsgKey } from '@shared/i18n';
 import { groupModels, variantLabel } from '@shared/models';
 import { Button, Chip, IconButton } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { cn } from '../ui/cn';
+import { t } from '../i18n';
 import { MenuFooter, MenuHeader, MenuList, Popover } from '../ui/Popover';
 import { Row, RowTarget } from '../ui/Row';
 import { ModelOptions } from './Composer';
@@ -53,7 +55,10 @@ export function PlanDocument({ block, permission: suppliedPermission, onChoose }
   const extra = permission?.options.filter(o => o.id !== primary?.id && o.id !== revise?.id) ?? [];
   const summary = block.markdown.replace(/^#\s+[^\n]+\n*/, '').split(/\n\s*\n/)[0];
   const filename = block.path?.split(/[\\/]/).pop() || 'plan.md';
-  const labels = { draft: '生成中', ready: '已生成', approved: '已批准', rejected: '待修改', executing: '实施中' };
+  const labels: Record<PlanDocumentBlock['status'], MsgKey> = {
+    draft: 'plan.status.draft', ready: 'plan.status.ready', approved: 'plan.status.approved',
+    rejected: 'plan.status.rejected', executing: 'plan.status.executing',
+  };
   const choose = (optionId: string) => {
     const option = permission?.options.find(o => o.id === optionId);
     if (option?.kind.startsWith('allow')) ctx.build?.(block.id, choice, optionId);
@@ -62,8 +67,8 @@ export function PlanDocument({ block, permission: suppliedPermission, onChoose }
   return (
     <Card className="flex min-w-0 flex-col gap-pad p-pad" data-plan-document={block.id}>
       <Row lead={<FileText className="size-icon" strokeWidth={1.5} />} dense trailing={<>
-        <span>{permission ? '待批准' : labels[block.status]}</span>
-        <IconButton title="打开计划文件" aria-label="打开计划文件" onClick={() => ctx.open?.(block.id)} disabled={!ctx.open}>
+        <span>{permission ? t('plan.pendingApproval') : t(labels[block.status])}</span>
+        <IconButton title={t('plan.openFile')} aria-label={t('plan.openFile')} onClick={() => ctx.open?.(block.id)} disabled={!ctx.open}>
           <ArrowUpRight strokeWidth={1.5} />
         </IconButton>
       </>}>
@@ -71,7 +76,7 @@ export function PlanDocument({ block, permission: suppliedPermission, onChoose }
       </Row>
       <div className="flex min-w-0 flex-col gap-gap">
         <button type="button" aria-expanded={expanded} aria-controls={previewId}
-          title={expanded ? '收起计划' : '预览计划全文'} onClick={() => setExpanded(v => !v)}
+          title={expanded ? t('plan.collapse') : t('plan.expand')} onClick={() => setExpanded(v => !v)}
           className="group flex w-full items-center gap-gap rounded-sm text-left text-1 font-semibold text-fg-strong outline-none focus-visible:ring-1 focus-visible:ring-line-strong">
           <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{block.title}</span>
           <ChevronDown className={cn('size-icon shrink-0 text-fg-3 group-hover:text-fg-1', expanded && 'rotate-180')} strokeWidth={1.5} />
@@ -84,16 +89,16 @@ export function PlanDocument({ block, permission: suppliedPermission, onChoose }
       </div>
       <div className="flex min-w-0 items-center justify-between gap-gap">
         {revise ? <Button variant="secondary" disabled={!ctx.ready} title={revise.label} onClick={() => choose(revise.id)}
-          className="shrink-0">修改计划</Button> : <span />}
+          className="shrink-0">{t('plan.revise')}</Button> : <span />}
         <div className="ml-auto flex min-w-0 items-center gap-gap">
           {(model || extra.length > 0) && <Popover side="top" align="end" width="md" role="menu"
             content={close => <BuildMenu model={model && { ...model, value: choice?.value ?? model.value }}
               hidden={model && ctx.hidden?.[model.id]} extra={extra} ready={ctx.ready} canBuild={!busy && !!ctx.build && !!block.markdown}
               onSelect={value => model && setSelected({ configId: model.id, value })} onChoose={choose} close={close} />}>
             {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} aria-expanded={open}
-              aria-haspopup="menu" aria-label="选择执行模型及审批选项" title={executor ?? '其他审批选项'} onClick={toggle}
+              aria-haspopup="menu" aria-label={t('plan.approvalsAria')} title={executor ?? t('plan.moreApprovals')} onClick={toggle}
               meta={[family?.source, params].filter(Boolean).join(' · ') || undefined} data-plan-executor>
-              {family?.name ?? executor ?? '审批选项'}
+              {family?.name ?? executor ?? t('plan.approvals')}
             </Chip>}
           </Popover>}
           <Button variant="primary" className="shrink-0"
@@ -119,12 +124,12 @@ function BuildMenu({ model, hidden, extra, ready, canBuild, onSelect, onChoose, 
 }) {
   const [approvals, setApprovals] = useState(!model);
   if (approvals) return <MenuList header={<MenuHeader
-    lead={model ? { label: '返回执行模型', icon: <ArrowLeft />, onClick: () => setApprovals(false) } : undefined}>其他审批选项</MenuHeader>}
+    lead={model ? { label: t('plan.backToExecutor'), icon: <ArrowLeft />, onClick: () => setApprovals(false) } : undefined}>{t('plan.moreApprovals')}</MenuHeader>}
     items={extra.map(o => ({ id: o.id, label: o.label, disabled: o.kind.startsWith('allow') ? !canBuild : !ready }))}
     onSelect={id => { onChoose(id); close(); }} />;
   return <>
-    <MenuHeader>执行模型</MenuHeader>
+    <MenuHeader>{t('plan.executor')}</MenuHeader>
     {model && <ModelOptions control={model} hidden={hidden} onSelect={onSelect} close={close} />}
-    {extra.length > 0 && <MenuFooter onClick={() => setApprovals(true)}>其他审批选项</MenuFooter>}
+    {extra.length > 0 && <MenuFooter onClick={() => setApprovals(true)}>{t('plan.moreApprovals')}</MenuFooter>}
   </>;
 }

@@ -35,7 +35,7 @@ const promptText = rest.join(' ');
 const registry = new AgentRegistry();
 const def = registry.get(agentId);
 const bin = await registry.resolveBinary(agentId);
-if (!bin) { console.error(`找不到 ${def.command}`); process.exit(1); }
+if (!bin) { console.error(`command not found: ${def.command}`); process.exit(1); }
 console.log(`→ ${bin} ${def.args.join(' ')}`);
 
 const providers: Record<string, () => Promise<AccountProvider>> = {
@@ -80,13 +80,13 @@ console.log('initialize →', JSON.stringify(proc.init, null, 2));
 // Account layer: import the local login first, then authenticate — credentials are handed over before session/new (same order as the extension)
 if (importLocal) {
   const make = providers[agentId];
-  if (!make) { console.error(`${agentId} 不走账号层`); process.exit(1); }
+  if (!make) { console.error(`${agentId} is not on the account layer`); process.exit(1); }
   const p = await make();
   const draft = await p.importLocal();
-  if (!draft) { console.error('本机没有该 CLI 的登录记录'); process.exit(1); }
-  console.log(`导入本机登录 → ${draft.label}${draft.detail ? `（${draft.detail}）` : ''}，meta ${JSON.stringify(draft.meta)}`);
+  if (!draft) { console.error('no local login for this CLI'); process.exit(1); }
+  console.log(`imported local login → ${draft.label}${draft.detail ? ` (${draft.detail})` : ''}, meta ${JSON.stringify(draft.meta)}`);
   await p.authenticate!(proc, draft);
-  console.log('authenticate（账号层）ok');
+  console.log('authenticate (account layer) ok');
 }
 
 async function newSession(): Promise<acp.NewSessionResponse> {
@@ -96,7 +96,7 @@ async function newSession(): Promise<acp.NewSessionResponse> {
   } catch (e) {
     const method = proc.init.authMethods?.[0];
     if (!(doAuth || apiKey) || !method || !(e instanceof acp.RequestError) || e.code !== -32000) throw e;
-    console.log(`\nsession/new 要登录，走 authenticate(${method.id}${apiKey ? ' + _meta.api_key' : ''})：${method.description ?? method.name}`);
+    console.log(`\nsession/new requires login, calling authenticate(${method.id}${apiKey ? ' + _meta.api_key' : ''}): ${method.description ?? method.name}`);
     const authReq: acp.AuthenticateRequest = apiKey ? { methodId: method.id, _meta: { api_key: apiKey } } : { methodId: method.id };
     const r = await proc.agent.request(acp.methods.agent.authenticate, authReq);
     console.log('authenticate →', JSON.stringify(r, null, 2));
@@ -130,7 +130,7 @@ try {
     console.log('\nstop →', r.stopReason);
   }
 } catch (e) {
-  console.error('session/new 失败：', e instanceof acp.RequestError ? `${e.code} ${e.message} ${JSON.stringify(e.data)}` : e);
+  console.error('session/new failed:', e instanceof acp.RequestError ? `${e.code} ${e.message} ${JSON.stringify(e.data)}` : e);
 }
 proc.kill();
 process.exit(0);

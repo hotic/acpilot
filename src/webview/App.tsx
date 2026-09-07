@@ -5,7 +5,7 @@ import type { HiddenMap, SettingsView } from '@shared/settings';
 import type { AgentInventory } from '@shared/inventory';
 import type { Locale } from '@shared/i18n';
 import { BASE_APPEARANCE, type Appearance } from './appearance';
-import { setLocale } from './i18n';
+import { setLocale, t } from './i18n';
 import { Shell, type ShellHandlers } from './chat/Shell';
 import { useVsCodeTheme } from './useVsCodeTheme';
 import { vscodeApi } from './vscodeApi';
@@ -46,7 +46,7 @@ export function App() {
   const [session, setSession] = useState<SessionView>();
   const [view, setView] = useState<'chat' | 'settings'>('chat');
   const [settings, setSettings] = useState<SettingsView>();
-  const [locale, setLoc] = useState<Locale>('zh-CN');
+  const [locale, setLoc] = useState<Locale>('en');
   const [inventories, setInventories] = useState<Partial<Record<AgentId, AgentInventory>>>({});
   const [controls, setControls] = useState<Partial<Record<AgentId, ConfigControl[]>>>({});
   const [page, setPage] = useState<SettingsPage>({ kind: 'general' });
@@ -153,7 +153,8 @@ export function App() {
       accountId={session?.accountId}
       accountAction={accountActions.find(action => action.agent === agent.id)}
       hidden={hidden}
-      title={session?.title ?? '新会话'}
+      followUp={settings.followUp}
+      title={session?.title ?? t('session.untitled')}
       status={session?.status ?? 'starting'}
       error={session?.error}
       authMethods={session?.authMethods}

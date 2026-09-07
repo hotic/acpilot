@@ -1,6 +1,7 @@
 import { History, Menu as MenuIcon, Plus, Settings2, UserRound } from 'lucide-react';
 import type { AccountInfo, AgentInfo, SessionSummary } from '@shared/transcript';
 import { useAppearance } from '../appearance';
+import { t } from '../i18n';
 import { IconButton } from '../ui/Button';
 import { Menu, Popover } from '../ui/Popover';
 import { AgentMark } from './AgentMark';
@@ -30,7 +31,7 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
   const { sessions: mode } = useAppearance();
   const account = accounts?.find(a => a.id === accountId);
   const settingsButton = onOpenSettings && (
-    <IconButton onClick={onOpenSettings} title="设置" aria-label="设置">
+    <IconButton onClick={onOpenSettings} title={t('session.settings')} aria-label={t('session.settings')}>
       <Settings2 strokeWidth={1.5} />
     </IconButton>
   );
@@ -44,7 +45,7 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
       {({ open, toggle, ref }) => (
         <IconButton
           ref={ref} data-open={open || undefined} onClick={toggle}
-          title={account ? `${agent.name} · ${account.label}` : agent.name} aria-label="账号"
+          title={account ? `${agent.name} · ${account.label}` : agent.name} aria-label={t('common.account')}
           className="data-[open]:bg-active data-[open]:text-fg-1"
         >
           <UserRound strokeWidth={1.5} />
@@ -78,7 +79,7 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
                 {({ open, toggle, ref }) => (
                   <IconButton
                     ref={ref} data-open={open || undefined} onClick={toggle}
-                    title="新会话" aria-label="新会话" aria-haspopup="menu" aria-expanded={open}
+                    title={t('session.new')} aria-label={t('session.new')} aria-haspopup="menu" aria-expanded={open}
                     className="data-[open]:bg-active data-[open]:text-fg-1"
                   >
                     <Plus strokeWidth={1.5} />
@@ -98,7 +99,7 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
                 />
               )}>
                 {({ open, toggle, ref }) => (
-                  <IconButton ref={ref} data-open={open || undefined} onClick={toggle} title="历史会话" aria-label="历史会话" className="data-[open]:bg-active data-[open]:text-fg-1">
+                  <IconButton ref={ref} data-open={open || undefined} onClick={toggle} title={t('session.history')} aria-label={t('session.history')} className="data-[open]:bg-active data-[open]:text-fg-1">
                     <History strokeWidth={1.5} />
                   </IconButton>
                 )}

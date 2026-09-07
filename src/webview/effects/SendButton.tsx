@@ -2,6 +2,7 @@ import { ArrowUp, Square } from 'lucide-react';
 import { MetalFx } from 'metal-fx';
 import { useAppearance } from '../appearance';
 import { cn } from '../ui/cn';
+import { t } from '../i18n';
 import { METAL_PRESET, METAL_VARIANT } from './presets';
 
 export interface SendButtonProps {
@@ -34,7 +35,7 @@ export function SendButton({ running, filled, theme = 'dark', onClick }: SendBut
   const button = (
     <button
       type="button"
-      aria-label={running ? '停止' : '发送'}
+      aria-label={running ? t('composer.stop') : t('composer.send')}
       onClick={onClick}
       disabled={!on}
       data-on={on || undefined}

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import type { AgentProcess } from '../acp/AgentProcess';
 import type { AccountCredential, AccountDraft, AccountProvider, LoginFlow } from './types';
+import { t } from '../i18n';
 
 // Devin CLI login = a PKCE exchange for a long-lived API key, stored in $XDG_DATA_HOME/devin/credentials.toml (four keys).
 // ACP mode does not read that file (so usage isn't billed to another account); the host must hand the key over via _meta.api_key in authenticate —
@@ -31,7 +32,7 @@ export class DevinAccountProvider implements AccountProvider {
 
   async login(): Promise<LoginFlow> {
     const bin = await this.binary();
-    if (!bin) throw new Error('找不到 devin，请先安装 Devin CLI');
+    if (!bin) throw new Error(t('host.notFound', { command: 'devin', agent: 'Devin' }));
     const dir = join(this.scratchDir, `login-${randomUUID()}`);
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const file = join(dir, 'devin', 'credentials.toml');

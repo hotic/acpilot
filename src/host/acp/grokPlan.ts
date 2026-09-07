@@ -1,4 +1,5 @@
 import * as acp from '@agentclientprotocol/sdk';
+import { t } from '../i18n';
 
 export const GROK_EXIT_PLAN = '_x.ai/exit_plan_mode';
 
@@ -28,7 +29,7 @@ export async function approveGrokPlan(
     toolCall: { toolCallId: req.toolCallId, title: 'exit_plan_mode', rawInput: { planContent: req.planContent }, _meta: { 'acpilot/planApproval': true } },
     options: [
       { optionId: 'approved', name: 'Build', kind: 'allow_once' },
-      { optionId: 'rejected', name: '修改计划', kind: 'reject_once' },
+      { optionId: 'rejected', name: t('plan.revise'), kind: 'reject_once' },
     ],
   }, signal);
   return { outcome: r.outcome.outcome === 'selected' ? r.outcome.optionId : 'rejected' };

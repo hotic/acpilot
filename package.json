@@ -46,19 +46,19 @@
     "commands": [
       {
         "command": "acpilot.newSession",
-        "title": "新建会话",
+        "title": "%acpilot.cmd.newSession%",
         "category": "ACPilot",
         "icon": "$(add)"
       },
       {
         "command": "acpilot.openInEditor",
-        "title": "在编辑区打开",
+        "title": "%acpilot.cmd.openInEditor%",
         "category": "ACPilot",
         "icon": "$(open-preview)"
       },
       {
         "command": "acpilot.showLog",
-        "title": "查看日志",
+        "title": "%acpilot.cmd.showLog%",
         "category": "ACPilot"
       }
     ],
@@ -86,7 +86,7 @@
         "acpilot.defaultAgent": {
           "type": "string",
           "default": "grok",
-          "description": "新会话默认用哪个 agent"
+          "description": "%acpilot.conf.defaultAgent%"
         },
         "acpilot.language": {
           "type": "string",
@@ -96,7 +96,7 @@
             "en"
           ],
           "default": "auto",
-          "description": "界面语言；auto 跟随 VS Code"
+          "description": "%acpilot.conf.language%"
         },
         "acpilot.followUp": {
           "type": "string",
@@ -106,13 +106,13 @@
             "interrupt"
           ],
           "default": "queue",
-          "description": "agent 运行时再发一条消息的处理方式：排到这轮结束再发 / 插进当前轮次调整方向 / 打断后立刻发送。调整方向要 agent 支持，不支持的退回排队"
+          "description": "%acpilot.conf.followUp%"
         },
         "acpilot.mcpServers": {
           "type": "object",
           "default": {},
           "scope": "application",
-          "markdownDescription": "ACPilot 通过 ACP 注入给 agent 的 MCP 服务：`{ \"<名称>\": { \"command\": \"...\", \"args\": [...], \"env\": {...} } }` 或 `{ \"url\": \"...\", \"type\": \"http\" | \"sse\" }`；`agents` 限定只对某些 agent 生效，`enabled: false` 整体停用",
+          "markdownDescription": "%acpilot.conf.mcpServers%",
           "additionalProperties": {
             "type": "object"
           }
@@ -120,7 +120,7 @@
         "acpilot.agents": {
           "type": "object",
           "default": {},
-          "markdownDescription": "追加自定义 ACP agent：`{ \"<id>\": { \"name\": \"显示名\", \"command\": \"可执行文件\", \"args\": [\"...\"], \"login\": \"登录命令\" } }`",
+          "markdownDescription": "%acpilot.conf.agents%",
           "additionalProperties": {
             "type": "object",
             "properties": {
@@ -154,18 +154,18 @@
         "acpilot.compactAtTokens": {
           "type": "number",
           "default": 300000,
-          "description": "一轮结束后上下文用量（agent 报的 usage.used）达到这么多 token 就自动发 /compact。只对报 usage 且有 /compact 命令的 agent 生效；上下文窗口比这个数小的模型由 agent 自己兜底"
+          "description": "%acpilot.conf.compactAtTokens%"
         },
         "acpilot.autoCompact": {
           "type": "boolean",
           "default": true,
-          "description": "超阈值后自动发送 /compact（关掉就只能在上下文面板里手动压）"
+          "description": "%acpilot.conf.autoCompact%"
         },
         "acpilot.hiddenOptions": {
           "type": "object",
           "default": {},
           "scope": "application",
-          "markdownDescription": "从菜单里隐藏的选项家族（模型 / 推理层级…）：`{ \"<agent>\": { \"<configOption id>\": [\"<家族名>\", ...] } }`。在 ACPilot 设置页的 agent 页里开关即可，一般不用手编",
+          "markdownDescription": "%acpilot.conf.hiddenOptions%",
           "additionalProperties": {
             "type": "object",
             "additionalProperties": {
@@ -184,7 +184,7 @@
             "airy"
           ],
           "default": "airy",
-          "description": "密度"
+          "description": "%acpilot.conf.appearance.density%"
         },
         "acpilot.appearance.radius": {
           "type": "string",
@@ -194,7 +194,7 @@
             "16"
           ],
           "default": "12",
-          "description": "圆角"
+          "description": "%acpilot.conf.appearance.radius%"
         },
         "acpilot.appearance.surface": {
           "type": "string",
@@ -204,7 +204,7 @@
             "stroke"
           ],
           "default": "tonal",
-          "description": "表面：hairline 细线 / tonal 无边分层 / stroke 描边"
+          "description": "%acpilot.conf.appearance.surface%"
         },
         "acpilot.appearance.font": {
           "type": "string",
@@ -214,7 +214,7 @@
             "geist"
           ],
           "default": "inter",
-          "description": "字体"
+          "description": "%acpilot.conf.appearance.font%"
         },
         "acpilot.appearance.userMessage": {
           "type": "string",
@@ -224,7 +224,7 @@
             "plain"
           ],
           "default": "bubble",
-          "description": "用户消息样式"
+          "description": "%acpilot.conf.appearance.userMessage%"
         },
         "acpilot.appearance.toolLine": {
           "type": "string",
@@ -234,7 +234,7 @@
             "rich"
           ],
           "default": "icon",
-          "description": "工具行：纯文字 / 加图标 / 图标 + 元信息"
+          "description": "%acpilot.conf.appearance.toolLine%"
         },
         "acpilot.appearance.thought": {
           "type": "string",
@@ -244,7 +244,7 @@
             "orb"
           ],
           "default": "orb",
-          "description": "思考中的样子"
+          "description": "%acpilot.conf.appearance.thought%"
         },
         "acpilot.appearance.sessions": {
           "type": "string",
@@ -253,7 +253,7 @@
             "drawer"
           ],
           "default": "dropdown",
-          "description": "会话列表：下拉 / 抽屉"
+          "description": "%acpilot.conf.appearance.sessions%"
         },
         "acpilot.appearance.composer": {
           "type": "string",
@@ -262,7 +262,7 @@
             "flush"
           ],
           "default": "island",
-          "description": "输入框：浮岛 / 贴底"
+          "description": "%acpilot.conf.appearance.composer%"
         },
         "acpilot.appearance.beam": {
           "type": "string",
@@ -273,7 +273,7 @@
             "full"
           ],
           "default": "full",
-          "description": "工作中的 Beam 边光"
+          "description": "%acpilot.conf.appearance.beam%"
         },
         "acpilot.appearance.beamColor": {
           "type": "string",
@@ -283,7 +283,7 @@
             "colorful"
           ],
           "default": "mono",
-          "description": "Beam 配色"
+          "description": "%acpilot.conf.appearance.beamColor%"
         },
         "acpilot.appearance.send": {
           "type": "string",
@@ -293,7 +293,7 @@
             "metal"
           ],
           "default": "metal",
-          "description": "发送钮"
+          "description": "%acpilot.conf.appearance.send%"
         },
         "acpilot.appearance.accent": {
           "type": "string",
@@ -303,7 +303,7 @@
             "vscode"
           ],
           "default": "agent",
-          "description": "强调色来源"
+          "description": "%acpilot.conf.appearance.accent%"
         },
         "acpilot.appearance.motion": {
           "type": "string",
@@ -313,7 +313,7 @@
             "full"
           ],
           "default": "subtle",
-          "description": "动效强度"
+          "description": "%acpilot.conf.appearance.motion%"
         },
         "acpilot.appearance.fold": {
           "type": "string",
@@ -322,7 +322,7 @@
             "cursor"
           ],
           "default": "codex",
-          "description": "过程行的折叠：整轮过程收在一栏，运行时显示当前动作，结束后显示用时，点击展开 / 只收只读动作（编辑与命令保持可见）"
+          "description": "%acpilot.conf.appearance.fold%"
         }
       }
     }

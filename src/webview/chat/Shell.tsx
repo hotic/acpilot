@@ -2,8 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Paperclip } from 'lucide-react';
 import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
 import type { HiddenMap } from '@shared/settings';
+import type { FollowUp } from '@shared/settings';
 import type { AccountAction, AddAccountVia, FileHit } from '@shared/protocol';
 import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
+import { t } from '../i18n';
 import { ShellLayerContext } from '../ui/Popover';
 import { cn } from '../ui/cn';
 import { Header } from './Header';
@@ -59,6 +61,8 @@ export interface ShellProps {
   accountAction?: AccountAction;
   // Option families hidden from the composer menus (acpilot.hiddenOptions)
   hidden?: HiddenMap;
+  // Follow-up handling while a turn runs; the composer placeholder explains it
+  followUp?: FollowUp;
   title: string;
   status: SessionStatus;
   error?: string;
@@ -105,9 +109,9 @@ export function Shell(p: ShellProps) {
   const handlers = useMemo<ShellHandlers>(() => ({
     ...on,
     deleteSession: id => {
-      const title = p.sessions.find(s => s.id === id)?.title ?? '会话';
+      const title = p.sessions.find(s => s.id === id)?.title ?? t('session.fallbackTitle');
       on.deleteSession(id);
-      pushToast({ key: id, text: `已删除「${title}」`, undo: () => { on.restoreSession(id); dropToast(id); } });
+      pushToast({ key: id, text: t('session.deleted', { title }), undo: () => { on.restoreSession(id); dropToast(id); } });
     },
   }), [on, p.sessions, pushToast, dropToast]);
   const blobUrl = useMemo(() => (p.blobBase && p.activeSessionId ? (blob: string) => `${p.blobBase}/${p.activeSessionId}/${blob}` : undefined), [p.blobBase, p.activeSessionId]);
@@ -182,7 +186,7 @@ export function Shell(p: ShellProps) {
                 <Alert
                   turn={alertTurn}
                   onRetry={on.retryTurn}
-                  onContinue={() => on.send('继续', [])}
+                  onContinue={() => on.send(t('alert.continueText'), [])}
                   onDismiss={() => setDismissedAlert(alertKey)}
                 />
               )}
@@ -193,10 +197,11 @@ export function Shell(p: ShellProps) {
                 onLogin={on.login} onRetry={on.retry} onNewSession={on.newSession}
                 onSelectAccount={on.selectAccount} onAddAccount={via => on.addAccount(p.agent.id, via)}
               />
-              {p.queued && <div className="truncate px-page pt-2 text-3 text-fg-3">已排队：{p.queued}</div>}
+              {p.queued && <div className="truncate px-page pt-2 text-3 text-fg-3">{t('session.queued', { text: p.queued })}</div>}
               <Composer
                 running={p.running}
                 disabled={p.status !== 'ready'}
+                followUp={p.followUp}
                 theme={p.theme}
                 turns={p.turns}
                 controls={p.controls}

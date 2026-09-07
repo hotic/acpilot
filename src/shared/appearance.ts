@@ -24,26 +24,27 @@ export type AxisKey = keyof Appearance;
 export interface AxisDef<K extends AxisKey = AxisKey> {
   key: K;
   label: string;
-  group: '骨架' | '对话' | 'Composer' | '氛围';
+  group: 'Structure' | 'Conversation' | 'Composer' | 'Ambience';
   options: { value: Appearance[K]; label: string }[];
 }
 
+// Axis labels are English-source and LAB-only; the production settings page never exposes them
 export const AXES: AxisDef[] = [
-  { key: 'density', label: '密度', group: '骨架', options: [{ value: 'cozy', label: '舒适' }, { value: 'compact', label: '紧凑' }, { value: 'airy', label: '宽松' }] },
-  { key: 'radius', label: '圆角', group: '骨架', options: [{ value: '12', label: '12' }, { value: '8', label: '8' }, { value: '16', label: '16' }] },
-  { key: 'surface', label: '表面', group: '骨架', options: [{ value: 'hairline', label: 'hairline' }, { value: 'tonal', label: '无边分层' }, { value: 'stroke', label: '描边' }] },
-  { key: 'font', label: '字体', group: '骨架', options: [{ value: 'system', label: '系统' }, { value: 'inter', label: 'Inter' }, { value: 'geist', label: 'Geist' }] },
-  { key: 'userMessage', label: '用户消息', group: '对话', options: [{ value: 'bubble', label: '右对齐气泡' }, { value: 'block', label: '色块' }, { value: 'plain', label: '纯文本' }] },
-  { key: 'toolLine', label: '工具行', group: '对话', options: [{ value: 'text', label: '纯文字' }, { value: 'icon', label: '加图标' }, { value: 'rich', label: '图标 + 元信息' }] },
-  { key: 'thought', label: '思考', group: '对话', options: [{ value: 'text', label: '纯文字' }, { value: 'shimmer', label: '微光' }, { value: 'orb', label: 'Orb' }] },
-  { key: 'sessions', label: '会话', group: '对话', options: [{ value: 'dropdown', label: '下拉' }, { value: 'drawer', label: '抽屉' }] },
-  { key: 'composer', label: '输入框', group: 'Composer', options: [{ value: 'island', label: '浮岛' }, { value: 'flush', label: '贴底' }] },
-  { key: 'beam', label: 'Beam', group: 'Composer', options: [{ value: 'line', label: '底线' }, { value: 'none', label: '无' }, { value: 'pulse', label: '呼吸' }, { value: 'full', label: '全边框' }] },
-  { key: 'beamColor', label: 'Beam 色', group: 'Composer', options: [{ value: 'mono', label: 'mono' }, { value: 'ocean', label: 'ocean' }, { value: 'colorful', label: 'colorful' }] },
-  { key: 'send', label: '发送钮', group: 'Composer', options: [{ value: 'accent', label: '强调色' }, { value: 'icon', label: '纯图标' }, { value: 'metal', label: 'MetalFx' }] },
-  { key: 'accent', label: '强调色', group: '氛围', options: [{ value: 'brand', label: '琥珀' }, { value: 'agent', label: '每 agent 一色' }, { value: 'vscode', label: '跟随 VS Code' }] },
-  { key: 'motion', label: '动效', group: '氛围', options: [{ value: 'subtle', label: '克制' }, { value: 'none', label: '无' }, { value: 'full', label: '拉满' }] },
-  { key: 'fold', label: '折叠', group: '对话', options: [{ value: 'codex', label: '整段收拢' }, { value: 'cursor', label: '只收只读动作' }] },
+  { key: 'density', label: 'Density', group: 'Structure', options: [{ value: 'cozy', label: 'Cozy' }, { value: 'compact', label: 'Compact' }, { value: 'airy', label: 'Airy' }] },
+  { key: 'radius', label: 'Radius', group: 'Structure', options: [{ value: '12', label: '12' }, { value: '8', label: '8' }, { value: '16', label: '16' }] },
+  { key: 'surface', label: 'Surface', group: 'Structure', options: [{ value: 'hairline', label: 'hairline' }, { value: 'tonal', label: 'Tonal' }, { value: 'stroke', label: 'Stroke' }] },
+  { key: 'font', label: 'Font', group: 'Structure', options: [{ value: 'system', label: 'System' }, { value: 'inter', label: 'Inter' }, { value: 'geist', label: 'Geist' }] },
+  { key: 'userMessage', label: 'User message', group: 'Conversation', options: [{ value: 'bubble', label: 'Right bubble' }, { value: 'block', label: 'Block' }, { value: 'plain', label: 'Plain' }] },
+  { key: 'toolLine', label: 'Tool line', group: 'Conversation', options: [{ value: 'text', label: 'Text' }, { value: 'icon', label: 'Icon' }, { value: 'rich', label: 'Icon + meta' }] },
+  { key: 'thought', label: 'Thinking', group: 'Conversation', options: [{ value: 'text', label: 'Text' }, { value: 'shimmer', label: 'Shimmer' }, { value: 'orb', label: 'Orb' }] },
+  { key: 'sessions', label: 'Sessions', group: 'Conversation', options: [{ value: 'dropdown', label: 'Dropdown' }, { value: 'drawer', label: 'Drawer' }] },
+  { key: 'composer', label: 'Composer', group: 'Composer', options: [{ value: 'island', label: 'Island' }, { value: 'flush', label: 'Flush' }] },
+  { key: 'beam', label: 'Beam', group: 'Composer', options: [{ value: 'line', label: 'Line' }, { value: 'none', label: 'None' }, { value: 'pulse', label: 'Pulse' }, { value: 'full', label: 'Full border' }] },
+  { key: 'beamColor', label: 'Beam color', group: 'Composer', options: [{ value: 'mono', label: 'mono' }, { value: 'ocean', label: 'ocean' }, { value: 'colorful', label: 'colorful' }] },
+  { key: 'send', label: 'Send button', group: 'Composer', options: [{ value: 'accent', label: 'Accent' }, { value: 'icon', label: 'Icon only' }, { value: 'metal', label: 'MetalFx' }] },
+  { key: 'accent', label: 'Accent', group: 'Ambience', options: [{ value: 'brand', label: 'Amber' }, { value: 'agent', label: 'Per-agent' }, { value: 'vscode', label: 'Follow VS Code' }] },
+  { key: 'motion', label: 'Motion', group: 'Ambience', options: [{ value: 'subtle', label: 'Subtle' }, { value: 'none', label: 'None' }, { value: 'full', label: 'Full' }] },
+  { key: 'fold', label: 'Folding', group: 'Conversation', options: [{ value: 'codex', label: 'Whole process' }, { value: 'cursor', label: 'Read-only only' }] },
 ];
 
 // Combo code ↔ Appearance: one option index digit per axis

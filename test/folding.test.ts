@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurn, PermissionBlock, ToolCallBlock } from '../src/shared/transcript';
+import { setLocale } from '../src/webview/i18n';
 import { elapsedLabel, foldActivity, splitCodexBlocks, toolVerb } from '../src/webview/chat/folding';
 
-const read: ToolCallBlock = { type: 'tool_call', id: 'read', kind: 'read', verb: '读取', target: 'README.md', status: 'completed' };
-const run: ToolCallBlock = { type: 'tool_call', id: 'run', kind: 'execute', verb: '运行', target: 'pnpm test', targetMono: true, status: 'in_progress' };
+const read: ToolCallBlock = { type: 'tool_call', id: 'read', kind: 'read', verb: 'Read', target: 'README.md', status: 'completed' };
+const run: ToolCallBlock = { type: 'tool_call', id: 'run', kind: 'execute', verb: 'Run', target: 'pnpm test', targetMono: true, status: 'in_progress' };
+
+// folding renders through the webview dictionary; the default locale is en
+afterEach(() => setLocale('en'));
 
 describe('Codex process folding', () => {
   it('keeps one process history across commentary and leaves the trailing reply outside', () => {
@@ -22,27 +26,35 @@ describe('Codex process folding', () => {
     const permission: PermissionBlock = { type: 'permission', id: 'p', title: '运行测试', options: [] };
     const blocks = [read, run, permission];
     expect(splitCodexBlocks(blocks)).toEqual({ process: [read, run], reply: [], permissions: [permission] });
-    expect(foldActivity({ role: 'agent', blocks })).toEqual({ kind: 'other', label: '等待批准' });
+    expect(foldActivity({ role: 'agent', blocks })).toEqual({ kind: 'other', label: 'Awaiting approval' });
   });
 
   it('selects the actual pending action despite stale activity or later completed calls', () => {
-    const turn: AgentTurn = { role: 'agent', blocks: [run, read], activity: { kind: 'think', label: '正在思考' } };
-    expect(foldActivity(turn)).toEqual({ kind: 'execute', label: '正在运行', target: 'pnpm test', mono: true });
-    expect(foldActivity({ role: 'agent', blocks: [{ ...run, status: 'completed' }], activity: turn.activity }).label).toBe('正在思考');
-    expect(foldActivity({ role: 'agent', blocks: [{ type: 'compaction', id: 'c', status: 'in_progress' }] }).label).toBe('正在压缩上下文');
+    const turn: AgentTurn = { role: 'agent', blocks: [run, read], activity: { kind: 'think', label: 'Thinking' } };
+    expect(foldActivity(turn)).toEqual({ kind: 'execute', label: 'Run…', target: 'pnpm test', mono: true });
+    expect(foldActivity({ role: 'agent', blocks: [{ ...run, status: 'completed' }], activity: turn.activity }).label).toBe('Thinking');
+    expect(foldActivity({ role: 'agent', blocks: [{ type: 'compaction', id: 'c', status: 'in_progress' }] }).label).toBe('Compacting context');
   });
 
   it('preserves failed and cancelled outcomes in action labels', () => {
-    expect(toolVerb(read)).toBe('已读取');
-    expect(toolVerb({ ...run, status: 'failed' })).toBe('运行失败');
-    expect(toolVerb({ ...run, status: 'cancelled' })).toBe('已取消运行');
+    expect(toolVerb(read)).toBe('Read');
+    expect(toolVerb({ ...run, status: 'failed' })).toBe('Run failed');
+    expect(toolVerb({ ...run, status: 'cancelled' })).toBe('Run cancelled');
   });
 
-  it('uses elapsed wall time and Chinese units, without appending action summaries', () => {
+  it('uses elapsed wall time with compact units, without appending action summaries', () => {
     const turn: AgentTurn = { role: 'agent', blocks: [{ type: 'thought', text: '', durationSec: 5 }, run], startedAt: 1000, endedAt: 287000 };
+    expect(elapsedLabel(turn)).toBe('Took 4m 46s');
+    expect(elapsedLabel({ ...turn, endedAt: 61000 })).toBe('Took 1m');
+    expect(elapsedLabel({ ...turn, endedAt: 6000 })).toBe('Took 5s');
+    expect(elapsedLabel({ ...turn, startedAt: undefined, endedAt: undefined })).toBe('Done');
+  });
+
+  it('follows the locale: zh-CN renders the same labels in Chinese', () => {
+    setLocale('zh-CN');
+    const turn: AgentTurn = { role: 'agent', blocks: [run], startedAt: 1000, endedAt: 287000 };
     expect(elapsedLabel(turn)).toBe('用时 4分钟 46秒');
-    expect(elapsedLabel({ ...turn, endedAt: 61000 })).toBe('用时 1分钟');
-    expect(elapsedLabel({ ...turn, endedAt: 6000 })).toBe('用时 5秒');
-    expect(elapsedLabel({ ...turn, startedAt: undefined, endedAt: undefined })).toBe('已完成');
+    expect(toolVerb({ ...run, status: 'failed' })).toBe('Run失败');
+    expect(foldActivity({ role: 'agent', blocks: [{ type: 'compaction', id: 'c', status: 'in_progress' }] }).label).toBe('正在压缩上下文');
   });
 });

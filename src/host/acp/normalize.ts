@@ -1,5 +1,7 @@
 import { basename } from 'node:path';
 import type * as acp from '@agentclientprotocol/sdk';
+import type { MsgKey } from '@shared/i18n';
+import { t } from '../i18n';
 import type {
   AgentBlock, AgentTurn, CompactionBlock, CompactionStatus, ConfigControl, DiffLine, PlanPriority, PlanStatus, SessionControls, SessionOption, SlashCommand, ToolCallBlock, ToolContent, ToolKind, Turn, TurnError, Usage,
 } from '@shared/transcript';
@@ -229,20 +231,21 @@ function findTool(s: NormalizeState, id: string): ToolCallBlock | undefined {
   return undefined;
 }
 
-const VERB: Record<ToolKind, string> = {
-  read: '读取', edit: '编辑', delete: '删除', move: '移动', search: '搜索', execute: '运行',
-  think: '思考', fetch: '抓取', switch_mode: '切换模式', other: '工具',
+const VERB_KEY: Record<ToolKind, MsgKey> = {
+  read: 'verb.read', edit: 'verb.edit', delete: 'verb.delete', move: 'verb.move', search: 'verb.search',
+  execute: 'verb.execute', think: 'verb.think', fetch: 'verb.fetch', switch_mode: 'verb.switch_mode', other: 'verb.other',
 };
+const verbOf = (kind: ToolKind): string => t(VERB_KEY[kind]);
 
 function toolBlock(tc: acp.ToolCall): ToolCallBlock {
-  const b: ToolCallBlock = { type: 'tool_call', id: tc.toolCallId, kind: tc.kind ?? 'other', verb: VERB[tc.kind ?? 'other'], status: tc.status ?? 'pending' };
+  const b: ToolCallBlock = { type: 'tool_call', id: tc.toolCallId, kind: tc.kind ?? 'other', verb: verbOf(tc.kind ?? 'other'), status: tc.status ?? 'pending' };
   mergeTool(b, tc);
   return b;
 }
 
 // Fields of tool_call and tool_call_update are all optional; overwrite only the ones provided
 function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
-  if (u.kind) { b.kind = u.kind; b.verb = VERB[u.kind]; }
+  if (u.kind) { b.kind = u.kind; b.verb = verbOf(u.kind); }
   if (u.status) b.status = u.status;
   // A target inferred from the title is only a fallback while there is no target yet; don't overwrite what rawInput / locations provided
   const target = pickTarget(u, b.kind);
@@ -286,7 +289,7 @@ function toolContent(items: acp.ToolCallContent[]): ToolContent | undefined {
   const texts = items.filter(c => c.type === 'content').map(c => c.type === 'content' ? textOf(c.content) : '').filter(Boolean);
   if (texts.length) return { type: 'text', text: texts.join('\n').slice(0, 20_000) };
   const term = items.find(c => c.type === 'terminal');
-  if (term && term.type === 'terminal') return { type: 'text', text: `终端 ${term.terminalId}（输出未接入）` };
+  if (term && term.type === 'terminal') return { type: 'text', text: t('host.terminalNotWired', { id: term.terminalId }) };
   return undefined;
 }
 
@@ -296,7 +299,7 @@ export function diffLines(oldText: string, newText: string): DiffLine[] {
   const b = newText.split('\n');
   if (a.length + b.length > 800) {
     return [
-      { kind: 'hunk', text: `@@ ${a.length} 行 → ${b.length} 行 @@` },
+      { kind: 'hunk', text: t('host.hunk', { a: a.length, b: b.length }) },
       ...a.slice(0, 40).map(t => ({ kind: 'del' as const, text: `-${t}` })),
       ...b.slice(0, 40).map(t => ({ kind: 'add' as const, text: `+${t}` })),
     ];
@@ -327,7 +330,7 @@ function collapseContext(lines: DiffLine[], keep = 3): DiffLine[] {
     else {
       const head = out.length === 0 ? [] : run.slice(0, keep);
       const tail = atEnd ? [] : run.slice(-keep);
-      out.push(...head, { kind: 'hunk', text: `@@ … ${run.length - head.length - tail.length} 行未变 … @@` }, ...tail);
+      out.push(...head, { kind: 'hunk', text: t('host.unchanged', { n: run.length - head.length - tail.length }) }, ...tail);
     }
     run = [];
   };
@@ -341,15 +344,15 @@ function collapseContext(lines: DiffLine[], keep = 3): DiffLine[] {
 
 // What's happening right now: feeds the Activity line of Turns
 export function activityOf(turns: Turn[]): AgentTurn['activity'] {
-  const t = turns[turns.length - 1];
-  if (t?.role !== 'agent') return { kind: 'think', label: '正在思考' };
-  for (let i = t.blocks.length - 1; i >= 0; i--) {
-    const b = t.blocks[i]!;
-    if (b.type === 'tool_call' && (b.status === 'in_progress' || b.status === 'pending')) return { kind: b.kind, label: `正在${b.verb} ${b.target ?? ''}`.trim() };
-    if (b.type === 'permission') return { kind: 'other', label: '等待批准' };
+  const turn = turns[turns.length - 1];
+  if (turn?.role !== 'agent') return { kind: 'think', label: t('host.thinking') };
+  for (let i = turn.blocks.length - 1; i >= 0; i--) {
+    const b = turn.blocks[i]!;
+    if (b.type === 'tool_call' && (b.status === 'in_progress' || b.status === 'pending')) return { kind: b.kind, label: t('host.doing', { verb: b.verb, target: b.target ?? '' }).trim() };
+    if (b.type === 'permission') return { kind: 'other', label: t('host.awaitingApproval') };
   }
-  const last = t.blocks[t.blocks.length - 1];
-  if (last?.type === 'thought' && last.streaming) return { kind: 'think', label: '正在思考' };
-  if (last?.type === 'text' && last.streaming) return { kind: 'other', label: '正在回复' };
-  return { kind: 'think', label: '正在思考' };
+  const last = turn.blocks[turn.blocks.length - 1];
+  if (last?.type === 'thought' && last.streaming) return { kind: 'think', label: t('host.thinking') };
+  if (last?.type === 'text' && last.streaming) return { kind: 'other', label: t('host.replying') };
+  return { kind: 'think', label: t('host.thinking') };
 }

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, u
 import { createPortal } from 'react-dom';
 import { Check, ChevronRight, Search, X } from 'lucide-react';
 import { cn } from './cn';
+import { t } from '../i18n';
 
 // Overlays attach to the shell root (not body): tokens / data-theme live on the shell root, and portaling out would lose the theme.
 // The composer is wrapped in a BorderBeam (overflow hidden), so overlays can't live inside it — they must portal.
@@ -175,7 +176,8 @@ export function Menu({ items, onSelect, searchable, empty, footer, ...pop }: Men
 const ITEM_SELECTOR = 'button[role="menuitemradio"]:not(:disabled), button[role="menuitemcheckbox"]:not(:disabled)';
 
 // Menu body: optional search box + a scroll area of at most --pop-rows rows + optional footer. Custom panels (multi-view) can use it directly
-export function MenuList({ items, onSelect, searchable, empty = '没有匹配', header, footer }: MenuListProps) {
+export function MenuList({ items, onSelect, searchable, empty, header, footer }: MenuListProps) {
+  const emptyText = empty ?? t('common.noMatch');
   const ref = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [q, setQ] = useState('');
@@ -222,7 +224,7 @@ export function MenuList({ items, onSelect, searchable, empty = '没有匹配', 
             ref={input}
             value={q}
             onChange={e => setQ(e.target.value)}
-            placeholder="搜索"
+            placeholder={t('common.search')}
             spellCheck={false}
             className="min-w-0 flex-1 bg-transparent text-2 text-fg-1 outline-none placeholder:text-fg-3"
           />
@@ -230,7 +232,7 @@ export function MenuList({ items, onSelect, searchable, empty = '没有匹配', 
       )}
       {/* Searchable lists keep their scrollbar gutter while filtering so rows don't jump in width */}
       <div className={cn('scroll-thin flex max-h-pop flex-col overflow-y-auto', searchable && 'scroll-stable')}>
-        {shown.length === 0 && <div className="flex min-h-row items-center px-2 text-3 text-fg-3">{empty}</div>}
+        {shown.length === 0 && <div className="flex min-h-row items-center px-2 text-3 text-fg-3">{emptyText}</div>}
         {shown.map((it, i) => {
           return (
             <div key={it.id} className="group/item relative flex shrink-0 flex-col">
@@ -262,7 +264,7 @@ export function MenuList({ items, onSelect, searchable, empty = '没有匹配', 
                 {it.checked && <Check className="size-icon shrink-0 text-fg-1" strokeWidth={2} />}
               </button>
               {it.onRemove && (
-                <TrailingButton label={`移除 ${it.label}`} title="移除" onClick={it.onRemove}>
+                <TrailingButton label={t('common.removeNamed', { name: it.label })} title={t('common.remove')} onClick={it.onRemove}>
                   <X className="size-3" strokeWidth={2} />
                 </TrailingButton>
               )}

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Check, ChevronsDown, ChevronsUp, ListTodo } from 'lucide-react';
 import type { PlanBlock, PlanEntry, PlanStatus } from '@shared/transcript';
 import { useAppearance } from '../appearance';
+import { t } from '../i18n';
 import { Disclosure } from '../ui/Disclosure';
 import { Row } from '../ui/Row';
 import { cn } from '../ui/cn';
@@ -14,7 +15,7 @@ export function Plan({ block }: { block: PlanBlock }) {
   const lead = toolLine === 'text' ? undefined : <ListTodo className="size-icon" strokeWidth={1.5} />;
   return (
     <Disclosure lead={lead} indent={false} body={<PlanEntries entries={block.entries} />}>
-      <span>计划</span>
+      <span>{t('plan.title')}</span>
       <span className="text-fg-3 tabular-nums">{done} / {block.entries.length}</span>
     </Disclosure>
   );
@@ -35,8 +36,8 @@ export function PlanEntries({ entries }: { entries: PlanEntry[] }) {
 
 // Medium is the default and gets no mark
 function priorityGlyph(priority: PlanEntry['priority']): ReactNode | undefined {
-  if (priority === 'high') return <ChevronsUp className="size-3" strokeWidth={1.75} aria-label="高优先级" />;
-  if (priority === 'low') return <ChevronsDown className="size-3" strokeWidth={1.75} aria-label="低优先级" />;
+  if (priority === 'high') return <ChevronsUp className="size-3" strokeWidth={1.75} aria-label={t('plan.priority.high')} />;
+  if (priority === 'low') return <ChevronsDown className="size-3" strokeWidth={1.75} aria-label={t('plan.priority.low')} />;
   return undefined;
 }
 

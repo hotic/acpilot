@@ -5,6 +5,7 @@ import type { FileHit } from '@shared/protocol';
 import { imageMimeOf } from '@shared/attachments';
 import { ShellLayerContext } from '../ui/Popover';
 import { cn } from '../ui/cn';
+import { t } from '../i18n';
 
 // An @ token under the caret: where it starts in the text and what has been typed after it
 export interface MentionSpan {
@@ -77,7 +78,7 @@ export function MentionList({ anchor, hits, active, empty, onHover, onPick }: Me
   if (!layer?.current || (!hits.length && !empty)) return null;
   return createPortal(
     <div ref={panel} role="listbox" style={style} className={cn('scroll-thin absolute z-30 flex max-h-pop flex-col overflow-y-auto rounded-lg border border-line bg-bg-1 p-1 shadow-pop', !style && 'invisible')}>
-      {!hits.length && <div className="flex min-h-row items-center px-2 text-3 text-fg-3">没有匹配的文件</div>}
+      {!hits.length && <div className="flex min-h-row items-center px-2 text-3 text-fg-3">{t('mention.noFiles')}</div>}
       {hits.map((h, i) => {
         const cut = h.path.lastIndexOf('/');
         const Icon = imageMimeOf(h.path) ? ImageIcon : FileText;

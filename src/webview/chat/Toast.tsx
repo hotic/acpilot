@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Trash2, X } from 'lucide-react';
 import { Button, IconButton } from '../ui/Button';
+import { t } from '../i18n';
 
 export interface ToastProps {
   text: string;
@@ -26,8 +27,8 @@ export function Toast({ text, icon, onUndo, onClose, ttl = 8000 }: ToastProps) {
     <div role="status" className="enter pointer-events-auto flex max-w-[calc(100%-2*var(--pad))] items-center gap-2 rounded-lg border border-line bg-bg-2 py-1 pr-1 pl-3 text-2 text-fg-1 shadow-pop">
       {icon ?? <Trash2 className="size-icon shrink-0 text-fg-3" strokeWidth={1.5} />}
       <span className="truncate">{text}</span>
-      {onUndo && <Button variant="secondary" onClick={onUndo} className="ml-1">撤销</Button>}
-      <IconButton aria-label="关闭" onClick={onClose}><X strokeWidth={1.5} /></IconButton>
+      {onUndo && <Button variant="secondary" onClick={onUndo} className="ml-1">{t('common.undo')}</Button>}
+      <IconButton aria-label={t('common.close')} onClick={onClose}><X strokeWidth={1.5} /></IconButton>
     </div>
   );
 }

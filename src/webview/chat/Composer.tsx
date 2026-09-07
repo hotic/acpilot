@@ -3,6 +3,8 @@ import { Shrink } from 'lucide-react';
 import type { ConfigControl, Draft, SessionControls, Turn, Usage } from '@shared/transcript';
 import type { FileHit } from '@shared/protocol';
 import type { HiddenMap } from '@shared/settings';
+import type { FollowUp } from '@shared/settings';
+import type { MsgKey } from '@shared/i18n';
 import { findVariant, groupModels, modelBrand, variantLabel, visibleOptions, type ModelFamily, type ModelVariant } from '@shared/models';
 import { useAppearance } from '../appearance';
 import { t } from '../i18n';
@@ -23,6 +25,8 @@ export interface ComposerProps {
   running: boolean;
   // Entire composer disabled while the session isn't ready (connecting / login required / read-only)
   disabled?: boolean;
+  // Follow-up handling while a turn runs: decides the running placeholder's wording
+  followUp?: FollowUp;
   theme: 'dark' | 'light';
   controls: SessionControls;
   turns: Turn[];
@@ -44,6 +48,13 @@ export interface ComposerProps {
 
 // Only offer search once the option count passes this threshold; short lists are scannable at a glance
 const SEARCH_FROM = 12;
+
+// The running placeholder explains what a send will do, per the follow-up setting
+const RUNNING_PLACEHOLDER: Record<FollowUp, MsgKey> = {
+  queue: 'composer.placeholder.queue',
+  steer: 'composer.placeholder.steer',
+  interrupt: 'composer.placeholder.interrupt',
+};
 
 // Composer has three layers: attachment chips (when any), the input area, and a toolbar row below.
 // The row's left side ("mode · reasoning level …") lists whatever the agent's ACP session provides, minus the model family;
@@ -93,9 +104,9 @@ export function Composer(p: ComposerProps) {
     try {
       const { drafts: more, refused } = await collectDrafts(dt, p.cwd);
       if (more.length) setDrafts(d => [...d, ...more.filter(m => m.kind !== 'file' || !d.some(x => x.kind === 'file' && x.uri === m.uri))]);
-      if (refused.length) p.onNotice(refused.join('；'));
+      if (refused.length) p.onNotice(refused.join(t('common.listSep')));
     } catch (e) {
-      p.onNotice(`读取附件失败：${e instanceof Error ? e.message : String(e)}`);
+      p.onNotice(t('composer.attachFailed', { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       setReading(n => n - 1);
     }
@@ -179,7 +190,7 @@ export function Composer(p: ComposerProps) {
         onSelect={e => syncCaret(e.currentTarget)}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
-        placeholder={p.disabled ? '会话未就绪' : p.running ? '排队一条，等这轮结束再发' : '有什么要改的？@ 引用文件'}
+        placeholder={p.disabled ? t('composer.notReady') : p.running ? t(RUNNING_PLACEHOLDER[p.followUp ?? 'queue']) : t('composer.placeholder')}
         className={cn(
           'min-w-0 resize-none bg-transparent px-3 pt-2.5 pb-1 text-1 outline-none transition-colors',
           'max-h-[calc(8*var(--text-1-lh))] placeholder:text-fg-3',
@@ -208,9 +219,9 @@ export function Composer(p: ComposerProps) {
                 return (
                   <Chip
                     ref={ref} variant="solid" className="ml-0.5 shrink-0" narrow="icon" data-open={open || undefined} onClick={toggle}
-                    title={mode ? [mode.name, mode.description].filter(Boolean).join(' · ') : '模式'} icon={Icon && <Icon strokeWidth={1.75} />}
+                    title={mode ? [mode.name, mode.description].filter(Boolean).join(' · ') : t('composer.mode')} icon={Icon && <Icon strokeWidth={1.75} />}
                   >
-                    {mode?.name ?? '模式'}
+                    {mode?.name ?? t('composer.mode')}
                   </Chip>
                 );
               }}
@@ -369,7 +380,7 @@ function ContextRing({ usage, turns, canCompact, onCompact, onOpenChange }: { us
           type="button"
           {...hover}
           data-open={open || undefined}
-          aria-label={`上下文已用 ${Math.round(pct * 100)}%`}
+          aria-label={t('usage.usedPct', { pct: Math.round(pct * 100) })}
           className="inline-flex size-ctl shrink-0 items-center justify-center rounded-md text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 data-[open]:bg-active data-[open]:text-fg-1"
         >
           <svg className="size-icon -rotate-90" viewBox="0 0 16 16" fill="none">
@@ -400,15 +411,15 @@ function UsagePanel({ usage, pct, segments, onCompact }: { usage: Usage; pct: nu
   return (
     <div className="flex flex-col gap-1 p-1 tabular-nums">
       <div className="flex h-ctl items-center justify-between pl-2">
-        <span className="text-2 font-medium text-fg-1">上下文</span>
+        <span className="text-2 font-medium text-fg-1">{t('usage.title')}</span>
         {onCompact && (
-          <IconButton title="压缩上下文" aria-label="压缩上下文" onClick={onCompact}>
+          <IconButton title={t('usage.compact')} aria-label={t('usage.compact')} onClick={onCompact}>
             <Shrink strokeWidth={1.75} />
           </IconButton>
         )}
       </div>
       <div className="flex items-baseline justify-between px-2 text-3">
-        <span className="text-fg-2">已用 {Math.round(pct * 100)}%</span>
+        <span className="text-fg-2">{t('usage.usedPctShort', { pct: Math.round(pct * 100) })}</span>
         <span className="text-fg-3">~{fmtTokens(usage.used)} / {fmtTokens(usage.size)}{usage.cost !== undefined ? ` · $${usage.cost.toFixed(2)}` : ''}</span>
       </div>
       <div className="mx-2 mb-1 flex h-1.5 overflow-hidden rounded-full bg-active">
@@ -417,7 +428,7 @@ function UsagePanel({ usage, pct, segments, onCompact }: { usage: Usage; pct: nu
             <button
               key={s.id}
               type="button"
-              aria-label={`${s.label} 约 ${fmtTokens(s.tokens)}`}
+              aria-label={t('usage.segAria', { label: s.label, n: fmtTokens(s.tokens) })}
               onClick={() => toggle(s.id)}
               className={cn('h-full transition-opacity hover:brightness-125 focus-visible:brightness-125', SEG_COLOR[s.id], sel && sel !== s.id && 'opacity-30')}
               style={{ width: `${(s.tokens / usage.size) * 100}%` }}

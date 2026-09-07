@@ -1,6 +1,5 @@
-import type { MsgKey } from './keys';
-
-// English — must cover exactly the keys of zh-CN (enforced by `satisfies`, and by test/i18n.test.ts against extra keys)
+// English — the source dictionary: its keys define MsgKey, every other locale must cover exactly these keys.
+// Placeholders are {name}
 export const en = {
   'common.back': 'Back',
   'common.close': 'Close',
@@ -20,6 +19,8 @@ export const en = {
   'common.image': 'Image',
   'common.previewImage': 'Preview {name}',
   'common.removeNamed': 'Remove {name}',
+  'common.account': 'Account',
+  'common.listSep': ', ',
 
   'session.untitled': 'New session',
   'session.new': 'New session',
@@ -34,6 +35,7 @@ export const en = {
   'session.fallbackTitle': 'session',
   'session.deleted': 'Deleted “{title}”',
   'session.queued': 'Queued: {text}',
+  'session.noneAgent': '{name} has no sessions yet',
 
   'composer.placeholder': 'What should change? @ to reference a file',
   'composer.placeholder.queue': 'Queue one for after this turn',
@@ -52,10 +54,12 @@ export const en = {
   'composer.pinHint': 'Hover an item and click pin to keep it handy',
   'composer.send': 'Send',
   'composer.stop': 'Stop',
+  'composer.attachFailed': 'Could not read attachments: {error}',
 
   'usage.title': 'Context',
   'usage.compact': 'Compact context',
   'usage.usedPct': 'Context {pct}% used',
+  'usage.usedPctShort': '{pct}% used',
   'usage.about': '~{n}',
   'usage.segAria': '{label} ~{n}',
   'usage.used': 'Used {n}',
@@ -123,9 +127,32 @@ export const en = {
   'turns.stop.maxTurns': 'Request limit for one turn reached',
   'turns.stop.cancelled': 'Stopped',
   'turns.stop.empty': 'No reply',
+  'turns.elapsed.ms': '{m}m {s}s',
+  'turns.elapsed.m': '{m}m',
+  'turns.elapsed.s': '{s}s',
   'plan.title': 'Plan',
   'plan.priority.high': 'High priority',
   'plan.priority.low': 'Low priority',
+  'plan.status.draft': 'Generating',
+  'plan.status.ready': 'Ready',
+  'plan.status.approved': 'Approved',
+  'plan.status.rejected': 'Changes requested',
+  'plan.status.executing': 'Executing',
+  'plan.pendingApproval': 'Pending approval',
+  'plan.openFile': 'Open plan file',
+  'plan.collapse': 'Collapse plan',
+  'plan.expand': 'Preview full plan',
+  'plan.revise': 'Revise plan',
+  'plan.executor': 'Execution model',
+  'plan.moreApprovals': 'More approval options',
+  'plan.backToExecutor': 'Back to execution model',
+  'plan.approvals': 'Approval options',
+  'plan.approvalsAria': 'Choose execution model and approval options',
+  // Per-tool fold labels, keyed by status; each locale orders {verb} as its grammar requires
+  'fold.pending': '{verb}…',
+  'fold.done': '{verb}',
+  'fold.failed': '{verb} failed',
+  'fold.cancelled': '{verb} cancelled',
 
   'alert.error.title': 'Request failed',
   'alert.error.unknown': 'The agent gave no reason; the log may have more',
@@ -154,6 +181,15 @@ export const en = {
   'host.needApproval': 'Approval needed',
   'host.needApprovalFor': 'Approval needed · {what}',
   'host.noPermissionOptions': 'Permission request has no options',
+  'host.planOptionsStale': 'Plan approval options are no longer valid',
+  'host.executorUnavailable': 'The chosen execution model is unavailable',
+  'host.noExecutableMode': 'The agent offered no executable mode',
+  'host.blobIllegal': 'Illegal blob location: {path}',
+  'host.spawnExited': '{command} exited (code {code}, signal {signal})',
+  'host.attachFailed': 'Could not process attachments ({error}); sent text only',
+  'host.promptDropped': 'Could not process attachments ({error}); the message was not sent',
+  'host.attachStageFailed': 'Could not save {label} ({error}); the turn still went out, history has no preview',
+  'host.imageTooBig': '{name} exceeds {mb} MB, skipped',
   'host.recordLost': 'Session record is missing',
   'host.loginTerminalTitle': '{agent} sign-in',
   'host.loginThenRetry': 'Finish signing in to {agent} in the terminal, then press “Retry”',
@@ -256,4 +292,4 @@ export const en = {
   'settings.config.desc': 'Configuration files for {agent}. Open a path to edit.',
   'settings.file.missing': 'Missing',
   'settings.loading': 'Scanning…',
-} satisfies Record<MsgKey, string>;
+} as const;

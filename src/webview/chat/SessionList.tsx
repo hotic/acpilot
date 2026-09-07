@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { Pencil, Pin, PinOff, Search, Trash2 } from 'lucide-react';
 import type { AgentInfo, SessionSummary } from '@shared/transcript';
 import { cn } from '../ui/cn';
+import { t } from '../i18n';
 import { AgentMark } from './AgentMark';
 
 const STATE_DOT: Record<NonNullable<SessionSummary['state']>, string> = {
@@ -64,25 +65,25 @@ export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, o
             autoFocus={autoFocus}
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="搜索会话"
-            aria-label="搜索会话"
+            placeholder={t('session.search')}
+            aria-label={t('session.search')}
             className="min-w-0 flex-1 bg-transparent text-2 text-fg-1 outline-none placeholder:text-fg-3"
           />
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-1 px-1 pt-1">
-        <FilterChip active={!agentFilter} onClick={() => setAgentFilter(undefined)}>全部</FilterChip>
+        <FilterChip active={!agentFilter} onClick={() => setAgentFilter(undefined)}>{t('common.all')}</FilterChip>
         {agents.map(a => (
           <FilterChip key={a.id} active={agentFilter === a.id} onClick={() => setAgentFilter(a.id)}>
             <AgentMark id={a.id} name={a.name} className="size-3" />{a.name}
           </FilterChip>
         ))}
       </div>
-      <div className="mt-1 flex min-h-0 flex-col overflow-y-auto border-t border-line pb-1" role="listbox" aria-label="会话">
-        {!shown.length && <div className="px-2 py-3 text-3 text-fg-3">{q ? '没有匹配的会话' : agentFilter ? `${nameOf(agentFilter)} 还没有会话` : '还没有会话'}</div>}
+      <div className="mt-1 flex min-h-0 flex-col overflow-y-auto border-t border-line pb-1" role="listbox" aria-label={t('session.listAria')}>
+        {!shown.length && <div className="px-2 py-3 text-3 text-fg-3">{q ? t('session.noMatch') : agentFilter ? t('session.noneAgent', { name: nameOf(agentFilter) }) : t('session.none')}</div>}
         {pinned.length > 0 && (
           <div className="flex flex-col">
-            <div className="px-2 pt-2.5 pb-1 text-3 text-fg-3">置顶</div>
+            <div className="px-2 pt-2.5 pb-1 text-3 text-fg-3">{t('session.group.pinned')}</div>
             {pinned.map(renderItem)}
           </div>
         )}
@@ -148,13 +149,13 @@ function Item({ session: s, agentName, active, time, editing, onSelect, onEdit, 
             <span>{time}</span>
           </span>
           <span className="hidden items-center gap-0.5 group-hover:flex group-focus-within:flex">
-            <button type="button" title={s.pinned ? '取消置顶' : '置顶'} aria-label={s.pinned ? '取消置顶' : '置顶'} onClick={e => { e.stopPropagation(); onPin(); }} className={act}>
+            <button type="button" title={s.pinned ? t('common.unpin') : t('common.pin')} aria-label={s.pinned ? t('common.unpin') : t('common.pin')} onClick={e => { e.stopPropagation(); onPin(); }} className={act}>
               {s.pinned ? <PinOff className="size-3" strokeWidth={1.5} /> : <Pin className="size-3" strokeWidth={1.5} />}
             </button>
-            <button type="button" title="重命名" aria-label="重命名" onClick={e => { e.stopPropagation(); onEdit(); }} className={act}>
+            <button type="button" title={t('common.rename')} aria-label={t('common.rename')} onClick={e => { e.stopPropagation(); onEdit(); }} className={act}>
               <Pencil className="size-3" strokeWidth={1.5} />
             </button>
-            <button type="button" title="删除" aria-label="删除" onClick={e => { e.stopPropagation(); onDelete(); }} className={act}>
+            <button type="button" title={t('common.delete')} aria-label={t('common.delete')} onClick={e => { e.stopPropagation(); onDelete(); }} className={act}>
               <Trash2 className="size-3" strokeWidth={1.5} />
             </button>
           </span>
@@ -183,7 +184,7 @@ function RenameInput({ initial, onDone }: { initial: string; onDone: (title: str
         if (e.key === 'Escape') finish(initial);
       }}
       onBlur={() => finish(value)}
-      aria-label="会话标题"
+      aria-label={t('session.titleAria')}
       className="min-w-0 flex-1 rounded-sm bg-active px-1 text-2 text-fg-1 outline-none"
     />
   );

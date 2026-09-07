@@ -21,7 +21,7 @@ const agentId = argv.find(a => !a.startsWith('--') && a !== String(delayMs)) ?? 
 const registry = new AgentRegistry();
 const def = registry.get(agentId);
 const bin = await registry.resolveBinary(agentId);
-if (!bin) { console.error(`找不到 ${def.command}`); process.exit(1); }
+if (!bin) { console.error(`command not found: ${def.command}`); process.exit(1); }
 console.log(`→ ${bin} ${def.args.join(' ')}`);
 
 const t0 = Date.now();
@@ -64,7 +64,7 @@ console.log('initialize → agentCapabilities', JSON.stringify(proc.init.agentCa
 if (importLocal) {
   const p = new DevinAccountProvider(await mkdtemp(join(tmpdir(), 'acpilot-probe-')), async () => bin);
   const draft = await p.importLocal();
-  if (!draft) { console.error('本机没有该 CLI 的登录记录'); process.exit(1); }
+  if (!draft) { console.error('no local login for this CLI'); process.exit(1); }
   await p.authenticate!(proc, draft);
   console.log(`authenticate ok（${draft.label}）`);
 }

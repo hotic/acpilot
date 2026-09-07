@@ -2,6 +2,7 @@ import type { AccountInfo, AgentId } from '@shared/transcript';
 import type { AgentProcess } from '../acp/AgentProcess';
 import type { AccountStore } from './AccountStore';
 import type { AccountProvider } from './types';
+import { t } from '../i18n';
 
 export interface AccountManagerDeps {
   store: AccountStore;
@@ -41,16 +42,16 @@ export class AccountManager {
 
   private provider(agent: AgentId): AccountProvider {
     const p = this.providers.get(agent);
-    if (!p) throw new Error(`${agent} 不走账号层`);
+    if (!p) throw new Error(t('host.noAccountLayer', { agent }));
     return p;
   }
 
   async import(agent: AgentId): Promise<AccountInfo | undefined> {
     const draft = await this.provider(agent).importLocal();
-    if (!draft) { this.deps.toast('info', `本机没有 ${agent} 的登录记录，先在终端登录或用「添加账号」`); return undefined; }
+    if (!draft) { this.deps.toast('info', t('host.noLocalLogin', { agent })); return undefined; }
     const a = await this.deps.store.add(agent, draft);
-    this.deps.log(`账号导入：${agent} ${a.label}`);
-    this.deps.toast('info', `已导入本机登录 ${a.label}`);
+    this.deps.log(`account imported: ${agent} ${a.label}`);
+    this.deps.toast('info', t('host.imported', { label: a.label }));
     this.emit();
     return a;
   }
@@ -60,8 +61,8 @@ export class AccountManager {
     const draft = await this.provider(agent).importLocal();
     if (draft && !this.list().some(a => a.agent === agent && a.label === draft.label)) {
       const a = await this.deps.store.add(agent, draft);
-      this.deps.log(`账号导入：${agent} ${a.label}`);
-      this.deps.toast('info', `已导入本机登录 ${a.label}`);
+      this.deps.log(`account imported: ${agent} ${a.label}`);
+      this.deps.toast('info', t('host.imported', { label: a.label }));
       this.emit();
       return a;
     }
@@ -71,16 +72,16 @@ export class AccountManager {
   // Open a terminal for the isolated login and wait for it to write to disk in the background; store the result once it arrives. Does not block the caller
   async login(agent: AgentId): Promise<AccountInfo | undefined> {
     const flow = await this.provider(agent).login();
-    this.deps.runInTerminal(`${agent} 登录`, flow.command, flow.args, flow.env);
-    this.deps.toast('info', '在终端里完成登录，账号会自动加进来');
+    this.deps.runInTerminal(t('host.loginTerminalTitle', { agent }), flow.command, flow.args, flow.env);
+    this.deps.toast('info', t('host.finishLoginInTerminal'));
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), LOGIN_TIMEOUT);
     try {
       const draft = await flow.collect(ctrl.signal);
-      if (!draft) { this.deps.toast('info', '登录没有完成'); return undefined; }
+      if (!draft) { this.deps.toast('info', t('host.loginIncomplete')); return undefined; }
       const a = await this.deps.store.add(agent, draft);
-      this.deps.log(`账号登录：${agent} ${a.label}`);
-      this.deps.toast('info', `已添加账号 ${a.label}`);
+      this.deps.log(`account login: ${agent} ${a.label}`);
+      this.deps.toast('info', t('host.accountAdded', { label: a.label }));
       this.emit();
       return a;
     } finally { clearTimeout(timer); }
@@ -106,7 +107,7 @@ export class AccountManager {
     const p = this.providers.get(agent);
     if (!p?.authenticate) return;
     const cred = await this.deps.store.credential(accountId);
-    if (!cred) throw new Error(`账号 ${this.get(accountId)?.label ?? accountId} 的凭据不在了，请重新登录`);
+    if (!cred) throw new Error(t('host.credentialGone', { label: this.get(accountId)?.label ?? accountId }));
     await p.authenticate(proc, cred);
     await this.touch(accountId);
   }

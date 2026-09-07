@@ -11,6 +11,7 @@ import { applyModelSources, type ModelSources } from '@shared/modelSources';
 import { readModelSources } from './modelSources';
 import { describeDrafts, preparePrompt, restoreDrafts, type BlobStore, type PreparedPrompt } from './attachments';
 import { activityOf, applyUpdate, endTurn, failTurn, initControls, applyConfigOptions, type NormalizeState } from './normalize';
+import { t, tOr } from '../i18n';
 
 // The persisted session record: view fields plus the acpSessionId needed for resuming
 export interface SessionRecord {
@@ -118,10 +119,10 @@ export class AcpSession {
 
   static fresh(agent: AgentId, cwd: string, deps: SessionDeps, accountId?: string): AcpSession {
     const now = new Date().toISOString();
-    return new AcpSession({ id: randomUUID(), agent, accountId, cwd, title: '新会话', createdAt: now, updatedAt: now, turns: [], controls: { modes: [], options: [] }, commands: [] }, deps);
+    return new AcpSession({ id: randomUUID(), agent, accountId, cwd, title: t('session.untitled'), createdAt: now, updatedAt: now, turns: [], controls: { modes: [], options: [] }, commands: [] }, deps);
   }
 
-  get title(): string { return this.state.title || '新会话'; }
+  get title(): string { return this.state.title || t('session.untitled'); }
   get isRunning(): boolean { return this.running; }
   get alive(): boolean { return !!this.proc?.alive; }
   get canCompact(): boolean { return this.state.commands.some(c => c.name === 'compact'); }
@@ -175,7 +176,7 @@ export class AcpSession {
       if (status === 'ready' && this.syntheticModes() && this.state.controls.modeId === 'plan') {
         try {
           await this.proc!.agent.request(acp.methods.agent.session.setMode, { sessionId: this.acpSessionId!, modeId: 'plan' });
-        } catch (e) { this.log(`恢复 plan 模式失败：${msg(e)}`); }
+        } catch (e) { this.log(`Failed to restore plan mode: ${msg(e)}`); }
       }
     } catch (e) {
       this.fail(e);
@@ -187,7 +188,7 @@ export class AcpSession {
     const def = this.deps.registry.get(this.agent);
     this.modelSources = await readModelSources(this.agent, this.cwd);
     const bin = await this.deps.registry.resolveBinary(this.agent);
-    if (!bin) throw new Error(`找不到 ${def.command}，请先安装 ${def.name} CLI`);
+    if (!bin) throw new Error(t('host.notFound', { command: def.command, agent: def.name }));
     this.log(`spawn ${bin} ${def.args.join(' ')} (cwd ${this.cwd})${this.accountId ? ` account ${this.accountId.slice(0, 8)}` : ''}`);
     const hooks = this.accountId ? this.deps.accounts : undefined;
     const env = hooks && this.accountId ? await hooks.spawnEnv(this.agent, this.accountId) : undefined;
@@ -203,7 +204,7 @@ export class AcpSession {
         this.log(`exit code=${code} signal=${signal}`);
         if (this.status !== 'closed') {
           this.status = 'error';
-          this.error = this.error ?? `${def.name} 进程退出（${code ?? signal ?? '?'}）`;
+          this.error = this.error ?? t('host.exited', { agent: def.name, code: code ?? signal ?? '?' });
           this.settle('cancelled');
           this.touch();
         }
@@ -223,9 +224,10 @@ export class AcpSession {
     catch (e) { throw new AccountAuthError(msg(e)); }
   }
 
-  // Synthetic modes declared in the registry (the kind the protocol doesn't advertise); undefined when there are none
+  // Synthetic modes declared in the registry (the kind the protocol doesn't advertise); undefined when there are none.
+  // Builtin descriptions are i18n keys (mode.grok.*), resolved against the current host locale here
   private syntheticModes() {
-    return this.deps.registry.get(this.agent).modes;
+    return this.deps.registry.get(this.agent).modes?.map(m => ({ ...m, description: m.description ? tOr(m.description) : m.description }));
   }
 
   // All session/new / resume / load responses come through here: when the protocol gave no modes and the registry has synthetic ones, backfill them,
@@ -255,7 +257,7 @@ export class AcpSession {
           this.status = 'ready';
           this.log('session/resume ok');
           return;
-        } catch (e) { this.log(`session/resume 失败：${msg(e)}`); if (isAuth(e)) throw e; gone = isSessionGone(e); }
+        } catch (e) { this.log(`session/resume failed: ${msg(e)}`); if (isAuth(e)) throw e; gone = isSessionGone(e); }
       }
       if (!gone && caps?.loadSession) {
         try {
@@ -266,14 +268,14 @@ export class AcpSession {
           this.status = 'ready';
           this.log('session/load ok');
           return;
-        } catch (e) { this.replaying = false; this.log(`session/load 失败：${msg(e)}`); if (isAuth(e)) throw e; gone = isSessionGone(e); }
+        } catch (e) { this.replaying = false; this.log(`session/load failed: ${msg(e)}`); if (isAuth(e)) throw e; gone = isSessionGone(e); }
       }
       if (!gone) {
         this.status = 'readonly';
-        this.error = '这个 agent 恢复不了老会话，只能看历史';
+        this.error = t('host.cannotResume');
         return;
       }
-      this.log('对面没这条会话了，开新的顶上');
+      this.log('Peer no longer has this session; starting a new one');
       this.acpSessionId = undefined;
     }
     const r = await agent.request(acp.methods.agent.session.new, { cwd: this.cwd, mcpServers: [] });
@@ -289,7 +291,7 @@ export class AcpSession {
       // When an account credential can't be handed over, keep the reason for the Notice to display; otherwise fall back to what the CLI said on stderr,
       // and a plain "not logged in yet" with no hint needs no explanation
       this.error = e instanceof AccountAuthError ? e.message : this.authHint;
-      this.log(`需要登录${this.error ? `：${this.error}` : ''}`);
+      this.log(`auth required${this.error ? `: ${this.error}` : ''}`);
     } else {
       this.status = 'error';
       this.error = msg(e);
@@ -301,7 +303,7 @@ export class AcpSession {
   async authenticate(methodId?: string): Promise<void> {
     if (!this.proc) return;
     const id = methodId ?? this.authMethods?.[0]?.id;
-    if (!id) throw new Error('agent 没有给出登录方式');
+    if (!id) throw new Error(t('host.noAuthMethod'));
     await this.proc.agent.request(acp.methods.agent.authenticate, { methodId: id });
   }
 
@@ -349,12 +351,12 @@ export class AcpSession {
     }
     if (!prepared) {
       // Staging blew up as a whole (should not happen — a single draft degrades into `problems` instead): send the text alone when there is any, so nothing typed is lost
-      this.log(`附件处理失败：${stagingError}`);
+      this.log(`Attachment staging failed: ${stagingError}`);
       if (text.trim()) {
-        this.deps.notify?.(`附件处理失败（${stagingError ?? '未知原因'}），只发送了文字`);
+        this.deps.notify?.(t('host.attachFailed', { error: stagingError ?? t('notice.error.unknown') }));
         prepared = { blocks: [{ type: 'text', text }], attachments: [], problems: [] };
       } else {
-        this.deps.notify?.(`附件处理失败（${stagingError ?? '未知原因'}），这条没发出去`);
+        this.deps.notify?.(t('host.promptDropped', { error: stagingError ?? t('notice.error.unknown') }));
         this.running = false;
         this.touch();
         this.flushQueued();
@@ -367,7 +369,7 @@ export class AcpSession {
     this.compactionCompletion = completion;
     if (attachments.length) this.log(`attachments: ${prepared.blocks.slice(text ? 1 : 0).map(b => b.type).join(' ')}`);
     this.state.turns.push(auto ? { role: 'user', text, auto: true } : { role: 'user', text, ...(prepared.attachments.length ? { attachments: prepared.attachments } : {}) });
-    if (!auto && (!this.state.title || this.state.title === '新会话')) this.state.title = summarizePrompt({ text, attachments }).slice(0, 40);
+    if (!auto && (!this.state.title || this.state.title === t('session.untitled'))) this.state.title = summarizePrompt({ text, attachments }).slice(0, 40);
     this.state.turns.push({ role: 'agent', blocks: [], startedAt: Date.now(), activity: activityOf(this.state.turns) });
     this.touch();
     let stop: acp.StopReason = 'cancelled';
@@ -386,7 +388,7 @@ export class AcpSession {
     } catch (e) {
       // The error stays on the turn (the webview shows it as a card, history keeps the row); the session itself is still usable, so status stays ready —
       // except when the peer says the credential is gone, which is the Notice's business
-      this.log(`prompt 失败：${msg(e)}`);
+      this.log(`prompt failed: ${msg(e)}`);
       this.settle('cancelled', turnErrorOf(e));
       if (isAuth(e)) this.status = 'auth_required';
     }
@@ -395,7 +397,7 @@ export class AcpSession {
     this.touch();
     if (this.flushQueued()) return;
     if (!auto && stop === 'end_turn' && this.shouldAutoCompact()) {
-      this.log(`usage ${this.state.usage?.used} ≥ 阈值，自动 /compact`);
+      this.log(`usage ${this.state.usage?.used} ≥ threshold, auto /compact`);
       void this.compact(true);
     }
   }
@@ -405,13 +407,13 @@ export class AcpSession {
     const next = this.queued;
     if (!next) return false;
     this.queued = undefined;
-    this.prompt(next.text, next.attachments).catch(e => this.log(`queued prompt 失败：${msg(e)}`));
+    this.prompt(next.text, next.attachments).catch(e => this.log(`queued prompt failed: ${msg(e)}`));
     return true;
   }
 
   // Compact the context: simply send /compact to the agent (ACP has no dedicated compaction request; it relies on the agent's own slash command)
   async compact(auto = false): Promise<void> {
-    if (!this.canCompact) { if (!auto) throw new Error('这个 agent 没有 /compact'); return; }
+    if (!this.canCompact) { if (!auto) throw new Error(t('host.noCompact')); return; }
     await this.prompt('/compact', [], auto);
   }
 
@@ -531,12 +533,12 @@ export class AcpSession {
     if (optionId && !permission) return;
     const option = permission?.options.find(o => o.optionId === optionId && o.kind.startsWith('allow'))
       ?? (optionId ? undefined : permission?.options.find(o => o.kind === 'allow_once'));
-    if (permission && !option) throw new Error('计划审批选项已失效');
+    if (permission && !option) throw new Error(t('host.planOptionsStale'));
     this.buildingPlan = true;
     try {
       if (model) {
         const c = this.state.controls.options.find(c => c.id === model.configId && c.category === 'model');
-        if (!c?.options.some(o => o.id === model.value)) throw new Error('执行模型不可用');
+        if (!c?.options.some(o => o.id === model.value)) throw new Error(t('host.executorUnavailable'));
         if (c.value !== model.value) await this.setConfig(model.configId, model.value);
       }
       if (this.status !== 'ready') return;
@@ -547,12 +549,13 @@ export class AcpSession {
         if (this.running) return;
         const mode = this.state.controls.modes.find(m => ['default', 'accept-edits', 'agent', 'code'].includes(m.id));
         if (this.state.controls.modeId === 'plan') {
-          if (!mode) throw new Error('Agent 未提供可执行的模式');
+          if (!mode) throw new Error(t('host.noExecutableMode'));
           await this.setMode(mode.id);
         }
         if (this.status !== 'ready' || this.running) return;
         plan.status = 'executing';
-        await this.prompt(`实施以下已批准的计划：\n\n${plan.markdown}`);
+        // Model-facing instruction: fixed English regardless of UI language
+        await this.prompt(`Implement the following approved plan:\n\n${plan.markdown}`);
       }
     } finally {
       this.buildingPlan = false;
@@ -626,7 +629,7 @@ export class AcpSession {
     const block: PermissionBlock = {
       type: 'permission', id: blockId,
       planId: plan?.markdown && plan.approvalToolCallId === req.toolCall.toolCallId ? plan.id : undefined,
-      title: tool ? `需要批准 · ${tool.verb}${tool.kind !== 'execute' && tool.target ? ` ${tool.target}` : ''}` : req.toolCall.title ? `需要批准 · ${req.toolCall.title}` : '需要批准',
+      title: tool ? t('host.needApprovalFor', { what: `${tool.verb}${tool.kind !== 'execute' && tool.target ? ` ${tool.target}` : ''}` }) : req.toolCall.title ? t('host.needApprovalFor', { what: req.toolCall.title }) : t('host.needApproval'),
       command: typeof raw?.command === 'string' ? raw.command : typeof raw?.cmd === 'string' ? raw.cmd : tool?.kind === 'execute' ? tool.target : undefined,
       description: typeof raw?.description === 'string' ? raw.description : undefined,
       options: req.options.map(o => ({ id: o.optionId, label: o.name, kind: o.kind })),
@@ -667,7 +670,7 @@ function summarizePrompt(p: QueuedPrompt): string {
 // Which option auto-approval picks: allow_always first, then allow_once, otherwise the first one
 function bestAllow(options: acp.PermissionOption[]): string {
   const o = options.find(o => o.kind === 'allow_always') ?? options.find(o => o.kind === 'allow_once') ?? options[0];
-  if (!o) throw new Error('权限请求没有选项');
+  if (!o) throw new Error(t('host.noPermissionOptions'));
   return o.optionId;
 }
 

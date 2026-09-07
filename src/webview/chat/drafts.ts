@@ -1,5 +1,6 @@
 import type { Draft } from '@shared/transcript';
 import { MAX_IMAGE_BYTES, MAX_TEXT_BYTES, imageMimeOf } from '@shared/attachments';
+import { t } from '../i18n';
 
 export interface Collected {
   drafts: Draft[];
@@ -25,13 +26,13 @@ export async function collectDrafts(dt: DataTransfer, cwd: string): Promise<Coll
   for (const f of Array.from(dt.files)) {
     const mimeType = imageMimeOf(f.name) ?? (f.type.startsWith('image/') && imageMimeOf(`.${f.type.slice(6)}`));
     if (mimeType) {
-      if (f.size > MAX_IMAGE_BYTES) { out.refused.push(`${f.name}：图片超过 ${MAX_IMAGE_BYTES >> 20} MB`); continue; }
+      if (f.size > MAX_IMAGE_BYTES) { out.refused.push(t('attach.tooBigImage', { name: f.name, mb: MAX_IMAGE_BYTES >> 20 })); continue; }
       out.drafts.push({ kind: 'image', mimeType, data: await base64Of(f), name: f.name === 'image.png' ? undefined : f.name });
       continue;
     }
-    if (f.size > MAX_TEXT_BYTES) { out.refused.push(`${f.name}：文件超过 ${MAX_TEXT_BYTES >> 10} KB，从资源管理器拖入或用 @ 引用`); continue; }
+    if (f.size > MAX_TEXT_BYTES) { out.refused.push(t('attach.tooBigText', { name: f.name, kb: MAX_TEXT_BYTES >> 10 })); continue; }
     const text = await f.text();
-    if (text.includes('\0')) { out.refused.push(`${f.name}：二进制文件放不进对话`); continue; }
+    if (text.includes('\0')) { out.refused.push(t('attach.binary', { name: f.name })); continue; }
     out.drafts.push({ kind: 'text', name: f.name, text });
   }
   return out;

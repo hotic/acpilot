@@ -1,4 +1,6 @@
-// Simplified Chinese — the source dictionary: its keys define MsgKey, every other locale must cover exactly these keys.
+import type { MsgKey } from './keys';
+
+// Simplified Chinese — must cover exactly the keys of en (enforced by `satisfies`, and by test/i18n.test.ts against extra keys).
 // Placeholders are {name}; punctuation inside Chinese copy is full-width
 
 export const zhCN = {
@@ -21,6 +23,8 @@ export const zhCN = {
   'common.image': '图片',
   'common.previewImage': '预览 {name}',
   'common.removeNamed': '移除 {name}',
+  'common.account': '账号',
+  'common.listSep': '、',
 
   // Header / session list
   'session.untitled': '新会话',
@@ -36,6 +40,7 @@ export const zhCN = {
   'session.fallbackTitle': '会话',
   'session.deleted': '已删除「{title}」',
   'session.queued': '已排队：{text}',
+  'session.noneAgent': '{name} 还没有会话',
 
   // Composer
   'composer.placeholder': '有什么要改的？@ 引用文件',
@@ -55,11 +60,13 @@ export const zhCN = {
   'composer.pinHint': '悬停一项，点 pin 钉为常用',
   'composer.send': '发送',
   'composer.stop': '停止',
+  'composer.attachFailed': '读取附件失败：{error}',
 
   // Context usage panel
   'usage.title': '上下文',
   'usage.compact': '压缩上下文',
   'usage.usedPct': '上下文已用 {pct}%',
+  'usage.usedPctShort': '已用 {pct}%',
   'usage.about': '约 {n}',
   'usage.segAria': '{label} 约 {n}',
   'usage.used': '已用 {n}',
@@ -131,9 +138,31 @@ export const zhCN = {
   'turns.stop.maxTurns': '达到单轮请求次数上限',
   'turns.stop.cancelled': '已停止',
   'turns.stop.empty': '没有回复',
+  'turns.elapsed.ms': '{m}分钟 {s}秒',
+  'turns.elapsed.m': '{m}分钟',
+  'turns.elapsed.s': '{s}秒',
   'plan.title': '计划',
   'plan.priority.high': '高优先级',
   'plan.priority.low': '低优先级',
+  'plan.status.draft': '生成中',
+  'plan.status.ready': '已生成',
+  'plan.status.approved': '已批准',
+  'plan.status.rejected': '待修改',
+  'plan.status.executing': '实施中',
+  'plan.pendingApproval': '待批准',
+  'plan.openFile': '打开计划文件',
+  'plan.collapse': '收起计划',
+  'plan.expand': '预览计划全文',
+  'plan.revise': '修改计划',
+  'plan.executor': '执行模型',
+  'plan.moreApprovals': '其他审批选项',
+  'plan.backToExecutor': '返回执行模型',
+  'plan.approvals': '审批选项',
+  'plan.approvalsAria': '选择执行模型及审批选项',
+  'fold.pending': '正在{verb}',
+  'fold.done': '已{verb}',
+  'fold.failed': '{verb}失败',
+  'fold.cancelled': '已取消{verb}',
 
   // The card above the composer for a turn that stopped short
   'alert.error.title': '请求失败',
@@ -165,6 +194,15 @@ export const zhCN = {
   'host.needApproval': '需要批准',
   'host.needApprovalFor': '需要批准 · {what}',
   'host.noPermissionOptions': '权限请求没有选项',
+  'host.planOptionsStale': '计划审批选项已失效',
+  'host.executorUnavailable': '执行模型不可用',
+  'host.noExecutableMode': 'Agent 未提供可执行的模式',
+  'host.blobIllegal': '非法的 blob 位置：{path}',
+  'host.spawnExited': '{command} 退出（code {code}，signal {signal}）',
+  'host.attachFailed': '附件处理失败（{error}），只发送了文字',
+  'host.promptDropped': '附件处理失败（{error}），这条没发出去',
+  'host.attachStageFailed': '{label} 没能存盘（{error}），本轮照常发出，历史里不会有预览',
+  'host.imageTooBig': '{name} 超过 {mb} MB，已跳过',
   'host.recordLost': '会话记录丢了',
   'host.loginTerminalTitle': '{agent} 登录',
   'host.loginThenRetry': '在终端里完成 {agent} 登录后，点「重试」',
@@ -271,4 +309,4 @@ export const zhCN = {
   'settings.config.desc': '{agent} 的配置文件。点击路径打开编辑。',
   'settings.file.missing': '不存在',
   'settings.loading': '正在扫描…',
-} as const;
+} satisfies Record<MsgKey, string>;

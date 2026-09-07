@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { TriangleAlert, X } from 'lucide-react';
 import type { AgentTurn, TurnStop } from '@shared/transcript';
+import type { MsgKey } from '@shared/i18n';
 import { Card } from '../ui/Card';
 import { Button, IconButton } from '../ui/Button';
+import { t } from '../i18n';
 
 export interface AlertProps {
   turn: AgentTurn;
@@ -20,18 +22,18 @@ export function Alert({ turn, onRetry, onContinue, onDismiss }: AlertProps) {
   const err = turn.error;
   const detail = [err?.code !== undefined ? String(err.code) : '', err?.kind ?? ''].filter(Boolean).join(' · ');
   const copyable = [err?.message, detail].filter(Boolean).join('\n');
-  const message = stop === 'error' ? err?.message || 'agent 没有说明原因，日志里可能有更多信息' : TEXT[stop];
+  const message = stop === 'error' ? err?.message || t('alert.error.unknown') : TEXT[stop] && t(TEXT[stop]);
   return (
     <div className="px-page pt-2">
       <Card role="alert" className="flex flex-col gap-1.5 px-pad py-2.5">
         <div className="flex items-center gap-2">
           <TriangleAlert className="size-icon shrink-0 text-fg-3" strokeWidth={1.75} />
-          <span className="shrink-0 text-2 font-medium text-fg-1">{TITLE[stop]}</span>
+          <span className="shrink-0 text-2 font-medium text-fg-1">{t(TITLE[stop])}</span>
           {copyable && <CopyDetail text={copyable} label={detail} />}
           <span className="flex-1" />
-          {stop === 'error' && <Button variant="primary" onClick={onRetry}>重试</Button>}
-          {(stop === 'max_tokens' || stop === 'max_turn_requests') && <Button variant="primary" onClick={onContinue}>继续</Button>}
-          <IconButton aria-label="关闭" onClick={onDismiss} className="-my-1 -mr-1.5"><X strokeWidth={1.5} /></IconButton>
+          {stop === 'error' && <Button variant="primary" onClick={onRetry}>{t('common.retry')}</Button>}
+          {(stop === 'max_tokens' || stop === 'max_turn_requests') && <Button variant="primary" onClick={onContinue}>{t('alert.continue')}</Button>}
+          <IconButton aria-label={t('common.close')} onClick={onDismiss} className="-my-1 -mr-1.5"><X strokeWidth={1.5} /></IconButton>
         </div>
         {message && <p className="m-0 whitespace-pre-wrap text-3 text-fg-2 [overflow-wrap:anywhere]">{message}</p>}
       </Card>
@@ -41,18 +43,18 @@ export function Alert({ turn, onRetry, onContinue, onDismiss }: AlertProps) {
 
 type ShortStop = Exclude<TurnStop, 'end_turn' | 'cancelled'>;
 
-const TITLE: Record<ShortStop, string> = {
-  error: '请求失败',
-  refusal: '模型拒绝了这次请求',
-  max_tokens: '回复被截断',
-  max_turn_requests: '达到单轮请求次数上限',
+const TITLE: Record<ShortStop, MsgKey> = {
+  error: 'alert.error.title',
+  refusal: 'alert.refusal.title',
+  max_tokens: 'alert.maxTokens.title',
+  max_turn_requests: 'alert.maxTurns.title',
 };
 
-const TEXT: Record<ShortStop, string> = {
-  error: '',
-  refusal: 'agent 判定不能处理这条消息；换个说法，或者拆小一点再试',
-  max_tokens: '这一轮达到了输出上限，让它接着说就行',
-  max_turn_requests: '这一轮的工具调用次数到顶了，让它继续即可',
+const TEXT: Record<ShortStop, MsgKey | undefined> = {
+  error: undefined,
+  refusal: 'alert.refusal.text',
+  max_tokens: 'alert.maxTokens.text',
+  max_turn_requests: 'alert.maxTurns.text',
 };
 
 // Cursor's "Copy Request (id)": a faint text button that copies the whole detail and confirms for a moment; the visible label is the code · kind line when there is one
@@ -69,7 +71,7 @@ function CopyDetail({ text, label }: { text: string; label: string }) {
       className="min-w-0 truncate text-3 text-fg-3 transition-colors hover:text-fg-1 focus-visible:text-fg-1"
       onClick={() => { void navigator.clipboard.writeText(text).then(() => setCopied(true)); }}
     >
-      {copied ? '已复制' : label ? `复制详情（${label}）` : '复制详情'}
+      {copied ? t('alert.copied') : label ? t('alert.copyWith', { detail: label }) : t('alert.copy')}
     </button>
   );
 }

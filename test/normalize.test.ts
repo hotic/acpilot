@@ -54,7 +54,7 @@ describe('applyUpdate', () => {
     applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'x', kind: 'execute', status: 'in_progress', rawInput: { command: 'ls -la' } });
     const t = s.turns[0];
     if (t?.role !== 'agent') throw new Error();
-    expect(t.blocks[0]).toMatchObject({ type: 'tool_call', id: 'x', verb: '运行', target: 'ls -la', targetMono: true, status: 'in_progress' });
+    expect(t.blocks[0]).toMatchObject({ type: 'tool_call', id: 'x', verb: 'Run', target: 'ls -la', targetMono: true, status: 'in_progress' });
   });
 
   it('endTurn: cancelled marks running tools cancelled, the rest failed; the stop reason lands on the turn', () => {

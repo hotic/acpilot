@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { Attachment, Draft } from '@shared/transcript';
 import { MAX_IMAGE_BYTES, base64Bytes, extOfMime, imageMimeOf } from '@shared/attachments';
+import { t } from '../i18n';
 
 // Where a session parks attachment payloads (TranscriptStore implements it): the name is what the turn keeps and the webview loads via blobBase,
 // the absolute path is what the agent gets told when the content is embedded
@@ -27,12 +28,12 @@ export async function preparePrompt(sessionId: string, text: string, drafts: Dra
   const out: PreparedPrompt = { blocks: text ? [{ type: 'text', text }] : [], attachments: [], problems: [] };
   const stage = async (ext: string, bytes: Uint8Array, label: string) => {
     try { return await blobs.saveBlob(sessionId, ext, bytes); }
-    catch (e) { out.problems.push(`${label} 没能存盘（${e instanceof Error ? e.message : String(e)}），本轮照常发出，历史里不会有预览`); return undefined; }
+    catch (e) { out.problems.push(t('host.attachStageFailed', { label, error: e instanceof Error ? e.message : String(e) })); return undefined; }
   };
   for (const d of drafts) {
     if (d.kind === 'image') {
-      if (base64Bytes(d.data) > MAX_IMAGE_BYTES) { out.problems.push(`${d.name ?? '图片'} 超过 ${MAX_IMAGE_BYTES >> 20} MB，已跳过`); continue; }
-      const saved = await stage(extOfMime(d.mimeType), Buffer.from(d.data, 'base64'), d.name ?? '图片');
+      if (base64Bytes(d.data) > MAX_IMAGE_BYTES) { out.problems.push(t('host.imageTooBig', { name: d.name ?? t('common.image'), mb: MAX_IMAGE_BYTES >> 20 })); continue; }
+      const saved = await stage(extOfMime(d.mimeType), Buffer.from(d.data, 'base64'), d.name ?? t('common.image'));
       out.blocks.push({ type: 'image', mimeType: d.mimeType, data: d.data });
       out.attachments.push({ kind: 'image', blob: saved?.name, mimeType: d.mimeType, name: d.name });
     } else if (d.kind === 'text') {
@@ -89,5 +90,5 @@ async function readImageFile(uri: string): Promise<{ mimeType: string; bytes: Bu
 export function describeDrafts(drafts: Draft[]): string {
   const images = drafts.filter(d => d.kind === 'image').length;
   const files = drafts.filter(d => d.kind !== 'image').map(d => d.name);
-  return [images ? `${images} 张图片` : '', ...files].filter(Boolean).join('、');
+  return [images ? t('host.images', { n: images }) : '', ...files].filter(Boolean).join(t('common.listSep'));
 }

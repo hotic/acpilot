@@ -6,6 +6,7 @@ import { AgentRegistry } from './acp/AgentRegistry';
 import { AcpSession, type CompactionPolicy, type SessionRecord } from './acp/AcpSession';
 import type { AccountManager } from './accounts/AccountManager';
 import { TranscriptStore, summarize } from './store/TranscriptStore';
+import { t } from './i18n';
 
 export interface ManagerDeps {
   registry: AgentRegistry;
@@ -181,7 +182,7 @@ export class SessionManager {
     const live = this.live.get(id);
     if (live) { this.emit({ type: 'session', session: live.view() }); this.emitSessions(); return; }
     const record = await this.deps.store.load(id);
-    if (!record) { this.deps.toast('error', '会话记录丢了'); this.index = this.index.filter(s => s.id !== id); this.emitSessions(); return; }
+    if (!record) { this.deps.toast('error', t('host.recordLost')); this.index = this.index.filter(s => s.id !== id); this.emitSessions(); return; }
     const s = new AcpSession(record, this.sessionDeps());
     this.live.set(id, s);
     this.emit({ type: 'session', session: s.view() });
@@ -225,7 +226,7 @@ export class SessionManager {
       }
     } catch (e) {
       const text = e instanceof Error ? e.message : String(e);
-      this.deps.log(`handle ${msg.type} 失败：${text}`);
+      this.deps.log(`handle ${msg.type} failed: ${text}`);
       this.deps.toast('error', text);
     }
   }
@@ -330,12 +331,12 @@ export class SessionManager {
       await s.authenticate(methodId);
       await s.retry();
     } catch (e) {
-      this.deps.log(`authenticate 失败：${e instanceof Error ? e.message : String(e)}`);
+      this.deps.log(`authenticate failed: ${e instanceof Error ? e.message : String(e)}`);
       if (def.login) {
         // When the login command is the same binary as the agent, use the probed absolute path; a GUI process's PATH may not have it
         const bin = def.login.command === def.command ? await this.deps.registry.resolveBinary(s.agent) : null;
-        this.deps.runInTerminal(`${def.name} 登录`, bin ?? def.login.command, def.login.args);
-        this.deps.toast('info', `在终端里完成 ${def.name} 登录后，点「重试」`);
+        this.deps.runInTerminal(t('host.loginTerminalTitle', { agent: def.name }), bin ?? def.login.command, def.login.args);
+        this.deps.toast('info', t('host.loginThenRetry', { agent: def.name }));
       } else throw e;
     }
   }

@@ -3,6 +3,7 @@ import { ChevronLeft, Plus } from 'lucide-react';
 import type { AccountInfo, AgentInfo } from '@shared/transcript';
 import type { AddAccountVia } from '@shared/protocol';
 import { MenuFooter, MenuHeader, MenuList } from '../ui/Popover';
+import { t } from '../i18n';
 import { AgentMark } from './AgentMark';
 
 export interface AgentPanelProps {
@@ -24,15 +25,15 @@ export interface AgentPanelProps {
 export function AgentPanel(p: AgentPanelProps) {
   const [view, setView] = useState<'agents' | 'accounts'>('agents');
   const current = p.accounts.find(a => a.id === p.accountId);
-  const add = { label: '添加账号', icon: <Plus strokeWidth={1.75} />, onClick: () => { p.onAddAccount(p.agent.id, 'auto'); p.close(); } };
+  const add = { label: t('composer.addAccount'), icon: <Plus strokeWidth={1.75} />, onClick: () => { p.onAddAccount(p.agent.id, 'auto'); p.close(); } };
 
   if (view === 'accounts') {
     return (
       <MenuList
         items={p.accounts.map(a => ({ id: a.id, label: a.label, description: a.detail, checked: a.id === p.accountId, onRemove: () => p.onRemoveAccount(a.id) }))}
-        empty="还没有账号，点「＋」添加"
+        empty={t('composer.noAccounts')}
         onSelect={id => { p.onSelectAccount(id); p.close(); }}
-        header={<MenuHeader lead={{ label: '返回', icon: <ChevronLeft strokeWidth={1.75} />, onClick: () => setView('agents') }} action={add}>{p.agent.name}</MenuHeader>}
+        header={<MenuHeader lead={{ label: t('common.back'), icon: <ChevronLeft strokeWidth={1.75} />, onClick: () => setView('agents') }} action={add}>{p.agent.name}</MenuHeader>}
       />
     );
   }
@@ -43,7 +44,7 @@ export function AgentPanel(p: AgentPanelProps) {
       }))}
       onSelect={id => { p.onSelectAgent(id); p.close(); }}
       footer={p.agent.accounts
-        ? <MenuFooter onClick={() => setView('accounts')} action={add}>{current ? current.label : '未登录'}</MenuFooter>
+        ? <MenuFooter onClick={() => setView('accounts')} action={add}>{current ? current.label : t('composer.notLoggedIn')}</MenuFooter>
         : undefined}
     />
   );

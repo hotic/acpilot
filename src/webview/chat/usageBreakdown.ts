@@ -1,4 +1,5 @@
 import type { Turn, Usage } from '@shared/transcript';
+import { t } from '../i18n';
 
 // Context breakdown estimate: ACP's usage_update only carries used / size / cost totals, so the breakdown has to be estimated locally from the transcript.
 // Token estimate: CJK characters count as 0.7 tokens, the rest as 1 token per 4 chars — reliable order of magnitude, not exact, so the panel always marks counts as approximate
@@ -67,14 +68,14 @@ export function estimateUsage(turns: Turn[], usage: Usage): UsageSegment[] {
   });
 
   return [
-    seg('user', '用户消息', '你发出的消息，含自动触发的 /compact'),
-    seg('agent', '助手回复', '助手的正文与计划条目'),
-    seg('tool', '工具调用', '工具调用的参数与输出：读取、编辑、终端等'),
-    seg('thought', '思考', '推理过程（Thinking）的文本'),
+    seg('user', t('usage.seg.user'), t('usage.seg.user.hint')),
+    seg('agent', t('usage.seg.agent'), t('usage.seg.agent.hint')),
+    seg('tool', t('usage.seg.tool'), t('usage.seg.tool.hint')),
+    seg('thought', t('usage.seg.thought'), t('usage.seg.thought.hint')),
     {
-      id: 'system', label: '系统与其他',
+      id: 'system', label: t('usage.seg.system'),
       tokens: overflow ? 0 : usage.used - convSum,
-      hint: '系统提示、工具定义等协议外的开销，由总量反推；压缩产生的摘要也算在这里',
+      hint: t('usage.seg.system.hint'),
     },
   ];
 }

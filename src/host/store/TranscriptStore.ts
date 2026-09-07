@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { SessionSummary } from '@shared/transcript';
 import type { SessionRecord } from '../acp/AcpSession';
 import type { BlobStore } from '../acp/attachments';
+import { t } from '../i18n';
 
 // Session persistence: <dir>/index.json holds the summary list, <dir>/<id>.json holds the full record, <dir>/<id>/ holds its attachment blobs. Writes are debounced per session
 export class TranscriptStore implements BlobStore {
@@ -65,7 +66,7 @@ export class TranscriptStore implements BlobStore {
   // Blob names are content hashes, so pasting the same image twice yields one file. The session id names the directory, so it must be a plain token
   // (fresh ids are UUIDs; a hand-edited record could hold anything)
   async saveBlob(sessionId: string, ext: string, bytes: Uint8Array): Promise<{ name: string; path: string }> {
-    if (!/^[\w-]+$/.test(sessionId) || !/^\.\w+$/.test(ext)) throw new Error(`非法的 blob 位置：${sessionId}/*${ext}`);
+    if (!/^[\w-]+$/.test(sessionId) || !/^\.\w+$/.test(ext)) throw new Error(t('host.blobIllegal', { path: `${sessionId}/*${ext}` }));
     const name = `${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}${ext}`;
     const dir = join(this.dir, sessionId);
     await mkdir(dir, { recursive: true });
@@ -75,7 +76,7 @@ export class TranscriptStore implements BlobStore {
   }
 
   async readBlob(sessionId: string, name: string): Promise<Uint8Array> {
-    if (!/^[\w-]+$/.test(sessionId) || !/^[\w-]+\.\w+$/.test(name)) throw new Error(`非法的 blob 位置：${sessionId}/${name}`);
+    if (!/^[\w-]+$/.test(sessionId) || !/^[\w-]+\.\w+$/.test(name)) throw new Error(t('host.blobIllegal', { path: `${sessionId}/${name}` }));
     return readFile(join(this.dir, sessionId, name));
   }
 }

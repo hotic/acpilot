@@ -14,7 +14,7 @@ const cwd = process.argv[3] ?? process.cwd();
 
 const registry = new AgentRegistry();
 const bin = await registry.resolveBinary(agent);
-if (!bin) throw new Error('devin 二进制没找到');
+if (!bin) throw new Error('devin binary not found');
 
 const proc = await AgentProcess.spawn(registry.get(agent), bin, cwd, {
   onUpdate: () => {},
@@ -25,7 +25,7 @@ const proc = await AgentProcess.spawn(registry.get(agent), bin, cwd, {
 
 const p = new DevinAccountProvider(await mkdtemp(join(tmpdir(), 'acpilot-probe-')), async () => bin!);
 const draft = await p.importLocal();
-if (!draft) throw new Error('本机没有 devin 登录（credentials.toml 缺失）');
+if (!draft) throw new Error('no local devin login (credentials.toml missing)');
 await p.authenticate!(proc, draft);
 console.log('authenticate ok');
 
@@ -33,7 +33,7 @@ try {
   const l = await proc.agent.request('session/list', { cwd });
   console.log('session/list:', JSON.stringify(l).slice(0, 2000));
 } catch (e: any) {
-  console.log('session/list 失败:', e?.code, e?.message);
+  console.log('session/list failed:', e?.code, e?.message);
 }
 
 if (sessionId) {
@@ -41,7 +41,7 @@ if (sessionId) {
     const r = await proc.agent.request('session/load', { sessionId, cwd, mcpServers: [] });
     console.log('session/load ok:', JSON.stringify(r));
   } catch (e: any) {
-    console.log('session/load 失败:', e?.code, e?.message, e?.data ?? '');
+    console.log('session/load failed:', e?.code, e?.message, e?.data ?? '');
   }
 }
 proc.kill();

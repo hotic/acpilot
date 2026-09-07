@@ -106,7 +106,7 @@ describe('AcpSession', () => {
       if (plan.type !== 'plan_document') throw new Error();
       await Promise.all([s.buildPlan(plan.id, { configId: 'model', value: 'm2' }), s.buildPlan(plan.id)]);
       expect(s.view().turns).toHaveLength(4);
-      expect(s.view().turns[2]).toMatchObject({ role: 'user', text: `实施以下已批准的计划：\n\n${plan.markdown}` });
+      expect(s.view().turns[2]).toMatchObject({ role: 'user', text: `Implement the following approved plan:\n\n${plan.markdown}` });
       expect(s.view().controls.modeId).toBe('agent');
       expect(s.view().controls.options.find(c => c.id === 'model')?.value).toBe('m2');
     } finally { s.dispose(); }
@@ -206,7 +206,7 @@ describe('AcpSession', () => {
     await s.prompt('', [{ kind: 'image', mimeType: 'image/png', data: 'AAAA' }, { kind: 'file', uri: 'file:///repo/README.md', name: 'README.md' }]);
     const v = s.view();
     expect(v.turns[0]).toMatchObject({ role: 'user', text: '' });
-    expect(v.title).toBe('1 张图片、README.md');
+    expect(v.title).toBe('1 images, README.md');
     const agent = v.turns[1]!;
     if (agent.role !== 'agent') throw new Error();
     expect(agent.blocks.find(b => b.type === 'text')).toMatchObject({ markdown: 'image:image/png · resource_link:file:///repo/README.md:README.md' });
@@ -235,7 +235,7 @@ describe('AcpSession', () => {
     const agent = v.turns[1]!;
     if (agent.role !== 'agent') throw new Error();
     expect(agent.blocks.find(b => b.type === 'text')).toMatchObject({ markdown: 'text · image:image/png' });
-    expect(notes).toEqual([`huge.png 超过 ${MAX_IMAGE_BYTES >> 20} MB，已跳过`]);
+    expect(notes).toEqual([`huge.png exceeds ${MAX_IMAGE_BYTES >> 20} MB, skipped`]);
     s.dispose();
   });
 
@@ -308,14 +308,14 @@ describe('AcpSession', () => {
     const perm = agent.blocks.find(b => b.type === 'permission') as PermissionBlock;
     expect(perm.command).toBe('pnpm test');
     expect(perm.options.map(o => o.id)).toEqual(['allow', 'reject']);
-    expect(agent.activity?.label).toBe('等待批准');
+    expect(agent.activity?.label).toBe('Awaiting approval');
     s.resolvePermission(perm.id, 'allow');
     await p;
     const v = s.view();
     const blocks = (v.turns[1] as { blocks: AgentBlock[] }).blocks;
     expect(blocks.some(b => b.type === 'permission')).toBe(false);
     const tc1 = blocks.find((b): b is ToolCallBlock => b.type === 'tool_call' && b.id === 'tc1')!;
-    expect(tc1).toMatchObject({ kind: 'execute', verb: '运行', target: 'pnpm test', targetMono: true, status: 'completed' });
+    expect(tc1).toMatchObject({ kind: 'execute', verb: 'Run', target: 'pnpm test', targetMono: true, status: 'completed' });
     expect(tc1.content).toEqual({ type: 'text', text: '12 passed' });
     const tc2 = blocks.find((b): b is ToolCallBlock => b.type === 'tool_call' && b.id === 'tc2')!;
     expect(tc2).toMatchObject({ kind: 'edit', target: 'a.ts', diffStat: { add: 2, del: 1 } });

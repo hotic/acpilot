@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
 import type { AgentDef } from './AgentRegistry';
+import { t } from '../i18n';
 import { approveGrokPlan, GROK_EXIT_PLAN, parseGrokExitPlan } from './grokPlan';
 
 // What the client side has to accept: updates / permission requests / file reads & writes / questions the agent sends on its own initiative.
@@ -66,7 +67,7 @@ export class AgentProcess {
     const conn = app.connect(stream);
 
     const exited = new Promise<never>((_, reject) => {
-      child.once('exit', (code, signal) => reject(new Error(`${def.command} 退出（code ${code ?? '-'}, signal ${signal ?? '-'}）`)));
+      child.once('exit', (code, signal) => reject(new Error(t('host.spawnExited', { command: def.command, code: code ?? '-', signal: signal ?? '-' }))));
       child.once('error', reject);
     });
     const initReq: acp.InitializeRequest = {

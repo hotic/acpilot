@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Check, ChevronRight, Compass, FoldVertical, Hand, TriangleAlert, X } from 'lucide-react';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
+import { t } from '../i18n';
 import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { Disclosure } from '../ui/Disclosure';
 import { Orb } from '../effects/Orb';
@@ -23,7 +24,7 @@ export function UserMessage({ turn, index, blobUrl }: { turn: UserTurn; index: n
   if (turn.auto) {
     return (
       <div className="enter" style={{ '--i': index } as CSSProperties}>
-        <Row className="text-fg-3"><RowLabel>上下文到阈值，自动发送</RowLabel><RowTarget mono className="text-fg-2">{turn.text}</RowTarget></Row>
+        <Row className="text-fg-3"><RowLabel>{t('turns.autoCompact')}</RowLabel><RowTarget mono className="text-fg-2">{turn.text}</RowTarget></Row>
       </div>
     );
   }
@@ -75,7 +76,7 @@ function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn;
       ))}
       {showActivity && (
         <div className="enter" style={{ '--i': i++ } as CSSProperties}>
-          <Activity label={turn.activity!.label} />
+          <Activity label={turn.activity!.label} awaitingApproval={turn.blocks.some(b => b.type === 'permission')} />
         </div>
       )}
       {!running && outcomeOf(turn) && (
@@ -91,12 +92,12 @@ function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn;
 // Nothing for a normal end with content, nor for turns persisted before `stop` existed
 function outcomeOf(turn: AgentTurn): string | undefined {
   switch (turn.stop) {
-    case 'error': return '请求失败';
-    case 'refusal': return '模型拒绝了这次请求';
-    case 'max_tokens': return '回复被截断：达到单轮输出上限';
-    case 'max_turn_requests': return '达到单轮请求次数上限';
-    case 'cancelled': return '已停止';
-    default: return turn.stop === 'end_turn' && turn.blocks.length === 0 ? '没有回复' : undefined;
+    case 'error': return t('turns.stop.error');
+    case 'refusal': return t('turns.stop.refusal');
+    case 'max_tokens': return t('turns.stop.maxTokens');
+    case 'max_turn_requests': return t('turns.stop.maxTurns');
+    case 'cancelled': return t('turns.stop.cancelled');
+    default: return turn.stop === 'end_turn' && turn.blocks.length === 0 ? t('turns.stop.empty') : undefined;
   }
 }
 
@@ -120,9 +121,9 @@ function isBusy(b: AgentBlock): boolean {
 }
 
 // Approval waits use a static icon; motion remains reserved for thinking.
-function Activity({ label }: { label: string }) {
+function Activity({ label, awaitingApproval }: { label: string; awaitingApproval?: boolean }) {
   return (
-    <Row lead={label === '等待批准' ? <Hand className="size-icon" strokeWidth={1.5} /> : <Orb kind="think" />} className="font-medium">
+    <Row lead={awaitingApproval ? <Hand className="size-icon" strokeWidth={1.5} /> : <Orb kind="think" />} className="font-medium">
       <RowLabel>{label.split(' ')[0]}</RowLabel>
       <RowTarget mono className="font-normal">{label.split(' ').slice(1).join(' ')}</RowTarget>
     </Row>
@@ -203,7 +204,7 @@ function CursorFold({ blocks }: { blocks: ToolCallBlock[] }) {
   const kinds = new Set(blocks.map(b => b.kind));
   const only = kinds.size === 1 ? blocks[0]!.kind : undefined;
   const files = new Set(blocks.map(b => b.target).filter(Boolean)).size || blocks.length;
-  const label = only === 'read' ? `读取 ${files} 个文件` : only === 'search' ? `搜索 ${blocks.length} 次` : `探索了 ${blocks.length} 处`;
+  const label = only === 'read' ? t('turns.readFiles', { n: files }) : only === 'search' ? t('turns.searched', { n: blocks.length }) : t('turns.explored', { n: blocks.length });
   const Icon = only ? TOOL_ICON[only] : Compass;
   return (
     <FoldRow icon={<Icon className="size-icon" strokeWidth={1.5} />} body={blocks.map(b => <ToolCall key={b.id} block={b} />)}>
@@ -220,7 +221,7 @@ function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; runnin
     return (
       <div className="flex flex-col gap-gap">
         {turn.blocks.map((block, i) => <Block key={'id' in block ? block.id : i} block={block} onPermission={onPermission} />)}
-        {running && turn.blocks.length === 0 && <Activity label={turn.activity?.label ?? '正在思考'} />}
+        {running && turn.blocks.length === 0 && <Activity label={turn.activity?.label ?? t('host.thinking')} awaitingApproval={turn.blocks.some(b => b.type === 'permission')} />}
         {!running && outcomeOf(turn) && <Outcome turn={turn} />}
       </div>
     );
@@ -245,8 +246,9 @@ function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBl
     : activity.kind === 'think' && thought === 'orb' ? <Orb kind="think" />
     : <Icon className="size-icon" strokeWidth={1.5} />;
   const label = running ? activity.label : elapsedLabel(turn);
+  const awaitingApproval = turn.blocks.some(b => b.type === 'permission');
   const heading = <>
-    <RowLabel className={running && activity.label !== '等待批准' ? 'shimmer' : undefined}>{label}</RowLabel>
+    <RowLabel className={running && !awaitingApproval ? 'shimmer' : undefined}>{label}</RowLabel>
     {running && activity.target && <RowTarget mono={activity.mono}>{activity.target}</RowTarget>}
   </>;
   if (blocks.length === 0) return <Row lead={lead}>{heading}</Row>;
@@ -285,7 +287,7 @@ function Compaction({ block }: { block: CompactionBlock }) {
         {block.status === 'failed' && <X className="size-3 text-danger" strokeWidth={2} />}
       </>
     : undefined;
-  const label = running ? '正在压缩上下文' : block.status === 'completed' ? '已压缩上下文' : block.status === 'failed' ? '压缩上下文失败' : '压缩上下文已取消';
+  const label = running ? t('turns.compacting') : block.status === 'completed' ? t('turns.compacted') : block.status === 'failed' ? t('turns.compactFailed') : t('turns.compactCancelled');
   return (
     <Row lead={lead} trailing={trailing}>
       <span className={running ? 'shimmer' : undefined}>{label}</span>

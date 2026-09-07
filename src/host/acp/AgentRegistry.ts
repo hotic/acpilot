@@ -2,6 +2,7 @@ import { access, constants } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
 import type { AgentId, AgentInfo, SessionOption } from '@shared/transcript';
+import { t } from '../i18n';
 
 // How an ACP agent is launched: command, args, candidate binary paths, login command
 export interface AgentDef {
@@ -24,11 +25,12 @@ export const BUILTIN_AGENTS: AgentDef[] = [
     candidates: ['~/.grok/bin/grok', '~/.local/bin/grok', '/opt/homebrew/bin/grok', '/usr/local/bin/grok'],
     login: { command: 'grok', args: ['login'] },
     // Grok doesn't give modes in session/new, but CLI ≥ 0.2.117 accepts session/set_mode (verified in probe-set-mode.ts):
-    // default / plan go through the protocol; yolo is host-side auto-approval of permission requests, and the CLI stays in default
+    // default / plan go through the protocol; yolo is host-side auto-approval of permission requests, and the CLI stays in default.
+    // The descriptions are i18n keys, resolved against the host locale when the modes enter a session
     modes: [
-      { id: 'default', name: 'Agent', description: '直接干活，权限请求逐个请示' },
-      { id: 'plan', name: 'Plan', description: '先出计划，批准后再动手' },
-      { id: 'yolo', name: 'Auto accept', description: '自动批准所有权限请求' },
+      { id: 'default', name: 'Agent', description: 'mode.grok.default' },
+      { id: 'plan', name: 'Plan', description: 'mode.grok.plan' },
+      { id: 'yolo', name: 'Auto accept', description: 'mode.grok.yolo' },
     ],
   },
   {
@@ -94,7 +96,7 @@ export class AgentRegistry {
 
   get(id: AgentId): AgentDef {
     const d = this.defs.get(id);
-    if (!d) throw new Error(`未知 agent：${id}`);
+    if (!d) throw new Error(t('host.unknownAgent', { id }));
     return d;
   }
 

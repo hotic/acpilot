@@ -6,7 +6,7 @@ import { AgentProcess } from '../src/host/acp/AgentProcess';
 const registry = new AgentRegistry();
 const def = registry.get('grok');
 const bin = await registry.resolveBinary('grok');
-if (!bin) { console.error('找不到 grok'); process.exit(1); }
+if (!bin) { console.error('grok not found'); process.exit(1); }
 
 const proc = await AgentProcess.spawn(def, bin, process.cwd(), {
   onUpdate: n => console.log(`[${n.update.sessionUpdate}]`, JSON.stringify(n.update).slice(0, 300)),

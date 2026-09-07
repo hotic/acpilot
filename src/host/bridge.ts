@@ -69,13 +69,13 @@ export class WebviewBridge implements vscode.Disposable {
     }
     if (m.type === 'openExternal') {
       if (isSafeExternalUrl(m.url)) void vscode.env.openExternal(vscode.Uri.parse(m.url));
-      else this.env.log(`openExternal 拒绝：非白名单 scheme（${m.url.slice(0, 80)}）`);
+      else this.env.log(`openExternal refused: scheme not on the allowlist (${m.url.slice(0, 80)})`);
       return;
     }
     if (m.type === 'searchFiles') {
       // Always answer, even on failure: the webview holds a promise per seq
       let files: FileHit[] = [];
-      try { files = await this.env.files.search(m.query); } catch (e) { this.env.log(`searchFiles 失败：${e instanceof Error ? e.message : String(e)}`); }
+      try { files = await this.env.files.search(m.query); } catch (e) { this.env.log(`searchFiles failed: ${e instanceof Error ? e.message : String(e)}`); }
       this.post({ type: 'files', seq: m.seq, files });
       return;
     }
@@ -97,7 +97,7 @@ export class WebviewBridge implements vscode.Disposable {
         default: return false;
       }
     } catch (e) {
-      this.env.log(`settings ${m.type} 失败：${e instanceof Error ? e.message : String(e)}`);
+      this.env.log(`settings ${m.type} failed: ${e instanceof Error ? e.message : String(e)}`);
       return true;
     }
   }

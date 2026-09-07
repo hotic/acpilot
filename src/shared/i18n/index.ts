@@ -14,9 +14,9 @@ export type Params = Record<string, string | number>;
 
 const DICTS: Record<Locale, Record<MsgKey, string>> = { 'zh-CN': zhCN, en };
 
-// Looks the key up in the locale, falls back to zh-CN, then to the key itself; {name} placeholders are filled from params
+// Looks the key up in the locale, falls back to en (the source dictionary), then to the key itself; {name} placeholders are filled from params
 export function translate(locale: Locale, key: MsgKey, params?: Params): string {
-  const s = DICTS[locale][key] ?? zhCN[key] ?? key;
+  const s = DICTS[locale][key] ?? en[key] ?? key;
   return params ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in params ? String(params[k]) : m)) : s;
 }
 
