@@ -48,7 +48,10 @@ export const zhCN = {
   'session.listAria': '会话',
   'session.fallbackTitle': '会话',
   'session.deleted': '已删除「{title}」',
-  'session.queued': '已排队：{text}',
+  'queue.title': '已排队，本轮结束后发送',
+  'queue.edit': '编辑排队消息',
+  'queue.remove': '移出队列',
+  'queue.gone': '这条消息已经发出去了。',
   'session.noneAgent': '{name} 还没有会话',
 
   // Composer

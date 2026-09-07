@@ -271,7 +271,7 @@ describe('AcpSession', () => {
     expect(s.view().running).toBe(true);
     await s.cancel();
     await s.prompt('hi');
-    expect(s.view().queued).toBe('hi');
+    expect(s.view().queued?.map(q => q.text)).toEqual(['hi']);
     release();
     await first;
     await until(() => !s.view().running && s.view().turns.length === 2);
@@ -466,11 +466,67 @@ describe('AcpSession', () => {
     const p = s.prompt('slow');
     await until(() => s.view().running);
     await s.prompt('hi');
-    expect(s.view().queued).toBe('hi');
+    expect(s.view().queued?.map(q => q.text)).toEqual(['hi']);
     await s.cancel();
     await p;
     await until(() => s.view().turns.length === 4 && !s.view().running);
     expect(s.view().queued).toBeUndefined();
+    s.dispose();
+  });
+
+  // Several sends during one turn line up in order and go out one after another; attachments are staged at queue time so the
+  // queue row shows them, and the flushed turn carries the same blobs. Removing / editing addresses an entry by id
+  it('queue: several prompts keep their order, a queued image is staged at once, entries can be edited in place or removed', async () => {
+    const { session, blobs } = deps();
+    const s = session();
+    try {
+      await s.start();
+      const p = s.prompt('slow');
+      await until(() => s.view().running);
+      await s.prompt('first', [{ kind: 'image', mimeType: 'image/png', data: 'AAAA', name: 'a.png' }]);
+      await s.prompt('second');
+      await s.prompt('third');
+      let queued = s.view().queued!;
+      expect(queued.map(q => q.text)).toEqual(['first', 'second', 'third']);
+      expect(queued[0]!.attachments).toEqual([{ kind: 'image', blob: 'b0.png', mimeType: 'image/png', name: 'a.png' }]);
+      expect(blobs.has('b0.png')).toBe(true);
+      // Edit the first: new text, the image kept, a text draft added; the entry stays first
+      await s.editQueued(queued[0]!.id, 'first edited', [0], [{ kind: 'text', name: 'n.md', text: 'x' }]);
+      queued = s.view().queued!;
+      expect(queued.map(q => q.text)).toEqual(['first edited', 'second', 'third']);
+      expect(queued[0]!.attachments.map(a => a.kind)).toEqual(['image', 'text']);
+      // Remove the middle one; removing something already gone is a no-op, editing it is an error
+      s.dequeue(queued[1]!.id);
+      expect(s.view().queued?.map(q => q.text)).toEqual(['first edited', 'third']);
+      s.dequeue(queued[1]!.id);
+      await expect(s.editQueued(queued[1]!.id, 'x', [], [])).rejects.toThrow();
+      // Emptying an entry removes it
+      await s.editQueued(queued[2]!.id, '   ', [], []);
+      expect(s.view().queued?.map(q => q.text)).toEqual(['first edited']);
+      await s.cancel();
+      await p;
+      await until(() => s.view().turns.length === 4 && !s.view().running);
+      expect(s.view().queued).toBeUndefined();
+      expect(s.view().turns[2]).toMatchObject({ role: 'user', text: 'first edited', attachments: [{ kind: 'image', mimeType: 'image/png' }, { kind: 'text', name: 'n.md' }] });
+      expect(s.view().turns[2]).not.toHaveProperty('edited');
+    } finally { s.dispose(); }
+  });
+
+  // The session list sorts by updatedAt: only the user's message may move a session, never the stream that follows it
+  it('updatedAt: bumped once by the prompt, then stable across streamed updates and the turn end', async () => {
+    const { d, session } = deps();
+    const seen: string[] = [];
+    d.onChange = s => { seen.push(s.view().updatedAt); };
+    const s = session();
+    await s.start();
+    const before = s.view().updatedAt;
+    await new Promise(r => setTimeout(r, 5));
+    seen.length = 0;
+    await s.prompt('hi');
+    expect(seen.length).toBeGreaterThan(2);
+    expect(seen[0]).not.toBe(before);
+    expect(new Set(seen).size).toBe(1);
+    expect(s.view().updatedAt).toBe(seen[0]);
     s.dispose();
   });
 

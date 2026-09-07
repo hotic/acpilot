@@ -43,7 +43,10 @@ export const en = {
   'session.listAria': 'Sessions',
   'session.fallbackTitle': 'session',
   'session.deleted': 'Deleted “{title}”',
-  'session.queued': 'Queued: {text}',
+  'queue.title': 'Queued, sends when this turn ends',
+  'queue.edit': 'Edit queued message',
+  'queue.remove': 'Remove from queue',
+  'queue.gone': 'That message has already been sent.',
   'session.noneAgent': '{name} has no sessions yet',
 
   'composer.placeholder': 'What should change? @ to reference a file',

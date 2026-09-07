@@ -86,8 +86,8 @@ async function readImageFile(uri: string): Promise<{ mimeType: string; bytes: Bu
   }
 }
 
-// One-line description of what a prompt carried, for the title of a session opened with attachments only and for the queue note
-export function describeDrafts(drafts: Draft[]): string {
+// One-line description of what a prompt carried (drafts before staging or attachments after), for the title of a session opened with attachments only
+export function describeDrafts(drafts: (Draft | Attachment)[]): string {
   const images = drafts.filter(d => d.kind === 'image').length;
   const files = drafts.filter(d => d.kind !== 'image').map(d => d.name);
   return [images ? t('host.images', { n: images }) : '', ...files].filter(Boolean).join(t('common.listSep'));

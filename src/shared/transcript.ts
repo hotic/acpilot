@@ -252,6 +252,14 @@ export interface Usage {
   cost?: number;
 }
 
+// A prompt waiting for the running turn to end. Its attachments are staged when it is queued (blobs on disk), so the webview shows
+// them the way it shows a sent turn's; the id addresses it for editing / removal while it waits
+export interface QueuedPrompt {
+  id: string;
+  text: string;
+  attachments: Attachment[];
+}
+
 // Everything a session looks like to the webview: the host pushes the whole thing on every change (the transcript is small, not worth diffing)
 export interface SessionView {
   id: string;
@@ -268,8 +276,8 @@ export interface SessionView {
   controls: SessionControls;
   usage?: Usage;
   commands: SlashCommand[];
-  // Next queued prompt (sent while a turn is in progress)
-  queued?: string;
+  // Prompts sent while a turn was in progress, in send order; the first goes out when the turn ends
+  queued?: QueuedPrompt[];
   createdAt: string;
   updatedAt: string;
 }

@@ -115,6 +115,9 @@ export type WebviewMsg =
   | { type: 'retry' }
   // Send the last user turn again after its agent turn ended in error / a short stop; both turns are dropped from the transcript first
   | { type: 'retryTurn' }
+  // Queued prompts (waiting for the running turn): drop one, or replace one in place — kept attachments by index, new drafts alongside
+  | { type: 'dequeue'; sessionId: string; id: string }
+  | { type: 'editQueued'; sessionId: string; id: string; text: string; retainedAttachments: number[]; attachments: Draft[] }
   | { type: 'openInEditor' }
   // A link inside agent output was clicked; host opens it externally after an isSafeExternalUrl check
   | { type: 'openExternal'; url: string }

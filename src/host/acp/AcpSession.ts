@@ -3,7 +3,7 @@ import { captureTurnSettings } from '@shared/turnSettings';
 import type { EditTurnRequest } from '@shared/protocol';
 import { readFile, stat } from 'node:fs/promises';
 import * as acp from '@agentclientprotocol/sdk';
-import type { AgentId, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, TurnError, TurnSettings, Usage } from '@shared/transcript';
+import type { AgentId, Attachment, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, TurnError, TurnSettings, Usage } from '@shared/transcript';
 import type { AgentRuntimeInfo } from '@shared/inventory';
 import type { AgentRegistry } from './AgentRegistry';
 import { AgentProcess } from './AgentProcess';
@@ -56,10 +56,18 @@ export interface SessionDeps {
   compaction?: () => CompactionPolicy;
 }
 
-// A prompt waiting for the current turn to finish
-interface QueuedPrompt {
+// A prompt waiting for the current turn to finish. Staged the moment it is queued (blobs written, image files read), so the queue
+// row can show the attachments like a sent turn's and the flush has no second pass over the drafts; `problems` are reported at queue time
+interface StagedPrompt {
+  id: string;
   text: string;
-  attachments: Draft[];
+  prepared: PreparedPrompt;
+}
+
+// How `prompt` receives an already staged payload: the queue flush hands its entry over, an edited turn also marks the user turn
+interface StagedSend {
+  prepared: PreparedPrompt;
+  edited?: boolean;
 }
 
 interface PendingPermission {
@@ -88,7 +96,7 @@ export class AcpSession {
   // running splits into staging (attachments being prepared, nothing on the wire yet) and the request itself; a cancel during staging just drops the prompt
   private staging = false;
   private stagingAborted = false;
-  private queued?: QueuedPrompt;
+  private queued: StagedPrompt[] = [];
   private replaying = false;
   private proc?: AgentProcess;
   private pending = new Map<string, PendingPermission>();
@@ -144,7 +152,8 @@ export class AcpSession {
       id: this.id, agent: this.agent, accountId: this.accountId, title: this.title, cwd: this.cwd,
       status: this.status, error: this.error, authMethods: this.authMethods,
       turns: this.state.turns, running: this.running, controls: this.state.controls,
-      usage: this.state.usage, commands: this.state.commands, queued: this.queued && summarizePrompt(this.queued),
+      usage: this.state.usage, commands: this.state.commands,
+      queued: this.queued.length ? this.queued.map(q => ({ id: q.id, text: q.text, attachments: q.prepared.attachments })) : undefined,
       createdAt: this.createdAt, updatedAt: this.updatedAt,
     };
   }
@@ -157,10 +166,17 @@ export class AcpSession {
     };
   }
 
+  // touch: publish state, leaving updatedAt alone. Streamed chunks arrive every few ms, and the session list sorts by updatedAt,
+  // so bumping it here made concurrently running sessions leapfrog each other on every update
   private touch() {
     applyModelSources(this.agent, this.state.controls.options, this.modelSources);
-    this.updatedAt = new Date().toISOString();
     this.deps.onChange(this);
+  }
+
+  // bump: a user-initiated message (prompt / queue / edit) moves the session to the top of the list
+  private bump() {
+    this.updatedAt = new Date().toISOString();
+    this.touch();
   }
 
   private log(line: string) { this.deps.log(`[${this.agent} ${this.id.slice(0, 8)}] ${line}`); }
@@ -334,16 +350,17 @@ export class AcpSession {
   // auto: sent by ACPilot itself (over-threshold /compact); doesn't change the title and renders as a note line.
   // Attachments are staged (blobs written, image files read) before the turn opens. running is claimed before that await so a second send arriving
   // meanwhile queues instead of racing onto the wire; if the session was cancelled or closed while staging, the prompt is dropped without a turn
-  async prompt(text: string, attachments: Draft[] = [], auto = false, staged?: PreparedPrompt): Promise<void> {
+  async prompt(text: string, attachments: Draft[] = [], auto = false, staged?: StagedSend): Promise<void> {
     if (this.status !== 'ready') return;
-    if (!text.trim() && attachments.length === 0) return;
-    if (this.running) { this.queued = { text, attachments }; this.touch(); return; }
+    if (!text.trim() && attachments.length === 0 && !staged?.prepared.blocks.length) return;
+    if (this.running) { await this.enqueue(text, attachments, staged?.prepared); return; }
     this.running = true;
     this.staging = true;
     this.stagingAborted = false;
-    this.touch();
+    // An automatic /compact is not a user message and must not reorder the list
+    if (auto) this.touch(); else this.bump();
     let prepared: PreparedPrompt | undefined, stagingError: string | undefined;
-    try { prepared = staged ?? await preparePrompt(this.id, text, attachments, this.deps.blobs); }
+    try { prepared = staged?.prepared ?? await preparePrompt(this.id, text, attachments, this.deps.blobs); }
     catch (e) { stagingError = msg(e); }
     this.staging = false;
     if (this.stagingAborted || this.status !== 'ready') {
@@ -371,11 +388,11 @@ export class AcpSession {
     const compacting = isCompactCommand(text);
     const completion = new CompactionCompletion(compacting ? this.agent : undefined);
     this.compactionCompletion = completion;
-    if (attachments.length) this.log(`attachments: ${prepared.blocks.slice(text ? 1 : 0).map(b => b.type).join(' ')}`);
+    if (prepared.attachments.length) this.log(`attachments: ${prepared.blocks.slice(text ? 1 : 0).map(b => b.type).join(' ')}`);
     this.state.turns.push(auto ? { role: 'user', text, auto: true } : { role: 'user', id: randomUUID(), text,
-      settings: captureTurnSettings(this.state.controls), ...(staged ? { edited: true as const } : {}),
+      settings: captureTurnSettings(this.state.controls), ...(staged?.edited ? { edited: true as const } : {}),
       ...(prepared.attachments.length ? { attachments: prepared.attachments } : {}) });
-    if (!auto && (!this.state.title || this.state.title === t('session.untitled'))) this.state.title = summarizePrompt({ text, attachments }).slice(0, 40);
+    if (!auto && (!this.state.title || this.state.title === t('session.untitled'))) this.state.title = summarizePrompt(text, prepared.attachments).slice(0, 40);
     this.state.turns.push({ role: 'agent', blocks: [], startedAt: Date.now(), activity: activityOf(this.state.turns) });
     this.touch();
     let stop: acp.StopReason = 'cancelled';
@@ -408,13 +425,56 @@ export class AcpSession {
     }
   }
 
-  // Send the prompt queued during the last turn, if any; nobody awaits it, so its failures end up in the log
+  // Send the first prompt queued during the last turn, if any; nobody awaits it, so its failures end up in the log. The rest stay queued behind it
   private flushQueued(): boolean {
-    const next = this.queued;
+    const next = this.queued.shift();
     if (!next) return false;
-    this.queued = undefined;
-    this.prompt(next.text, next.attachments).catch(e => this.log(`queued prompt failed: ${msg(e)}`));
+    this.prompt(next.text, [], false, { prepared: next.prepared }).catch(e => this.log(`queued prompt failed: ${msg(e)}`));
     return true;
+  }
+
+  // Queue a prompt behind the running turn, staging its drafts first so the row above the composer can show them. A staging failure keeps the
+  // text alone (as a direct send does), a per-draft problem is reported now and not again at send time. The turn may end while staging: then the
+  // entry goes straight out, since the turn's own flush found the queue empty
+  private async enqueue(text: string, attachments: Draft[], staged?: PreparedPrompt): Promise<void> {
+    const prepared = staged ?? await this.stage(text, attachments);
+    if (!prepared.blocks.length || this.status !== 'ready') return;
+    this.queued.push({ id: randomUUID(), text, prepared });
+    this.bump();
+    if (!this.running) this.flushQueued();
+  }
+
+  private async stage(text: string, attachments: Draft[]): Promise<PreparedPrompt> {
+    let prepared: PreparedPrompt;
+    try { prepared = await preparePrompt(this.id, text, attachments, this.deps.blobs); }
+    catch (e) {
+      this.log(`Attachment staging failed: ${msg(e)}`);
+      this.deps.notify?.(t('host.attachFailed', { error: msg(e) }));
+      return { blocks: text.trim() ? [{ type: 'text', text }] : [], attachments: [], problems: [] };
+    }
+    for (const p of prepared.problems) { this.log(p); this.deps.notify?.(p); }
+    return { ...prepared, problems: [] };
+  }
+
+  // Drop a queued prompt; a no-op when it already went out
+  dequeue(id: string) {
+    const before = this.queued.length;
+    this.queued = this.queued.filter(q => q.id !== id);
+    if (this.queued.length !== before) this.touch();
+  }
+
+  // Replace a queued prompt in place: kept attachments come back from their blobs, new drafts are staged alongside. Emptying it removes it
+  async editQueued(id: string, text: string, retained: number[], drafts: Draft[]): Promise<void> {
+    const entry = this.queued.find(q => q.id === id);
+    if (!entry) throw new Error(t('queue.gone'));
+    const kept = retained.map(i => entry.prepared.attachments[i]).filter((a): a is Attachment => !!a);
+    const prepared = await this.stage(text, [...await restoreDrafts(this.id, kept, this.deps.blobs), ...drafts]);
+    // It may have gone out while the blobs were being read
+    if (!this.queued.includes(entry)) throw new Error(t('queue.gone'));
+    if (!prepared.blocks.some(b => b.type !== 'text' || b.text.trim())) { this.dequeue(id); return; }
+    entry.text = text;
+    entry.prepared = prepared;
+    this.touch();
   }
 
   // Compact the context: simply send /compact to the agent (ACP has no dedicated compaction request; it relies on the agent's own slash command)
@@ -458,7 +518,7 @@ export class AcpSession {
     this.editing = this.running = this.staging = true;
     this.editNotifications = [];
     this.stagingAborted = false;
-    this.touch();
+    this.bump();
     let accepted = false;
     try {
       const prefix = this.state.turns.slice(0, edit.turnIndex);
@@ -532,7 +592,7 @@ export class AcpSession {
         if (n.sessionId === fresh.sessionId && n.update.sessionUpdate === 'available_commands_update') this.onUpdate(n);
       }
       accepted = true;
-      void this.prompt(edit.text, drafts, false, prepared);
+      void this.prompt(edit.text, drafts, false, { prepared, edited: true });
     } finally {
       this.editNotifications = [];
       if (!accepted) {
@@ -702,7 +762,7 @@ export class AcpSession {
   dispose() {
     this.permissionEpoch++;
     this.status = 'closed';
-    this.queued = undefined;
+    this.queued = [];
     if (this.running) this.settle('cancelled');
     for (const p of this.pending.values()) p.resolve({ outcome: { outcome: 'cancelled' } });
     this.pending.clear();
@@ -802,9 +862,9 @@ function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-// First line of the text, or what was attached when there is no text (title of a session opened with attachments only, the queue note)
-function summarizePrompt(p: QueuedPrompt): string {
-  return p.text.trim().split('\n')[0]!.trim() || describeDrafts(p.attachments);
+// First line of the text, or what was attached when there is no text (title of a session opened with attachments only)
+function summarizePrompt(text: string, attachments: Attachment[]): string {
+  return text.trim().split('\n')[0]!.trim() || describeDrafts(attachments);
 }
 
 // Which option auto-approval picks: allow_always first, then allow_once, otherwise the first one

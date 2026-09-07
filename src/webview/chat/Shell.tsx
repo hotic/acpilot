@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Paperclip } from 'lucide-react';
-import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
+import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PermissionBlock, QueuedPrompt, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
 import type { HiddenMap } from '@shared/settings';
 import type { FollowUp } from '@shared/settings';
 import type { AccountAction, AddAccountVia, EditTurnRequest, FileHit } from '@shared/protocol';
@@ -18,6 +18,7 @@ import { Toast } from './Toast';
 import { Alert, isShortStop } from './Alert';
 import { PlanBar } from './PlanBar';
 import { PlanDocumentContext } from './PlanDocument';
+import { Queue } from './Queue';
 
 // Every action the webview sends to the host; in the LAB a fake host implements these, the real build swaps in postMessage
 export interface ShellHandlers {
@@ -50,6 +51,9 @@ export interface ShellHandlers {
   retry: () => void;
   // Send the last user turn again after its agent turn ended in error
   retryTurn: () => void;
+  // Queued prompts: drop one / replace one in place (kept attachments by index plus new drafts)
+  dequeue?: (sessionId: string, id: string) => void;
+  editQueued?: (sessionId: string, id: string, text: string, retainedAttachments: number[], attachments: Draft[]) => void;
 }
 
 export interface ShellProps {
@@ -73,7 +77,7 @@ export interface ShellProps {
   authMethods?: AuthMethodInfo[];
   turns: Turn[];
   running: boolean;
-  queued?: string;
+  queued?: QueuedPrompt[];
   controls: SessionControls;
   usage?: Usage;
   // The context panel only gets a compact button when the agent has a /compact command
@@ -220,8 +224,12 @@ export function Shell(p: ShellProps) {
                 onLogin={on.login} onRetry={on.retry} onNewSession={on.newSession}
                 onSelectAccount={on.selectAccount} onAddAccount={via => on.addAccount(p.agent.id, via)}
               />
-              {p.queued && <div className="truncate px-page pt-2 text-3 text-fg-3">{t('session.queued', { text: p.queued })}</div>}
-              <Composer {...composerProps} />
+              {p.queued?.length && p.activeSessionId
+                ? <Queue key={p.activeSessionId} items={p.queued} composer={composerProps} blobUrl={blobUrl}
+                    on={on.dequeue && on.editQueued ? { remove: id => on.dequeue!(p.activeSessionId!, id), edit: (id, text, kept, drafts) => on.editQueued!(p.activeSessionId!, id, text, kept, drafts) } : undefined} />
+                : null}
+              {/* Keyed by session so each one has its own field; the unsent draft is parked under the same key while another session is shown */}
+              <Composer key={p.activeSessionId} {...composerProps} draftKey={p.activeSessionId} />
             </div>
           </div>
         </div>

@@ -4,6 +4,7 @@ import type { Attachment, Draft } from '@shared/transcript';
 import { imageMimeOf } from '@shared/attachments';
 import { t } from '../i18n';
 import { cn } from '../ui/cn';
+import { IconButton } from '../ui/Button';
 import { Lightbox } from './Lightbox';
 
 // An image open in the Lightbox: the source to show and the name for labels
@@ -51,6 +52,42 @@ export function TurnAttachments({ attachments, blobUrl }: { attachments: Attachm
         />
       ))}
       {preview && <Lightbox src={preview.src} name={preview.name} onClose={() => setPreview(null)} />}
+    </div>
+  );
+}
+
+// Attachments of a queued prompt, inline before its text: images as square tiles (the "little grid" Cursor shows), the rest as the usual pill
+export function AttachmentTiles({ attachments, blobUrl }: { attachments: Attachment[]; blobUrl?: (blob: string) => string }) {
+  const [preview, setPreview] = useState<Preview | null>(null);
+  return (
+    <span className="flex shrink-0 self-center items-center gap-1">
+      {attachments.map((a, i) => {
+        const src = a.kind === 'image' && blobUrl && a.blob ? blobUrl(a.blob) : undefined;
+        return src
+          ? <button key={i} type="button" title={a.name} aria-label={t('common.previewImage', { name: a.name ?? t('common.image') })} onClick={() => setPreview({ src, name: a.name })}
+              className="flex size-lead shrink-0 cursor-zoom-in overflow-hidden rounded-xs outline-none focus-visible:ring-1 focus-visible:ring-focus">
+              <img src={src} alt="" className="size-full object-cover" />
+            </button>
+          : <AttachmentTag key={i} name={a.name} image={a.kind === 'image' || (a.kind === 'file' && !!imageMimeOf(a.name))} title={a.kind === 'file' ? a.uri : undefined} onPreview={() => undefined} />;
+      })}
+      {preview && <Lightbox src={preview.src} name={preview.name} onClose={() => setPreview(null)} />}
+    </span>
+  );
+}
+
+// The attachments an inline editor (history / queue) keeps from the original message, each with its own remove button; sits above the editor's textarea
+export function EditAttachments({ attachments, retained, blobUrl, disabled, onRemove }: {
+  attachments: Attachment[]; retained: number[]; blobUrl?: (blob: string) => string; disabled?: boolean; onRemove: (index: number) => void;
+}) {
+  if (!retained.length) return null;
+  return (
+    <div className="flex flex-wrap gap-gap px-pad pt-gap">
+      {retained.map(i => (
+        <div key={i} className="flex min-w-0 items-center gap-gap">
+          <TurnAttachments attachments={[attachments[i]!]} blobUrl={blobUrl} />
+          <IconButton disabled={disabled} title={t('common.remove')} aria-label={t('common.removeNamed', { name: attachments[i]!.name ?? t('common.image') })} onClick={() => onRemove(i)}><X /></IconButton>
+        </div>
+      ))}
     </div>
   );
 }

@@ -120,6 +120,8 @@ export function App() {
     login: methodId => post({ type: 'login', methodId }),
     retry: () => post({ type: 'retry' }),
     retryTurn: () => post({ type: 'retryTurn' }),
+    dequeue: (sessionId, id) => post({ type: 'dequeue', sessionId, id }),
+    editQueued: (sessionId, id, text, retainedAttachments, attachments) => post({ type: 'editQueued', sessionId, id, text, retainedAttachments, attachments }),
   }), []);
 
   const settingsOn = useMemo<SettingsHandlers>(() => ({

@@ -265,6 +265,8 @@ export class SessionManager {
         case 'compact': await s?.compact(); break;
         case 'retry': await s?.retry(); break;
         case 'retryTurn': await s?.retryTurn(); break;
+        case 'dequeue': this.live.get(msg.sessionId)?.dequeue(msg.id); break;
+        case 'editQueued': await this.live.get(msg.sessionId)?.editQueued(msg.id, msg.text, msg.retainedAttachments, msg.attachments); break;
         case 'login': await this.login(s, msg.methodId); break;
         default: break;
       }

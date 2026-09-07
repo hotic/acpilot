@@ -36,7 +36,7 @@ describe('background compaction queue', () => {
       await until(() => logs.some(l => l.includes('prompt done:')));
       expect(s.isRunning).toBe(true);
       await s.prompt('follow-up');
-      expect(s.view().queued).toBe('follow-up');
+      expect(s.view().queued?.map(q => q.text)).toEqual(['follow-up']);
       expect(s.view().turns).toHaveLength(4);
       await s.setConfig('effort', 'low');
       expect(s.isRunning).toBe(true);

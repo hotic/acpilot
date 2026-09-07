@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { Shrink, X } from 'lucide-react';
 import type { ConfigControl, Draft, SessionControls, Turn, Usage } from '@shared/transcript';
 import type { FileHit } from '@shared/protocol';
@@ -39,6 +39,8 @@ export interface ComposerProps {
   onSend: (text: string, attachments: Draft[]) => void | Promise<void>;
   // Inline history editors keep their draft until the host accepts the resend.
   edit?: { text: string; attachments?: ReactNode; hasAttachments: boolean; onCancel: () => void };
+  // Where the unsent draft (text + attachments) is parked while another session is shown; the session id. Absent: nothing is kept across remounts
+  draftKey?: string;
   onSearchFiles: (query: string) => Promise<FileHit[]>;
   // Something couldn't be attached; the shell shows it as a toast
   onNotice: (text: string) => void;
@@ -50,6 +52,10 @@ export interface ComposerProps {
 
 // Only offer search once the option count passes this threshold; short lists are scannable at a glance
 const SEARCH_FROM = 12;
+
+// Unsent drafts by session id. Each session has its own composer state: switching away parks what was typed / pasted here, switching back
+// restores it, and a draft never leaks into another session's field. Webview memory only — a window reload starts clean
+const DRAFTS = new Map<string, { text: string; drafts: Draft[] }>();
 
 // The running placeholder explains what a send will do, per the follow-up setting
 const RUNNING_PLACEHOLDER: Record<FollowUp, MsgKey> = {
@@ -64,8 +70,14 @@ const RUNNING_PLACEHOLDER: Record<FollowUp, MsgKey> = {
 // Attachments come from pasting / dropping (images, OS files, Explorer items) or from an @ mention that searches the workspace
 export function Composer(p: ComposerProps) {
   const { composer } = useAppearance();
-  const [text, setText] = useState(p.edit?.text ?? '');
-  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const parked = p.draftKey ? DRAFTS.get(p.draftKey) : undefined;
+  const [text, setText] = useState(p.edit?.text ?? parked?.text ?? '');
+  const [drafts, setDrafts] = useState<Draft[]>(parked?.drafts ?? []);
+  const { draftKey } = p;
+  useEffect(() => {
+    if (!draftKey) return;
+    if (text || drafts.length) DRAFTS.set(draftKey, { text, drafts }); else DRAFTS.delete(draftKey);
+  }, [draftKey, text, drafts]);
   const flush = !p.edit && composer === 'flush';
   // The beam lights up while the composer is focused (focus-within semantics), not while it's working.
   // Overlays portal to the shell root, so opening a menu blurs the composer; "a menu is open" therefore also counts as focused
@@ -209,7 +221,8 @@ export function Composer(p: ComposerProps) {
         className={cn(
           'min-w-0 resize-none bg-transparent px-3 pt-2.5 pb-1 text-1 outline-none transition-colors',
           'max-h-[calc(8*var(--text-1-lh))] placeholder:text-fg-3',
-          dim ? 'text-fg-3/60 placeholder:text-fg-3/60' : 'text-fg-strong',
+          // Queued / follow-up text while a turn runs stays at full strength; only an unready session dims the field
+          p.disabled ? 'text-fg-3/60 placeholder:text-fg-3/60' : 'text-fg-strong',
         )}
       />
       {mentionOpen && <MentionList anchor={fieldRef} hits={hits} active={active} empty={span!.query.length > 0} onHover={setActive} onPick={pick} />}
@@ -419,11 +432,10 @@ const SEG_COLOR: Record<UsageSegment['id'], string> = {
 };
 
 // Breakdown panel (modeled on Cursor's context usage): title row with the compact button, one summary line (percent left, "~used / size" right), a thin stacked bar,
-// then legend rows — square swatch, label, right-aligned count. Clicking a segment or row selects it, dims the others, and expands the row with a line of explanation.
+// then legend rows — square swatch, label, right-aligned count. Hovering a row or bar segment highlights that slice (dims the rest); nothing opens on click.
 // The breakdown is a local estimate, so the total carries a "~" and the counts are read as approximate
 function UsagePanel({ usage, pct, segments, onCompact }: { usage: Usage; pct: number; segments: UsageSegment[]; onCompact?: () => void }) {
-  const [sel, setSel] = useState<UsageSegment['id']>();
-  const toggle = (id: UsageSegment['id']) => setSel(s => (s === id ? undefined : id));
+  const [hov, setHov] = useState<UsageSegment['id']>();
   return (
     <div className="flex flex-col gap-1 p-1 tabular-nums">
       <div className="flex h-ctl items-center justify-between pl-2">
@@ -441,12 +453,11 @@ function UsagePanel({ usage, pct, segments, onCompact }: { usage: Usage; pct: nu
       <div className="mx-2 mb-1 flex h-1.5 overflow-hidden rounded-full bg-active">
         {segments.map(s =>
           s.tokens > 0 && (
-            <button
+            <div
               key={s.id}
-              type="button"
-              aria-label={t('usage.segAria', { label: s.label, n: fmtTokens(s.tokens) })}
-              onClick={() => toggle(s.id)}
-              className={cn('h-full transition-opacity hover:brightness-125 focus-visible:brightness-125', SEG_COLOR[s.id], sel && sel !== s.id && 'opacity-30')}
+              onMouseEnter={() => setHov(s.id)}
+              onMouseLeave={() => setHov(undefined)}
+              className={cn('h-full transition-opacity', SEG_COLOR[s.id], hov === s.id && 'brightness-125', hov && hov !== s.id && 'opacity-30')}
               style={{ width: `${(s.tokens / usage.size) * 100}%` }}
             />
           ),
@@ -454,21 +465,16 @@ function UsagePanel({ usage, pct, segments, onCompact }: { usage: Usage; pct: nu
       </div>
       <div className="flex flex-col">
         {segments.map(s => (
-          <div key={s.id}>
-            <button
-              type="button"
-              onClick={() => toggle(s.id)}
-              className={cn(
-                'flex min-h-row w-full items-center gap-2 rounded-md px-2 text-left text-3 transition-colors hover:bg-hover focus-visible:bg-hover',
-                sel && sel !== s.id && 'opacity-50',
-              )}
-            >
-              {/* Swatch sits in the standard lead slot so the hint below can indent to the label with pl-indent */}
-              <span className="flex w-lead shrink-0 justify-center"><span className={cn('size-2.5 rounded-xs', SEG_COLOR[s.id])} /></span>
-              <span className="flex-1 text-fg-1">{s.label}</span>
-              <span className="text-fg-2">{fmtTokens(s.tokens)}</span>
-            </button>
-            {sel === s.id && <div className="ml-2 pl-indent pr-2 pb-1 text-3 text-fg-3">{s.hint}</div>}
+          <div
+            key={s.id}
+            title={s.hint}
+            onMouseEnter={() => setHov(s.id)}
+            onMouseLeave={() => setHov(undefined)}
+            className={cn('flex min-h-row w-full items-center gap-2 rounded-md px-2 text-3 transition-colors', hov === s.id && 'bg-hover')}
+          >
+            <span className="flex w-lead shrink-0 justify-center"><span className={cn('size-2.5 rounded-xs', SEG_COLOR[s.id])} /></span>
+            <span className="flex-1 text-fg-1">{s.label}</span>
+            <span className="text-fg-2">{fmtTokens(s.tokens)}</span>
           </div>
         ))}
       </div>
