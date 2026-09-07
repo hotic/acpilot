@@ -69,25 +69,6 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
             <span className="min-w-0 flex-1 truncate text-2 font-medium text-fg-strong">{title}</span>
             {/* The icon is 6px smaller than the button box; the negative margin makes the right edge of the last icon bite into the page-margin line */}
             <div className="-mr-1.5 flex shrink-0 items-center gap-0.5">
-              {accountButton}
-              <Popover side="bottom" align="end" width="xl" content={close => (
-                <SessionList
-                  sessions={sessions}
-                  agents={agents}
-                  activeId={activeSessionId}
-                  autoFocus
-                  onSelect={id => { on.selectSession(id); close(); }}
-                  onRename={on.renameSession}
-                  onDelete={on.deleteSession}
-                  onPin={on.pinSession}
-                />
-              )}>
-                {({ open, toggle, ref }) => (
-                  <IconButton ref={ref} data-open={open || undefined} onClick={toggle} title="历史会话" aria-label="历史会话" className="data-[open]:bg-active data-[open]:text-fg-1">
-                    <History strokeWidth={1.5} />
-                  </IconButton>
-                )}
-              </Popover>
               {/* Split new-session: the plus goes with the configured default agent, the caret opens an agent picker */}
               <div className="flex items-center">
                 <IconButton onClick={() => on.newSession()} title="新会话" aria-label="新会话">
@@ -109,6 +90,25 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
                   )}
                 </Menu>
               </div>
+              <Popover side="bottom" align="end" width="xl" content={close => (
+                <SessionList
+                  sessions={sessions}
+                  agents={agents}
+                  activeId={activeSessionId}
+                  autoFocus
+                  onSelect={id => { on.selectSession(id); close(); }}
+                  onRename={on.renameSession}
+                  onDelete={on.deleteSession}
+                  onPin={on.pinSession}
+                />
+              )}>
+                {({ open, toggle, ref }) => (
+                  <IconButton ref={ref} data-open={open || undefined} onClick={toggle} title="历史会话" aria-label="历史会话" className="data-[open]:bg-active data-[open]:text-fg-1">
+                    <History strokeWidth={1.5} />
+                  </IconButton>
+                )}
+              </Popover>
+              {accountButton}
               {settingsButton}
             </div>
           </>
