@@ -182,6 +182,17 @@ describe('account layer wired into sessions', () => {
     }
   });
 
+  it('Devin generic missing-credential stderr uses login guidance instead of a raw log line', async () => {
+    const s = AcpSession.fresh('fake', '/tmp/acpilot-needs-auth', {
+      registry: new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE], env: { FAKE_AUTH_HINT: 'devin' } } }),
+      log: () => {}, onChange: () => {}, blobs: { saveBlob: async () => ({ name: 'x', path: '/tmp/x' }), readBlob: async () => new Uint8Array() },
+    });
+    try {
+      await s.start();
+      expect(s.view()).toMatchObject({ status: 'auth_required', error: undefined });
+    } finally { s.dispose(); }
+  });
+
   it('no account → auth_required and the agent flagged accounts; after import a reopened session is ready and bound to the account; switching accounts opens a new session and changes the default', async () => {
     const { m, accounts, store } = setup();
     await m.init();

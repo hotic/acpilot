@@ -28,7 +28,11 @@ const app = acp.agent({ name: 'fake-agent' })
   .onRequest(acp.methods.agent.session.new, ({ params }) => {
     if (params.cwd.includes('needs-auth') && !authed) {
       // Mimic Kimi: the reason goes to stderr as an ndjson log line, the -32000 itself carries nothing
-      process.stderr.write(`${JSON.stringify({ level: 'info', msg: 'acp: auth readiness probe failed, trying the OAuth summary', error: 'provider managed:fake has no credential configured' })}\n`);
+      if (process.env.FAKE_AUTH_HINT === 'devin') {
+        process.stderr.write('2026-09-07T06:49:18.250107Z WARN run_acp_server:acp_bridge_dispatch{method="session/new" queue_wait_ms=0}:new_session: chisel_agent::acp_server::agent_impl: ACP: Creating session without credentials - agent may not work\n');
+      } else {
+        process.stderr.write(`${JSON.stringify({ level: 'info', msg: 'acp: auth readiness probe failed, trying the OAuth summary', error: 'provider managed:fake has no credential configured' })}\n`);
+      }
       // Mimic Devin: the JSON-RPC layer then echoes its own error response to stderr — noise the client must not mistake for a diagnosis
       process.stderr.write('2026-01-01T00:00:00Z WARN run_acp_server: agent_client_protocol::jsonrpc::outgoing_actor: Sending error response id=Number(1) method=session/new error=Error { code: -32000: Authentication required, message: "ACP host has not authenticated." }\n');
       throw acp.RequestError.authRequired();

@@ -617,6 +617,9 @@ function authHintOf(line: string): string | undefined {
   if (!text) return undefined;
   // The JSON-RPC layer's own "Sending error response" echo only repackages what the response already carries; it isn't a diagnosis
   if (text.includes('jsonrpc::outgoing_actor')) return undefined;
+  // Devin's generic missing-credential warning adds no diagnosis; use the localized login guidance.
+  // The complete stderr line remains in the output log.
+  if (text.includes('ACP: Creating session without credentials - agent may not work')) return undefined;
   if (text.startsWith('{')) {
     try {
       const j = JSON.parse(text) as Record<string, unknown>;
