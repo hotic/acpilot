@@ -38,7 +38,8 @@ export function PageRail({ agents, page, onPage }: PageRailProps) {
     </button>
   );
   return (
-    <nav aria-label={t('settings.title')} className="flex shrink-0 flex-col gap-0.5 border-r border-line p-1.5">
+    // Horizontal padding mirrors the top bar: back button sits at --page with a -6px outdent, so the rail icons centre on the same axis
+    <nav aria-label={t('settings.title')} className="flex shrink-0 flex-col gap-0.5 border-r border-line px-[calc(var(--page)_-_6px)] py-1.5">
       {item('general', t('settings.nav.general'), <Settings2 strokeWidth={1.5} />)}
       {agents.map(a => item(a.id, a.name, <AgentMark id={a.id} name={a.name} />, a.available === false))}
     </nav>
