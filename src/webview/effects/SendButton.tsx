@@ -24,7 +24,7 @@ function hasWebGL(): boolean {
   return webgl;
 }
 
-// Send / stop in one, a --ctl-square flat button. Dim when empty, lit when there's text or a run in progress.
+// Send / stop in one, a --ctl-sm flat button, one tier below the toolbar chips' neighbors. Dim when empty, lit when there's text or a run in progress.
 // Three modes: accent lights up with the accent color; icon is inverted-neutral; metal wraps the button in metal-fx's silver ring when lit —
 // the wrapped button's surface is taken over by metal-fx (it zeroes out the child's background / border and uses its own dark / light base), leaving only the icon and radius
 export function SendButton({ running, filled, theme = 'dark', onClick }: SendButtonProps) {
@@ -40,7 +40,7 @@ export function SendButton({ running, filled, theme = 'dark', onClick }: SendBut
       data-on={on || undefined}
       data-metal={metal || undefined}
       className={cn(
-        'send-btn inline-flex size-ctl shrink-0 items-center justify-center rounded-md [&_svg]:size-icon-ctl disabled:cursor-default',
+        'send-btn inline-flex size-ctl-sm shrink-0 items-center justify-center rounded-md [&_svg]:size-icon disabled:cursor-default',
         send === 'accent' && on && '[--send-bg-on:var(--accent)] [--send-ink-on:var(--accent-fg)]',
       )}
     >
