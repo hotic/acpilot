@@ -32,6 +32,15 @@ export interface FileHit {
   path: string;
 }
 
+// Links in agent output open on the host side; only these schemes are ever handed to openExternal
+export function isSafeExternalUrl(url: string): boolean {
+  try {
+    return ['https:', 'http:', 'mailto:'].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
 export type HostMsg =
   | { type: 'init'; state: InitState }
   | { type: 'appearance'; appearance: Appearance }
@@ -79,6 +88,8 @@ export type WebviewMsg =
   // Send the last user turn again after its agent turn ended in error / a short stop; both turns are dropped from the transcript first
   | { type: 'retryTurn' }
   | { type: 'openInEditor' }
+  // A link inside agent output was clicked; host opens it externally after an isSafeExternalUrl check
+  | { type: 'openExternal'; url: string }
   // Settings page: write a setting (host maps it onto acpilot.<key> at user scope), open a file / directory from the inventory lists,
   // open settings.json (or the Settings UI filtered to `key`), rescan an agent's extension inventory, read the configOptions of its latest session
   | { type: 'setSetting'; key: SettingKey; value: unknown }

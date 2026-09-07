@@ -7,15 +7,17 @@ import type { Locale } from '@shared/i18n';
 import { BASE_APPEARANCE, type Appearance } from './appearance';
 import { setLocale } from './i18n';
 import { Shell, type ShellHandlers } from './chat/Shell';
+import { useVsCodeTheme } from './useVsCodeTheme';
+import { vscodeApi } from './vscodeApi';
 import { SettingsShell, type SettingsHandlers } from './settings/SettingsShell';
 import type { SettingsPage } from './settings/Nav';
 
 declare global {
   interface Window { __acpilot?: { host: 'sidebar' | 'editor' } }
-  function acquireVsCodeApi(): { postMessage(msg: unknown): void };
 }
 
-const vscode = acquireVsCodeApi();
+// Always through the memo: acquireVsCodeApi() throws when called twice, and other components (Link) reach the api via vscodeApi()
+const vscode = vscodeApi();
 const post = (m: WebviewMsg) => vscode.postMessage(m);
 
 // The one request/response pair over postMessage: file search for @ mentions. Each request gets a seq; the matching `files` reply resolves it.
@@ -165,17 +167,4 @@ export function App() {
       onOpenSettings={() => setView('settings')}
     />
   );
-}
-
-// VS Code hangs theme classes on body (vscode-dark / vscode-light / vscode-high-contrast*); follow it
-function useVsCodeTheme(): 'dark' | 'light' {
-  const read = () => (document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-high-contrast-light') ? 'light' : 'dark');
-  const [theme, setTheme] = useState<'dark' | 'light'>(read);
-  useEffect(() => {
-    const mo = new MutationObserver(() => setTheme(read()));
-    mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-    return () => mo.disconnect();
-  }, []);
-  useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
-  return theme;
 }

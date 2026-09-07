@@ -400,6 +400,45 @@
   background-image: linear-gradient(var(--chip), var(--chip));
 }
 
+/* Agent prose (streamdown output): all markdown typography lives here — Tailwind never scans node_modules,
+   so the library's own utility classes don't resolve and every element needs an explicit rule. */
+.acp-prose > * { margin: 0; }
+.acp-prose p, .acp-prose li { overflow-wrap: anywhere; }
+.acp-prose :is(h1, h2, h3, h4, h5, h6) { margin: 0; color: var(--fg-strong); font-weight: 600; line-height: var(--text-1-lh); }
+.acp-prose :is(h1, h2, h3, h4, h5, h6):not(:first-child) { margin-top: var(--gap); }
+.acp-prose h1 { font-size: calc(var(--text-1) * 1.35); }
+.acp-prose h2 { font-size: calc(var(--text-1) * 1.25); }
+.acp-prose h3 { font-size: calc(var(--text-1) * 1.15); }
+.acp-prose :is(h4, h5, h6) { font-size: var(--text-1); }
+/* Tailwind preflight strips list-style; restore the markers streamdown's own (ungenerated) classes would have set */
+.acp-prose :is(ul, ol) { margin: 0; padding-left: 1.2em; }
+.acp-prose ul { list-style-type: disc; }
+.acp-prose ol { list-style-type: decimal; }
+.acp-prose li::marker { color: var(--fg-3); }
+.acp-prose li + li, .acp-prose li > :is(ul, ol) { margin-top: 2px; }
+.acp-prose blockquote { margin: 0; padding-left: var(--pad); border-left: 2px solid var(--line-strong); color: var(--fg-2); }
+.acp-prose blockquote > * + * { margin-top: var(--gap); }
+.acp-prose hr { margin: 0; border: 0; border-top: 1px solid var(--line); }
+.acp-prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.acp-prose a:hover { filter: brightness(1.1); }
+.acp-prose strong { color: var(--fg-strong); font-weight: 600; }
+.acp-prose table { border-collapse: collapse; font-size: var(--text-2); line-height: var(--text-2-lh); }
+.acp-prose th, .acp-prose td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.acp-prose th { color: var(--fg-2); font-weight: 500; }
+/* KaTeX: a wide display formula scrolls inside its own box instead of breaking the column */
+.acp-prose .katex { color: var(--fg-1); }
+.acp-prose .katex-display { margin: 0; padding: 2px 0; overflow-x: auto; overflow-y: hidden; }
+/* Mermaid: centred, width-capped; the pending box holds the layout while the svg is rendering */
+.acp-mermaid { display: flex; justify-content: center; }
+.acp-mermaid svg { max-width: 100%; height: auto; }
+.acp-mermaid-pending { min-height: 40px; border-radius: var(--r-md); background: var(--bg-code); animation: acp-pulse 1.5s ease infinite; }
+/* streamdown's caret is a --streamdown-caret char on the root; its own ::after rule is a Tailwind class we never generate, so it is redone here */
+.acp-prose[style*="--streamdown-caret"] > *:last-child::after {
+  content: var(--streamdown-caret);
+  color: var(--fg-2);
+  animation: acp-caret 1s steps(2) infinite;
+}
+
 @keyframes acp-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes acp-enter { from { opacity: 0; transform: translateY(var(--enter-y)); } }
 @keyframes acp-caret { to { opacity: 0; } }

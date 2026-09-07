@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import * as vscode from 'vscode';
-import type { FileHit, HostMsg, WebviewHost, WebviewMsg } from '@shared/protocol';
+import { isSafeExternalUrl, type FileHit, type HostMsg, type WebviewHost, type WebviewMsg } from '@shared/protocol';
 import type { Appearance } from '@shared/appearance';
 import type { SessionManager } from './SessionManager';
 import type { SettingsCenter } from './settings';
@@ -57,6 +57,11 @@ export class WebviewBridge implements vscode.Disposable {
       return;
     }
     if (m.type === 'openInEditor') { void vscode.commands.executeCommand('acpilot.openInEditor'); return; }
+    if (m.type === 'openExternal') {
+      if (isSafeExternalUrl(m.url)) void vscode.env.openExternal(vscode.Uri.parse(m.url));
+      else this.env.log(`openExternal 拒绝：非白名单 scheme（${m.url.slice(0, 80)}）`);
+      return;
+    }
     if (m.type === 'searchFiles') {
       // Always answer, even on failure: the webview holds a promise per seq
       let files: FileHit[] = [];

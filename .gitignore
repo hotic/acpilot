@@ -23,3 +23,7 @@ docs/
 lab/
 src/lab/
 vite.lab.config.ts
+
+# Playwright scratch output
+.playwright-cli/
+output/
