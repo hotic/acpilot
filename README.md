@@ -1,58 +1,46 @@
-<p align="center">
-  <img src="media/icon.png" alt="ACPilot logo" width="128" height="128">
-</p>
+# ACPilot
 
-<h1 align="center">ACPilot</h1>
+A chat interface for ACP coding agents in VS Code and Cursor.
 
-<p align="center">
-  A home for coding agents in VS Code / Cursor.<br>
-  Grok, Devin, Kimi Code, and more — connected through ACP.
-</p>
+**English** · [简体中文](README.zh.md)
 
-<p align="center">
-  <strong>English</strong> · <a href="README.zh.md">简体中文</a>
-</p>
-
-<p align="center">
-  <a href="#usage">Getting started</a> · <a href="#development">Development</a>
-</p>
-
-## Overview
-
-A chat shell that lives in the VS Code / Cursor secondary sidebar and drives official agent CLIs over [ACP](https://agentclientprotocol.com) (JSON-RPC over stdio):
+ACPilot lives in the secondary sidebar and drives official agent CLIs over [ACP](https://agentclientprotocol.com) (JSON-RPC over stdio):
 
 - `grok agent stdio`
 - `devin acp`
 - `kimi acp`
 - any ACP-compatible command (added via the `acpilot.agents` setting)
 
-The shell handles UI, session organization, permission approvals, accounts, and context budget. Model calls, agent execution, and context compaction itself are left to the CLIs.
+The extension manages the UI, sessions, permission approvals, accounts, and context budget. Model calls, agent execution, and context compaction stay in the CLIs.
 
-## Usage
+- **Bring your own agent:** Drive Grok, Devin, Kimi Code, or any ACP-compatible command from the composer toolbar.
+- **Sessions and permissions:** Organize conversations in the sidebar and review tool approvals before they run.
+- **Multiple accounts:** Store several logins per agent and start a new session with a different account.
+- **Images, files, and queue:** Paste or drop images, attach workspace files with `@`, and queue follow-ups while a turn is running.
 
-1. Install the CLIs (log in to Grok / Kimi in their own terminals; for Devin see below)
-2. Open the ACPilot view in the secondary sidebar; switch agent / mode / model from the toolbar below the composer
-3. Type and send; messages sent mid-turn are queued; the square button cancels
+## Get started
+
+1. Install the agent CLI and sign in. Add or switch accounts from the agent menu; see [Accounts](#accounts).
+2. Open the ACPilot view in the secondary sidebar.
+3. Choose an agent, mode, and model from the toolbar below the composer, then send a message. Follow-ups sent mid-turn are queued. The square button cancels the current turn.
 
 ### Images and files
 
-- Paste or drop images (PNG · JPEG · GIF · WebP, ≤ 10 MB): they go inline as base64. Grok advertises `image: false` in `initialize` yet sees them fine, so the flag is ignored
-- Drag files from the Explorer into the composer, or type `@` to search workspace files: sent as `resource_link`, the agent reads them itself (dropped image files are read and sent as images)
-- Text files dropped from Finder (≤ 256 KB): a webview has no path for them, so the content is embedded as a `resource` block; binaries are refused
+- Paste or drop images (PNG, JPEG, GIF, or WebP, up to 10 MB). They are sent with the message.
+- Drag files from Explorer into the composer, or type `@` to search the workspace. The agent reads those files itself. Image files dropped from Explorer are sent as images.
+- Text files dropped from the system file manager (up to 256 KB) are embedded in the message. Binary files are not supported.
 
-Transcripts live in the extension's globalStorage. On restart, sessions try `session/resume` first, then `session/load`, and fall back to read-only history if neither is supported.
+Sessions are stored in the extension's global storage. After a restart, ACPilot resumes the session when the agent allows it; otherwise the transcript remains available as read-only history. When context usage is high, ACPilot can send `/compact` automatically; you can also compact from the context panel.
 
-### Multiple Devin accounts
+### Accounts
 
-Devin's ACP mode does not read the local CLI login — credentials are handed to it by ACPilot when a session starts — so you can store several accounts and switch per session (when one Max quota runs out, switch to another):
+ACPilot can store several logins per agent and bind one account to each session. Credentials are supplied when a session starts, so picking a different account starts a new session.
 
-- The lower section of the agent Chip menu is the account list: pick one to start a new session with it. "Import local CLI login" reads `~/.local/share/devin/credentials.toml`; "Log in a new account in the terminal…" runs `devin auth login` once in an isolated directory without touching your local login (also works on servers: copy the link, paste the code)
-- Secrets only ever go to the OS keychain (VS Code SecretStorage); `accounts.json` holds metadata like email and plan, and transcripts store only the account id
-- A session is bound to one account from start to finish. The "Log in with browser (this session only)" option on the Notice is Devin's own browser login — it authenticates the current process only and is not saved
+- The lower half of the agent menu lists saved accounts. Pick one to start a new session with it. **Import CLI login** reads the CLI’s existing local login (for Devin, `~/.local/share/devin/credentials.toml`). **Sign in in terminal** runs the agent’s login command in an isolated directory and does not change your existing local login. This also works on remote servers: copy the link and paste the code.
+- Secrets are stored in the OS keychain (VS Code SecretStorage). `accounts.json` keeps metadata such as email and plan. Transcripts store only the account id.
+- Each session is bound to one account. A **this session only** option on the sign-in notice (for example Devin’s **Sign in with browser**) authenticates the current process only and is not saved.
 
-### Auto-compaction
-
-When context usage reaches `acpilot.compactAtTokens` (default 300k) after a turn, ACPilot automatically sends `/compact` to the agent (`acpilot.autoCompact`, on by default); you can also compact manually from the context ring. Only applies to agents that report usage and expose a `/compact` command (Devin / Grok both do).
+Agents without an account list still use their own CLI login.
 
 ## Development
 
@@ -65,4 +53,8 @@ pnpm typecheck && pnpm test
 pnpm package        # build a .vsix
 ```
 
-Press F5 to launch an Extension Development Host. Logs are in Output → ACPilot. See [AGENTS.md](AGENTS.md) for the architecture map and protocol gotchas.
+Press F5 to launch an Extension Development Host. Logs are in Output → ACPilot. See [AGENTS.md](AGENTS.md) for the architecture map and protocol notes.
+
+## License
+
+[MIT](LICENSE)

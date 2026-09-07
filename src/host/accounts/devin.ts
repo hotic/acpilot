@@ -84,7 +84,7 @@ export class DevinAccountProvider implements AccountProvider {
     const res = await fetch(base + USER_STATUS_PATH, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'connect-protocol-version': '1' },
-      body: JSON.stringify({ metadata: { apiKey: cred.secret, ideName: 'acpilot', ideVersion: '0.0.1', extensionVersion: '0.0.1' } }),
+      body: JSON.stringify({ metadata: { apiKey: cred.secret, ideName: 'acpilot', ideVersion: '1.0.0', extensionVersion: '1.0.0' } }),
       signal: AbortSignal.timeout(QUOTA_TIMEOUT),
     });
     if (!res.ok) throw new Error(`GetUserStatus ${res.status}`);

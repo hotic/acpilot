@@ -1,8 +1,8 @@
 {
   "name": "acpilot",
   "displayName": "ACPilot",
-  "description": "VS Code / Cursor chat shell for official agent CLIs (Grok, Devin, Kimi Code) over ACP",
-  "version": "0.0.1",
+  "description": "A chat interface for ACP coding agents in VS Code and Cursor (Grok, Devin, Kimi Code)",
+  "version": "1.0.0",
   "publisher": "hotic",
   "icon": "media/icon.png",
   "license": "MIT",

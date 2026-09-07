@@ -19,7 +19,7 @@ export interface ClientHandlers {
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
 }
 
-export const CLIENT_INFO = { name: 'acpilot', version: '0.0.1' };
+export const CLIENT_INFO = { name: 'acpilot', version: '1.0.0' };
 
 // One agent subprocess = one long-lived ACP connection. stdio carries ndjson; stderr goes line by line to the Output Channel
 export class AgentProcess {
