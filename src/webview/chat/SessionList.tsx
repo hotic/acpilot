@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Pencil, Pin, PinOff, Search, Trash2 } from 'lucide-react';
 import type { AgentInfo, SessionSummary } from '@shared/transcript';
 import { cn } from '../ui/cn';
@@ -23,7 +23,7 @@ export interface SessionListProps {
   onPin: (id: string, pinned: boolean) => void;
 }
 
-// Session list: search at the top (new-session lives on the shell outside); an extra row of agent filters when sessions span multiple agents; pinned sessions get their own section, the rest is one flat list.
+// Session list: search and agent filters stay visible even without history; pinned sessions get their own section, the rest is one flat list.
 // Each item: vendor mark · title · time; on hover those swap for three actions — pin / rename / delete. Deletion applies immediately, undo lives on the Toast at the shell's bottom
 export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, onRename, onDelete, onPin }: SessionListProps) {
   const [query, setQuery] = useState('');
@@ -31,7 +31,6 @@ export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, o
   const [editing, setEditing] = useState<string>();
   const nameOf = (id: string) => agents.find(a => a.id === id)?.name ?? id;
 
-  const usedAgents = useMemo(() => agents.filter(a => sessions.some(s => s.agent === a.id)), [agents, sessions]);
   const q = query.trim().toLowerCase();
   const shown = sessions.filter(s => (!agentFilter || s.agent === agentFilter) && (!q || s.title.toLowerCase().includes(q) || nameOf(s.agent).toLowerCase().includes(q)));
 
@@ -71,18 +70,16 @@ export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, o
           />
         </label>
       </div>
-      {usedAgents.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1 px-1 pt-1">
-          <FilterChip active={!agentFilter} onClick={() => setAgentFilter(undefined)}>全部</FilterChip>
-          {usedAgents.map(a => (
-            <FilterChip key={a.id} active={agentFilter === a.id} onClick={() => setAgentFilter(agentFilter === a.id ? undefined : a.id)}>
-              <AgentMark id={a.id} name={a.name} className="size-3" />{a.name}
-            </FilterChip>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-1 px-1 pt-1">
+        <FilterChip active={!agentFilter} onClick={() => setAgentFilter(undefined)}>全部</FilterChip>
+        {agents.map(a => (
+          <FilterChip key={a.id} active={agentFilter === a.id} onClick={() => setAgentFilter(a.id)}>
+            <AgentMark id={a.id} name={a.name} className="size-3" />{a.name}
+          </FilterChip>
+        ))}
+      </div>
       <div className="mt-1 flex min-h-0 flex-col overflow-y-auto border-t border-line pb-1" role="listbox" aria-label="会话">
-        {!shown.length && <div className="px-2 py-3 text-3 text-fg-3">{sessions.length ? '没有匹配的会话' : '还没有会话'}</div>}
+        {!shown.length && <div className="px-2 py-3 text-3 text-fg-3">{q ? '没有匹配的会话' : agentFilter ? `${nameOf(agentFilter)} 还没有会话` : '还没有会话'}</div>}
         {pinned.length > 0 && (
           <div className="flex flex-col">
             <div className="px-2 pt-2.5 pb-1 text-3 text-fg-3">置顶</div>
