@@ -105,4 +105,44 @@ describe('SessionManager', () => {
     expect((await m2.knownControls('fake')).map(c => c.id)).toEqual(['model', 'effort']);
     expect(await m2.knownControls('ghost')).toEqual([]);
   }, 20_000);
+
+  // The fake agent's process starts every session on model m1 / effort high / mode agent; what the user picked last must come back on the next new session
+  it('last chosen mode / config values are remembered per agent, replayed onto new sessions (also after a reload), and values the agent no longer offers are skipped', async () => {
+    const { m, dir } = manager();
+    await m.init();
+    await m.newSession();
+    const controls = () => m.active()!.controls;
+    expect(controls().options.map(c => c.value)).toEqual(['m1', 'high']);
+    await m.handle({ type: 'setConfig', configId: 'model', value: 'm2' });
+    await m.handle({ type: 'setConfig', configId: 'effort', value: 'low' });
+    await m.handle({ type: 'setMode', id: 'plan' });
+    expect(m.lastSettings('fake')).toEqual({ modeId: 'plan', config: { model: 'm2', effort: 'low' } });
+    // a mode the agent switches by itself (Devin's "switch to bypass mode" permission answer arrives as current_mode_update) counts as the choice in effect
+    await m.handle({ type: 'send', text: 'mode:agent' });
+    expect(m.lastSettings('fake')).toEqual({ modeId: 'agent', config: { model: 'm2', effort: 'low' } });
+    await m.handle({ type: 'setMode', id: 'plan' });
+    // (a session must have said something, or the next newSession replaces it instead of adding one — done above)
+    await m.newSession();
+    expect(controls().options.map(c => c.value)).toEqual(['m2', 'low']);
+    expect(controls().modeId).toBe('plan');
+    // the choices themselves are what a turn records, so the new session's first turn carries them
+    await m.handle({ type: 'send', text: 'inspect-history' });
+    const reply = m.active()!.turns.at(-1)!;
+    expect(reply.role === 'agent' && reply.blocks.some(b => b.type === 'text' && b.markdown.includes('"model":"m2"') && b.markdown.includes('"mode":"plan"'))).toBe(true);
+    await m.dispose();
+
+    // reload: the memory is on disk; a stale value (no longer in the agent's list) is passed over while the others still apply
+    const store = new TranscriptStore(dir);
+    const prefs = await store.loadPrefs();
+    prefs.lastSettings.fake = { modeId: 'plan', config: { model: 'gone', effort: 'low' } };
+    await store.savePrefs(prefs);
+    const m2 = new SessionManager({
+      registry: new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE] } }), store, log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'fake', runInTerminal: () => {}, toast: () => {},
+    });
+    await m2.init();
+    await m2.newSession();
+    expect(m2.active()!.controls.options.map(c => c.value)).toEqual(['m1', 'low']);
+    expect(m2.active()!.controls.modeId).toBe('plan');
+    await m2.dispose();
+  }, 30_000);
 });

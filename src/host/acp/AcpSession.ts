@@ -3,7 +3,7 @@ import { captureTurnSettings } from '@shared/turnSettings';
 import type { EditTurnRequest } from '@shared/protocol';
 import { readFile, stat } from 'node:fs/promises';
 import * as acp from '@agentclientprotocol/sdk';
-import type { AgentId, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, TurnError, Usage } from '@shared/transcript';
+import type { AgentId, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, TurnError, TurnSettings, Usage } from '@shared/transcript';
 import type { AgentRuntimeInfo } from '@shared/inventory';
 import type { AgentRegistry } from './AgentRegistry';
 import { AgentProcess } from './AgentProcess';
@@ -609,6 +609,26 @@ export class AcpSession {
     const r = await this.proc.agent.request(acp.methods.agent.session.setConfigOption, { sessionId: this.acpSessionId!, configId, value });
     applyConfigOptions(c, r.configOptions);
     this.touch();
+  }
+
+  // A fresh session opens on the agent's defaults; replay what was chosen last time in this agent (mode + config values), one request per
+  // difference in control order (model before effort: an agent may reshape the effort list when the model changes, so each value is checked
+  // against the options current at that moment). Choices the agent no longer offers are skipped, a refused one is logged and the rest go on
+  async adoptControls(settings: TurnSettings): Promise<void> {
+    if (this.status !== 'ready' || !this.proc) return;
+    const c = this.state.controls;
+    for (const id of c.options.map(o => o.id)) {
+      const value = settings.config[id];
+      const control = c.options.find(o => o.id === id);
+      if (!value || !control || control.value === value || !control.options.some(o => o.id === value)) continue;
+      try { await this.setConfig(id, value); }
+      catch (e) { this.log(`adopt ${id}=${value} refused: ${msg(e)}`); }
+    }
+    const mode = settings.modeId;
+    if (mode && mode !== c.modeId && c.modes.some(m => m.id === mode)) {
+      try { await this.setMode(mode); }
+      catch (e) { this.log(`adopt mode ${mode} refused: ${msg(e)}`); }
+    }
   }
 
   // Rename / pin: touch only the record, leave the agent alone, and don't bump updatedAt (don't let a rename catapult it to the top of the list)

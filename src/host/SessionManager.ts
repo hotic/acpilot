@@ -2,10 +2,11 @@ import type { AccountInfo, AgentId, AgentInfo, ConfigControl, SessionSummary, Se
 import type { AccountAction, AddAccountVia, WebviewMsg } from '@shared/protocol';
 import type { HiddenMap } from '@shared/settings';
 import type { AgentRuntimeInfo } from '@shared/inventory';
+import { captureTurnSettings } from '@shared/turnSettings';
 import { AgentRegistry } from './acp/AgentRegistry';
 import { AcpSession, type CompactionPolicy, type SessionRecord } from './acp/AcpSession';
 import type { AccountManager } from './accounts/AccountManager';
-import { TranscriptStore, summarize } from './store/TranscriptStore';
+import { TranscriptStore, summarize, type SessionPrefs } from './store/TranscriptStore';
 import { t } from './i18n';
 
 export interface ManagerDeps {
@@ -43,6 +44,10 @@ export class SessionManager {
   private accountActionState = new Map<AgentId, AccountAction>();
   // Sessions seen running at the last onChange; a running → idle edge is the moment to re-read the account's quota
   private wasRunning = new Set<string>();
+  // Mode of each live session at the last onChange: a change that did not come through setMode (a permission answer like Devin's
+  // "switch to bypass mode", Kimi leaving plan after approval) is still the mode in effect, so it is remembered too
+  private modeSeen = new Map<string, string>();
+  private prefs: SessionPrefs = { lastSettings: {} };
   activeId?: string;
 
   constructor(private deps: ManagerDeps) {
@@ -51,9 +56,25 @@ export class SessionManager {
 
   async init() {
     this.index = await this.deps.store.loadIndex();
+    this.prefs = await this.deps.store.loadPrefs();
     this.activeId = this.index[0]?.id;
     await this.deps.registry.probeAll();
     void this.deps.accounts?.refreshQuotas();
+  }
+
+  // The mode / config values last chosen for an agent, replayed onto its next new session
+  lastSettings(agent: AgentId) { return this.prefs.lastSettings[agent]; }
+
+  private remember(s: AcpSession) {
+    this.prefs.lastSettings[s.agent] = captureTurnSettings(s.view().controls);
+    void this.deps.store.savePrefs(this.prefs);
+  }
+
+  private rememberMode(agent: AgentId, modeId: string) {
+    const cur = this.prefs.lastSettings[agent];
+    if (cur?.modeId === modeId) return;
+    this.prefs.lastSettings[agent] = { config: {}, ...cur, modeId };
+    void this.deps.store.savePrefs(this.prefs);
   }
 
   get registry(): AgentRegistry { return this.deps.registry; }
@@ -141,6 +162,15 @@ export class SessionManager {
     this.emitSessions();
     if (s.isRunning) this.wasRunning.add(s.id);
     else if (this.wasRunning.delete(s.id) && s.accountId) void this.deps.accounts?.refreshQuota(s.accountId, true);
+    // Only ready sessions count, and the first ready sighting only records: the mode a session opens with (agent default, or a restored
+    // session's own) is not a new choice; a change after that is
+    const view = s.view();
+    if (view.status === 'ready') {
+      const prev = this.modeSeen.get(s.id);
+      const mode = view.controls.modeId ?? '';
+      this.modeSeen.set(s.id, mode);
+      if (prev !== undefined && mode && mode !== prev) this.rememberMode(s.agent, mode);
+    }
   };
 
   private sessionDeps() {
@@ -167,6 +197,8 @@ export class SessionManager {
     this.activeId = s.id;
     this.onChange(s);
     await s.start();
+    const last = this.lastSettings(id);
+    if (last) await s.adoptControls(last);
   }
 
   // If the current session hasn't said a word yet (just opened / stuck on login), replace it directly; don't leave a trail of empty "New session" entries.
@@ -217,8 +249,8 @@ export class SessionManager {
         case 'stop': await s?.cancel(); break;
         case 'permission': s?.resolvePermission(msg.blockId, msg.optionId); break;
         case 'buildPlan': await this.live.get(msg.sessionId)?.buildPlan(msg.planId, msg.model, msg.optionId); break;
-        case 'setMode': await s?.setMode(msg.id); break;
-        case 'setConfig': await s?.setConfig(msg.configId, msg.value); break;
+        case 'setMode': if (s) { await s.setMode(msg.id); this.remember(s); } break;
+        case 'setConfig': if (s) { await s.setConfig(msg.configId, msg.value); this.remember(s); } break;
         case 'selectAgent': if (s?.agent !== msg.id) await this.newSession(msg.id); break;
         case 'selectSession': await this.selectSession(msg.id); break;
         case 'newSession': await this.newSession(msg.agent); break;
@@ -280,6 +312,7 @@ export class SessionManager {
     const live = this.live.get(id);
     if (live) { await this.deps.store.flush(live.toRecord()); live.dispose(); this.live.delete(id); }
     this.wasRunning.delete(id);
+    this.modeSeen.delete(id);
     const sum = this.index.find(s => s.id === id);
     this.index = this.index.filter(s => s.id !== id);
     await this.deps.store.saveIndex(this.index);

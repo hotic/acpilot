@@ -1,12 +1,20 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { SessionSummary } from '@shared/transcript';
+import type { AgentId, SessionSummary, TurnSettings } from '@shared/transcript';
 import type { SessionRecord } from '../acp/AcpSession';
 import type { BlobStore } from '../acp/attachments';
 import { t } from '../i18n';
 
-// Session persistence: <dir>/index.json holds the summary list, <dir>/<id>.json holds the full record, <dir>/<id>/ holds its attachment blobs. Writes are debounced per session
+// Cross-session memory that is not a setting: the mode / config values last chosen per agent, replayed onto new sessions
+export interface SessionPrefs {
+  lastSettings: Record<AgentId, TurnSettings>;
+}
+
+const META_FILES = new Set(['index.json', 'prefs.json']);
+
+// Session persistence: <dir>/index.json holds the summary list, <dir>/prefs.json the per-agent memory, <dir>/<id>.json the full record,
+// <dir>/<id>/ its attachment blobs. Record writes are debounced per session
 export class TranscriptStore implements BlobStore {
   private timers = new Map<string, NodeJS.Timeout>();
 
@@ -19,12 +27,22 @@ export class TranscriptStore implements BlobStore {
     catch { return this.rebuildIndex(); }
   }
 
+  async loadPrefs(): Promise<SessionPrefs> {
+    try { return { lastSettings: {}, ...(JSON.parse(await readFile(join(this.dir, 'prefs.json'), 'utf8')) as Partial<SessionPrefs>) }; }
+    catch { return { lastSettings: {} }; }
+  }
+
+  async savePrefs(prefs: SessionPrefs) {
+    await this.ensure();
+    await writeFile(join(this.dir, 'prefs.json'), JSON.stringify(prefs, null, 2));
+  }
+
   // If the index is lost, rebuild it by scanning the directory
   private async rebuildIndex(): Promise<SessionSummary[]> {
     await this.ensure();
     const out: SessionSummary[] = [];
     for (const f of await readdir(this.dir)) {
-      if (!f.endsWith('.json') || f === 'index.json') continue;
+      if (!f.endsWith('.json') || META_FILES.has(f)) continue;
       const r = await this.load(f.slice(0, -5));
       if (r) out.push(summarize(r));
     }

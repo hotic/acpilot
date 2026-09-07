@@ -5,7 +5,7 @@ import * as acp from '@agentclientprotocol/sdk';
 // Scripts: default → thought + text; "tool" → tool call + permission request; "slow" → streams slowly, waits for cancel; "auth" → session/new fails with -32000;
 // "big" → reports a very large usage; "/compact" → compaction_update in_progress → completed, usage drops;
 // "fail" → session/prompt rejects with a typed upstream error the way Devin does (once: the same prompt succeeds when sent again);
-// "refuse" → stopReason refusal with no output; "truncate" → some text, then stopReason max_tokens
+// "refuse" → stopReason refusal with no output; "truncate" → some text, then stopReason max_tokens; "mode:<id>" → current_mode_update to that mode
 // Resume: when resume doesn't know the sessionId, a cwd containing "gone" mimics Devin's session_not_found, otherwise reports unknown session
 // Login: when cwd contains "needs-auth", session/new requires authenticate first; authenticate validates _meta.api_key the way Devin does (only accepts good-key)
 
@@ -82,6 +82,11 @@ const app = acp.agent({ name: 'fake-agent' })
     cancelled.delete(sid);
     if (text.endsWith('inspect-history')) {
       await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: JSON.stringify({ sessionId: sid, mode: modes.get(sid), config, prompt: params.prompt }) } });
+      return { stopReason: 'end_turn' };
+    }
+    // "mode:<id>" → the agent switches the session's mode on its own (the way Devin does when a permission answer picks bypass mode)
+    if (text.startsWith('mode:')) {
+      await send({ sessionUpdate: 'current_mode_update', currentModeId: text.slice(5) });
       return { stopReason: 'end_turn' };
     }
     if (text.startsWith('plan-')) {
