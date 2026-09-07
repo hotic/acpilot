@@ -64,7 +64,7 @@ export function decodeAppearance(code: string, fallback: Appearance): Appearance
 // Baseline: finalized as 201110200302100
 export const BASE_APPEARANCE: Appearance = decodeAppearance('201110200302100', {
   density: 'airy', radius: '12', surface: 'tonal', font: 'inter',
-  userMessage: 'bubble', toolLine: 'icon', thought: 'orb', sessions: 'dropdown',
+  userMessage: 'block', toolLine: 'icon', thought: 'orb', sessions: 'dropdown',
   composer: 'island', beam: 'full', beamColor: 'mono', send: 'metal',
   accent: 'agent', motion: 'subtle', fold: 'codex',
 });

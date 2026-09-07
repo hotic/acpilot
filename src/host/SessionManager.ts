@@ -193,6 +193,12 @@ export class SessionManager {
     return this.activeId ? this.live.get(this.activeId) : undefined;
   }
 
+  async editTurn(edit: import('@shared/protocol').EditTurnRequest): Promise<void> {
+    const session = this.live.get(edit.sessionId);
+    if (!session) throw new Error(t('history.unavailable'));
+    await session.editTurn(edit);
+  }
+
   planDocument(sessionId: string, planId: string) {
     return this.live.get(sessionId)?.view().turns.flatMap(t => t.role === 'agent' ? t.blocks : [])
       .find(b => b.type === 'plan_document' && b.id === planId);

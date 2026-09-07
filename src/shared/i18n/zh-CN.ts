@@ -5,6 +5,15 @@ import type { MsgKey } from './keys';
 
 export const zhCN = {
   // Shared verbs / labels
+  'history.edit': '编辑并重新发送',
+  'history.cancel': '取消编辑',
+  'history.replace': '重新发送会替换此条及后续对话。此前记录作为上下文带入新会话，文件改动保留。',
+  'history.unavailable': '请等待会话就绪并结束当前回复。',
+  'history.stale': '对话已更新，请重新打开此条消息进行编辑。',
+  'history.empty': '请输入消息或保留附件。',
+  'history.missingAttachment': '历史附件不可用，对话尚未替换。',
+  'history.optionUnavailable': '选项不可用：{name}。请重新打开编辑框并选择。',
+  'history.cancelled': '已取消重新发送，对话尚未替换。',
   'common.back': '返回',
   'common.close': '关闭',
   'common.undo': '撤销',

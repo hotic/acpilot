@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
-import { Check, ChevronRight, Compass, FoldVertical, Hand, TriangleAlert, X } from 'lucide-react';
+import { Check, ChevronRight, Compass, FoldVertical, Hand, Pencil, TriangleAlert, X } from 'lucide-react';
+import { IconButton } from '../ui/Button';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
 import { t } from '../i18n';
@@ -19,7 +20,7 @@ import { elapsedLabel, foldActivity, splitCodexBlocks } from './folding';
 
 // User message: color block / right-aligned bubble / plain text; ones ACPilot sends automatically (/compact) render as a note line, not a bubble.
 // Attachments (image thumbnails / file pills) sit above the text inside the same bubble
-export function UserMessage({ turn, index, blobUrl }: { turn: UserTurn; index: number; blobUrl?: (blob: string) => string }) {
+export function UserMessage({ turn, index, blobUrl, onEdit, editDisabled }: { turn: UserTurn; index: number; blobUrl?: (blob: string) => string; onEdit?: () => void; editDisabled?: boolean }) {
   const { userMessage } = useAppearance();
   if (turn.auto) {
     return (
@@ -39,6 +40,7 @@ export function UserMessage({ turn, index, blobUrl }: { turn: UserTurn; index: n
     >
       {turn.attachments?.length ? <TurnAttachments attachments={turn.attachments} blobUrl={blobUrl} /> : null}
       {turn.text && <div className="scroll-thin min-h-0 overflow-y-auto whitespace-pre-wrap">{turn.text}</div>}
+      {onEdit && <div className="flex justify-end"><IconButton title={t('history.edit')} aria-label={t('history.edit')} disabled={editDisabled} onClick={onEdit}><Pencil /></IconButton></div>}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AccountAction, FileHit, HostMsg, InitState, WebviewMsg } from '@shared/protocol';
+import type { AccountAction, EditTurnRequest, FileHit, HostMsg, InitState, WebviewMsg } from '@shared/protocol';
 import type { AccountInfo, AgentId, AgentInfo, ConfigControl, SessionSummary, SessionView } from '@shared/transcript';
 import type { HiddenMap, SettingsView } from '@shared/settings';
 import type { AgentInventory } from '@shared/inventory';
@@ -19,6 +19,14 @@ declare global {
 // Always through the memo: acquireVsCodeApi() throws when called twice, and other components (Link) reach the api via vscodeApi()
 const vscode = vscodeApi();
 const post = (m: WebviewMsg) => vscode.postMessage(m);
+
+// Replies return to the originating webview. Drafts survive a rejected edit.
+const editWaits = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
+const editTurn = (edit: EditTurnRequest) => new Promise<void>((resolve, reject) => {
+  const requestId = crypto.randomUUID();
+  editWaits.set(requestId, { resolve, reject });
+  post({ type: 'editTurn', requestId, edit });
+});
 
 // The one request/response pair over postMessage: file search for @ mentions. Each request gets a seq; the matching `files` reply resolves it.
 // A reply that never comes (host gone) resolves empty after a while so nothing waits forever
@@ -56,6 +64,12 @@ export function App() {
     const onMsg = (e: MessageEvent<HostMsg>) => {
       const m = e.data;
       switch (m.type) {
+        case 'editTurnResult': {
+          const wait = editWaits.get(m.requestId);
+          editWaits.delete(m.requestId);
+          if (m.error) wait?.reject(new Error(m.error)); else wait?.resolve();
+          break;
+        }
         case 'init': setInit(m.state); setAppearance(m.state.appearance); setAgents(m.state.agents); setSessions(m.state.sessions); setAccounts(m.state.accounts); setAccountActions(m.state.accountActions ?? []); setHidden(m.state.hidden); setSession(m.state.active); setSettings(m.state.settings); setLocale(m.state.locale); setLoc(m.state.locale); break;
         case 'appearance': setAppearance(m.appearance); break;
         case 'agents': setAgents(m.agents); break;
@@ -82,6 +96,7 @@ export function App() {
   }, [view, page, controls]);
 
   const on = useMemo<ShellHandlers>(() => ({
+    editTurn,
     send: (text, attachments) => post({ type: 'send', text, ...(attachments.length ? { attachments } : {}) }),
     searchFiles,
     stop: () => post({ type: 'stop' }),

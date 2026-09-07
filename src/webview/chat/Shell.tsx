@@ -3,15 +3,16 @@ import { Paperclip } from 'lucide-react';
 import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
 import type { HiddenMap } from '@shared/settings';
 import type { FollowUp } from '@shared/settings';
-import type { AccountAction, AddAccountVia, FileHit } from '@shared/protocol';
+import type { AccountAction, AddAccountVia, EditTurnRequest, FileHit } from '@shared/protocol';
 import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
 import { t } from '../i18n';
 import { ShellLayerContext } from '../ui/Popover';
 import { cn } from '../ui/cn';
 import { Header } from './Header';
 import { SessionList } from './SessionList';
-import { AgentMessage, UserMessage } from './Turns';
-import { Composer } from './Composer';
+import { AgentMessage } from './Turns';
+import { HistoryContext, HistoryMessage } from './HistoryMessage';
+import { Composer, type ComposerProps } from './Composer';
 import { Notice } from './Notice';
 import { Toast } from './Toast';
 import { Alert, isShortStop } from './Alert';
@@ -20,6 +21,7 @@ import { PlanDocumentContext } from './PlanDocument';
 
 // Every action the webview sends to the host; in the LAB a fake host implements these, the real build swaps in postMessage
 export interface ShellHandlers {
+  editTurn?: (edit: EditTurnRequest) => Promise<void>;
   send: (text: string, attachments: Draft[]) => void;
   // @ mention lookup over workspace files
   searchFiles: (query: string) => Promise<FileHit[]>;
@@ -101,6 +103,8 @@ export function Shell(p: ShellProps) {
   const wide = p.host === 'editor';
   const root = useRef<HTMLDivElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editing, setEditing] = useState<{ sessionId: string; index: number }>();
+  useEffect(() => setEditing(undefined), [p.activeSessionId]);
   // Deletion applies immediately, with an undoable toast floating at the bottom (modeled on Codex's archive), no confirmation dialog; refused attachments show up the same way
   const [toasts, setToasts] = useState<ToastState[]>([]);
   const dropToast = useCallback((key: string) => setToasts(ts => ts.filter(t => t.key !== key)), []);
@@ -132,6 +136,14 @@ export function Shell(p: ShellProps) {
       onPin={on.pinSession}
     />
   );
+
+  const composerProps: ComposerProps = {
+    running: p.running, disabled: p.status !== 'ready', followUp: p.followUp,
+    theme: p.theme, turns: p.turns, controls: p.controls, hidden: p.hidden?.[p.agent.id],
+    usage: p.usage, canCompact: p.canCompact, cwd: p.cwd ?? '',
+    onSend: on.send, onSearchFiles: on.searchFiles, onNotice: notice, onStop: on.stop,
+    onSetMode: on.setMode, onSetConfig: on.setConfig, onCompact: on.compact,
+  };
 
   return (
     <AppearanceContext.Provider value={a}>
@@ -172,7 +184,16 @@ export function Shell(p: ShellProps) {
                 build: p.activeSessionId && on.buildPlan ? (id, model, optionId) => on.buildPlan!(p.activeSessionId!, id, model, optionId) : undefined,
                 open: p.activeSessionId && on.openPlan ? id => on.openPlan!(p.activeSessionId!, id) : undefined,
               }}>
-                <Thread turns={p.turns} running={p.running} wide={wide} replayKey={p.replayKey} blobUrl={blobUrl} onPermission={on.permission} />
+                <HistoryContext.Provider value={on.editTurn && p.activeSessionId ? {
+                  sessionId: p.activeSessionId, composer: composerProps, edit: on.editTurn,
+                  editing: editing?.sessionId === p.activeSessionId ? editing.index : undefined,
+                  // A late reply from another session must not close its editor.
+                  select: index => setEditing(current => index === undefined
+                    ? current?.sessionId === p.activeSessionId ? undefined : current
+                    : { sessionId: p.activeSessionId!, index }),
+                } : undefined}>
+                  <Thread key={p.activeSessionId} turns={p.turns} running={p.running} wide={wide} replayKey={p.replayKey} blobUrl={blobUrl} onPermission={on.permission} />
+                </HistoryContext.Provider>
               </PlanDocumentContext.Provider>
               {toasts.length > 0 && (
                 <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex flex-col items-center gap-1 px-page">
@@ -198,25 +219,7 @@ export function Shell(p: ShellProps) {
                 onSelectAccount={on.selectAccount} onAddAccount={via => on.addAccount(p.agent.id, via)}
               />
               {p.queued && <div className="truncate px-page pt-2 text-3 text-fg-3">{t('session.queued', { text: p.queued })}</div>}
-              <Composer
-                running={p.running}
-                disabled={p.status !== 'ready'}
-                followUp={p.followUp}
-                theme={p.theme}
-                turns={p.turns}
-                controls={p.controls}
-                hidden={p.hidden?.[p.agent.id]}
-                usage={p.usage}
-                canCompact={p.canCompact}
-                cwd={p.cwd ?? ''}
-                onSend={on.send}
-                onSearchFiles={on.searchFiles}
-                onNotice={notice}
-                onStop={on.stop}
-                onSetMode={on.setMode}
-                onSetConfig={on.setConfig}
-                onCompact={on.compact}
-              />
+              <Composer {...composerProps} />
             </div>
           </div>
         </div>
@@ -270,7 +273,7 @@ function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: Thre
       exchanges.push({ key: ti, messages: [] });
     }
     exchanges[exchanges.length - 1]!.messages.push(turn.role === 'user'
-      ? <UserMessage key={ti} turn={turn} index={index} blobUrl={blobUrl} />
+      ? <HistoryMessage key={turn.id ?? ti} turn={turn} turnIndex={ti} index={index} blobUrl={blobUrl} />
       : <AgentMessage key={ti} turn={turn} index={index} running={running && ti === turns.length - 1} onPermission={onPermission} />);
   });
   return (

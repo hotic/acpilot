@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react';
-import { Shrink } from 'lucide-react';
+import { useCallback, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { Shrink, X } from 'lucide-react';
 import type { ConfigControl, Draft, SessionControls, Turn, Usage } from '@shared/transcript';
 import type { FileHit } from '@shared/protocol';
 import type { HiddenMap } from '@shared/settings';
@@ -36,7 +36,9 @@ export interface ComposerProps {
   canCompact?: boolean;
   // Workspace root: dropped and mentioned files are labeled relative to it
   cwd: string;
-  onSend: (text: string, attachments: Draft[]) => void;
+  onSend: (text: string, attachments: Draft[]) => void | Promise<void>;
+  // Inline history editors keep their draft until the host accepts the resend.
+  edit?: { text: string; attachments?: ReactNode; hasAttachments: boolean; onCancel: () => void };
   onSearchFiles: (query: string) => Promise<FileHit[]>;
   // Something couldn't be attached; the shell shows it as a toast
   onNotice: (text: string) => void;
@@ -62,9 +64,9 @@ const RUNNING_PLACEHOLDER: Record<FollowUp, MsgKey> = {
 // Attachments come from pasting / dropping (images, OS files, Explorer items) or from an @ mention that searches the workspace
 export function Composer(p: ComposerProps) {
   const { composer } = useAppearance();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(p.edit?.text ?? '');
   const [drafts, setDrafts] = useState<Draft[]>([]);
-  const flush = composer === 'flush';
+  const flush = !p.edit && composer === 'flush';
   // The beam lights up while the composer is focused (focus-within semantics), not while it's working.
   // Overlays portal to the shell root, so opening a menu blurs the composer; "a menu is open" therefore also counts as focused
   const [focused, setFocused] = useState(false);
@@ -85,13 +87,21 @@ export function Composer(p: ComposerProps) {
   const leftControls = p.controls.options.filter(c => !isModel(c));
   // Files are read asynchronously after a paste / drop; sending is held until every read has landed, so a message never leaves without its attachments
   const [reading, setReading] = useState(0);
-  const canSend = !p.disabled && reading === 0 && (text.trim().length > 0 || drafts.length > 0);
-  const send = () => {
+  const [sending, setSending] = useState(false);
+  const canSend = !p.disabled && !sending && reading === 0 && (text.trim().length > 0 || drafts.length > 0 || !!p.edit?.hasAttachments);
+  const send = async () => {
     if (!canSend) return;
-    p.onSend(text, drafts);
-    setText('');
-    setDrafts([]);
-    setDismissed(undefined);
+    setSending(true);
+    try {
+      await p.onSend(text, drafts);
+      setText('');
+      setDrafts([]);
+      setDismissed(undefined);
+    } catch (e) {
+      p.onNotice(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
   };
 
   // Drop zone: the whole field lights up while something attachable hovers over it. Enter / leave are counted rather than trusting relatedTarget,
@@ -157,6 +167,7 @@ export function Composer(p: ComposerProps) {
         if (hits[active]) { e.preventDefault(); pick(hits[active]!); return; }
       }
     }
+    if (e.key === 'Escape' && p.edit && !sending) { e.preventDefault(); p.edit.onCancel(); return; }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   };
   const syncCaret = (el: HTMLTextAreaElement) => {
@@ -170,6 +181,7 @@ export function Composer(p: ComposerProps) {
       ref={fieldRef}
       data-busy={dim || undefined}
       data-drag={dragging || undefined}
+      data-focused={beamActive || undefined}
       className={cn('composer-field flex flex-col', flush ? 'rounded-none' : 'rounded-lg')}
       onFocus={() => setFocused(true)}
       onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false); }}
@@ -178,12 +190,15 @@ export function Composer(p: ComposerProps) {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      {p.edit?.attachments}
       <DraftChips drafts={drafts} onRemove={i => setDrafts(d => d.filter((_, j) => j !== i))} />
       <textarea
         ref={textarea}
         rows={1}
         value={text}
-        disabled={p.disabled}
+        disabled={p.disabled || sending}
+        autoFocus={!!p.edit}
+        aria-label={p.edit ? t('history.edit') : undefined}
         onChange={e => { setText(e.target.value); syncCaret(e.target); }}
         onKeyUp={e => syncCaret(e.currentTarget)}
         onClick={e => syncCaret(e.currentTarget)}
@@ -200,7 +215,7 @@ export function Composer(p: ComposerProps) {
       {mentionOpen && <MentionList anchor={fieldRef} hits={hits} active={active} empty={span!.query.length > 0} onHover={setActive} onPick={pick} />}
       {/* The row is a container: below the sm tier (a 380 sidebar leaves ~324 here) the mode chip collapses to icon + caret so the option chips keep their room —
           the same move Cursor makes in a narrow sidebar; the editor panel is wide enough for the names */}
-      <div className="@container flex items-center gap-1 px-2 pt-1 pb-2">
+      <fieldset disabled={p.disabled || sending} className="@container flex min-w-0 items-center gap-1 px-2 pt-1 pb-2">
         <div className="flex min-w-0 flex-1 items-center gap-1">
           {/* Mode is the one solid chip and never truncates; single-line rows with a glyph each, the description rides along as a tooltip */}
           {p.controls.modes.length > 0 && (
@@ -235,13 +250,14 @@ export function Composer(p: ComposerProps) {
         {modelControls.map(c => (
           <OptionControl key={c.id} end control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
         ))}
+        {p.edit && <IconButton title={t('history.cancel')} aria-label={t('history.cancel')} onClick={p.edit.onCancel}><X /></IconButton>}
         <SendButton running={p.running} filled={canSend} theme={p.theme} onClick={p.running ? p.onStop : send} />
-      </div>
+      </fieldset>
     </div>
   );
 
   return (
-    <div className={cn(flush ? 'pt-0' : 'px-page pb-page pt-2')}>
+    <div className={cn(p.edit ? 'min-w-0' : flush ? 'pt-0' : 'px-page pb-page pt-2')}>
       <WorkingBeam active={beamActive} theme={p.theme}>{field}</WorkingBeam>
     </div>
   );

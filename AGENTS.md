@@ -28,6 +28,8 @@ A chat shell for VS Code / Cursor that drives official agent CLIs (`grok agent s
 
 Hard-won facts about the ACP implementations we drive; check here before assuming the spec:
 
+- Historical message editing uses a fresh `session/new` plus retained transcript context because standard ACP has no turn-addressed rewind. Never truncate only the UI while keeping the old peer context, and never replay historical tool actions as prompts. `AcpSession.editTurn` stages attachments and exact model/config/mode selections before replacing the local continuation; failed edited-turn retries rebuild that context. Workspace files are not rolled back. See `docs/history-editing.md` and `scripts/probe-edit-turn.ts` for Grok / Devin / Kimi verification and capability boundaries.
+
 - Model identity must preserve the ACP option ID and source/group identity, independently of the display name. Kimi's `kimi-code/k3` and `asgard/kimi-k3` both advertise `K3`; merging them by name routes selection to the first provider. Grok advertises custom config aliases such as `asgard` without source metadata, so `host/acp/modelSources.ts` reads custom endpoint declarations and `shared/modelSources.ts` annotates the options. Keep ACP select groups through normalization. New agent integrations must verify official/custom same-name selection, independent hiding, restoration, and config updates; unknown sources stay unclassified, and ambiguous duplicate parameter tuples remain separate by their original option IDs. Devin's genuine effort/Fast/1M variants still group normally.
 
 - Grok echoes our prompt back as `user_message_chunk`; ignore it while a turn is in flight, and suppress content updates during load/resume replay

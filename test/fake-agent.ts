@@ -10,6 +10,7 @@ import * as acp from '@agentclientprotocol/sdk';
 // Login: when cwd contains "needs-auth", session/new requires authenticate first; authenticate validates _meta.api_key the way Devin does (only accepts good-key)
 
 const sessions = new Set<string>();
+const modes = new Map<string, string>();
 let seq = 0;
 let usedTokens = 1234;
 let compactions = 0;
@@ -60,7 +61,7 @@ const app = acp.agent({ name: 'fake-agent' })
     authed = true;
     return {};
   })
-  .onRequest(acp.methods.agent.session.setMode, () => ({}))
+  .onRequest(acp.methods.agent.session.setMode, ({ params }) => { modes.set(params.sessionId, params.modeId); return {}; })
   .onRequest(acp.methods.agent.session.setConfigOption, async ({ params }) => {
     if (params.value === 'unavailable') throw acp.RequestError.invalidParams(undefined, 'Model unavailable');
     if (background && params.configId === 'effort') {
@@ -79,6 +80,10 @@ const app = acp.agent({ name: 'fake-agent' })
     const text = params.prompt.map(p => (p.type === 'text' ? p.text : '')).join('');
     const send = (update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId: sid, update });
     cancelled.delete(sid);
+    if (text.endsWith('inspect-history')) {
+      await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: JSON.stringify({ sessionId: sid, mode: modes.get(sid), config, prompt: params.prompt }) } });
+      return { stopReason: 'end_turn' };
+    }
     if (text.startsWith('plan-')) {
       const path = '/Users/test/.devin/plans/demo.md';
       const markdown = '# Demo plan\n\nCreate hello.txt.';

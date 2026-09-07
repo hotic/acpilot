@@ -177,10 +177,20 @@ export type Attachment =
 
 export interface UserTurn {
   role: 'user';
+  id?: string;
   text: string;
   attachments?: Attachment[];
+  // The exact ACP selections used when this message was sent; older records omit it.
+  settings?: TurnSettings;
+  // Retrying a failed edited turn must rebuild its preceding context as well.
+  edited?: true;
   // Sent automatically by ACPilot (/compact over threshold); rendered as a note line instead of a bubble
   auto?: boolean;
+}
+
+export interface TurnSettings {
+  modeId?: string;
+  config: Record<string, string>;
 }
 
 // How an agent turn ended. `end_turn` and `cancelled` are the normal outcomes; the rest stopped the turn short and are shown to the user:

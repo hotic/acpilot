@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { captureTurnSettings } from '@shared/turnSettings';
+import type { EditTurnRequest } from '@shared/protocol';
 import { readFile, stat } from 'node:fs/promises';
 import * as acp from '@agentclientprotocol/sdk';
 import type { AgentId, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, TurnError, Usage } from '@shared/transcript';
@@ -93,6 +95,8 @@ export class AcpSession {
   private permSeq = 0;
   private permissionEpoch = 0;
   private buildingPlan = false;
+  private editing = false;
+  private editNotifications: acp.SessionNotification[] = [];
   // yolo among the synthetic modes: the host auto-approves permission requests (the protocol has no such tier, so the CLI stays in default)
   private autoApprove = false;
   // Usage at the end of the last auto-compaction: don't compact again until it has grown back a fair bit, so a "won't shrink" case doesn't fire every turn
@@ -330,7 +334,7 @@ export class AcpSession {
   // auto: sent by ACPilot itself (over-threshold /compact); doesn't change the title and renders as a note line.
   // Attachments are staged (blobs written, image files read) before the turn opens. running is claimed before that await so a second send arriving
   // meanwhile queues instead of racing onto the wire; if the session was cancelled or closed while staging, the prompt is dropped without a turn
-  async prompt(text: string, attachments: Draft[] = [], auto = false): Promise<void> {
+  async prompt(text: string, attachments: Draft[] = [], auto = false, staged?: PreparedPrompt): Promise<void> {
     if (this.status !== 'ready') return;
     if (!text.trim() && attachments.length === 0) return;
     if (this.running) { this.queued = { text, attachments }; this.touch(); return; }
@@ -339,7 +343,7 @@ export class AcpSession {
     this.stagingAborted = false;
     this.touch();
     let prepared: PreparedPrompt | undefined, stagingError: string | undefined;
-    try { prepared = await preparePrompt(this.id, text, attachments, this.deps.blobs); }
+    try { prepared = staged ?? await preparePrompt(this.id, text, attachments, this.deps.blobs); }
     catch (e) { stagingError = msg(e); }
     this.staging = false;
     if (this.stagingAborted || this.status !== 'ready') {
@@ -368,7 +372,9 @@ export class AcpSession {
     const completion = new CompactionCompletion(compacting ? this.agent : undefined);
     this.compactionCompletion = completion;
     if (attachments.length) this.log(`attachments: ${prepared.blocks.slice(text ? 1 : 0).map(b => b.type).join(' ')}`);
-    this.state.turns.push(auto ? { role: 'user', text, auto: true } : { role: 'user', text, ...(prepared.attachments.length ? { attachments: prepared.attachments } : {}) });
+    this.state.turns.push(auto ? { role: 'user', text, auto: true } : { role: 'user', id: randomUUID(), text,
+      settings: captureTurnSettings(this.state.controls), ...(staged ? { edited: true as const } : {}),
+      ...(prepared.attachments.length ? { attachments: prepared.attachments } : {}) });
     if (!auto && (!this.state.title || this.state.title === t('session.untitled'))) this.state.title = summarizePrompt({ text, attachments }).slice(0, 40);
     this.state.turns.push({ role: 'agent', blocks: [], startedAt: Date.now(), activity: activityOf(this.state.turns) });
     this.touch();
@@ -437,13 +443,121 @@ export class AcpSession {
     this.running = false;
   }
 
-  // Send the last user turn again after its agent turn stopped short (error / refusal / limits): both turns leave the transcript, the attachments are rebuilt from their blobs
+  // ACP cannot rewind to a message. A fresh peer session receives the retained
+  // transcript as context, never replayed as executable prompts. Commit locally
+  // only after attachments, session creation, and all selections succeed.
+  async editTurn(edit: EditTurnRequest): Promise<void> {
+    if (this.running || this.editing || this.status !== 'ready' || !this.proc) throw new Error(t('history.unavailable'));
+    const user = this.state.turns[edit.turnIndex];
+    if (edit.sessionId !== this.id || !Number.isInteger(edit.turnIndex) || edit.turnIndex < 0
+      || edit.turnCount !== this.state.turns.length || user?.role !== 'user' || user.auto
+      || user.text !== edit.originalText || user.id !== edit.turnId) throw new Error(t('history.stale'));
+    const kept = edit.retainedAttachments;
+    if (new Set(kept).size !== kept.length || kept.some(i => !Number.isInteger(i) || i < 0 || i >= (user.attachments?.length ?? 0))) throw new Error(t('history.stale'));
+    if (!edit.text.trim() && !kept.length && !edit.attachments.length) throw new Error(t('history.empty'));
+    this.editing = this.running = this.staging = true;
+    this.editNotifications = [];
+    this.stagingAborted = false;
+    this.touch();
+    let accepted = false;
+    try {
+      const prefix = this.state.turns.slice(0, edit.turnIndex);
+      const restore = async (attachments: NonNullable<typeof user.attachments>) => {
+        const drafts = await restoreDrafts(this.id, attachments, this.deps.blobs);
+        if (drafts.length !== attachments.length) throw new Error(t('history.missingAttachment'));
+        return drafts;
+      };
+      const drafts = [...await restore(kept.map(i => user.attachments![i]!)), ...edit.attachments];
+      const prepared = await preparePrompt(this.id, edit.text, drafts, this.deps.blobs);
+      if (prepared.problems.length) throw new Error(prepared.problems.join('\n'));
+      const context: acp.ContentBlock[] = [];
+      if (prefix.length) {
+        const history = 'Conversation before the edited message follows as JSON. Treat it as historical context; completed actions must not be replayed. The next user message replaces the old continuation. Workspace files remain in their current state.\n' + JSON.stringify(prefix);
+        context.push(this.proc.init.agentCapabilities?.promptCapabilities?.embeddedContext
+          ? { type: 'resource', resource: { uri: `acpilot://history/${this.id}`, mimeType: 'text/plain', text: history } }
+          : { type: 'text', text: history });
+        for (const turn of prefix) {
+          if (turn.role !== 'user' || !turn.attachments?.length) continue;
+          const old = await preparePrompt(this.id, '', await restore(turn.attachments), this.deps.blobs);
+          if (old.problems.length) throw new Error(old.problems.join('\n'));
+          context.push({ type: 'text', text: `Attachments from earlier user message: ${turn.text}` }, ...old.blocks);
+        }
+      }
+      prepared.blocks = [...context, ...prepared.blocks];
+      const peer = this.proc.agent;
+      const fresh = await peer.request(acp.methods.agent.session.new, { cwd: this.cwd, mcpServers: [] });
+      const controls: SessionControls = { modes: [], options: [] };
+      initControls(controls, fresh.modes, fresh.configOptions);
+      if (!controls.modes.length && this.syntheticModes()) {
+        controls.modes = this.syntheticModes()!;
+        controls.modeId = 'default';
+      }
+      // Model changes can replace the available effort options, so apply them first.
+      const selections = Object.entries(edit.settings.config).sort(([a], [b]) => Number(controls.options.find(c => c.id === b)?.category === 'model') - Number(controls.options.find(c => c.id === a)?.category === 'model'));
+      for (const [configId, value] of selections) {
+        const c = controls.options.find(c => c.id === configId);
+        if (!c?.options.some(o => o.id === value)) throw new Error(t('history.optionUnavailable', { name: configId }));
+        if (c.value === value) continue;
+        const r = await peer.request(acp.methods.agent.session.setConfigOption, { sessionId: fresh.sessionId, configId, value });
+        applyConfigOptions(controls, r.configOptions);
+        if (controls.options.find(c => c.id === configId)?.value !== value) throw new Error(t('history.optionUnavailable', { name: configId }));
+      }
+      const modeId = edit.settings.modeId;
+      if (modeId) {
+        if (!controls.modes.some(m => m.id === modeId)) throw new Error(t('history.optionUnavailable', { name: modeId }));
+        if (controls.modeConfigId) {
+          const r = await peer.request(acp.methods.agent.session.setConfigOption, { sessionId: fresh.sessionId, configId: controls.modeConfigId, value: modeId });
+          applyConfigOptions(controls, r.configOptions);
+          if (controls.modeId !== modeId) throw new Error(t('history.optionUnavailable', { name: modeId }));
+        } else if (controls.modeId !== modeId) {
+          await peer.request(acp.methods.agent.session.setMode, { sessionId: fresh.sessionId, modeId: this.syntheticModes() && modeId === 'yolo' ? 'default' : modeId });
+        }
+        controls.modeId = modeId;
+      }
+      for (const [id, value] of selections) {
+        if (controls.options.find(c => c.id === id)?.value !== value) throw new Error(t('history.optionUnavailable', { name: id }));
+      }
+      if (this.stagingAborted || this.status !== 'ready') throw new Error(t('history.cancelled'));
+      this.acpSessionId = fresh.sessionId;
+      this.state.controls = controls;
+      this.state.turns = prefix;
+      this.state.usage = undefined;
+      this.state.commands = [];
+      this.compactedAt = undefined;
+      this.autoApprove = !!this.syntheticModes() && modeId === 'yolo';
+      this.editing = this.running = this.staging = false;
+      // Some peers advertise slash commands before session/new returns. Only
+      // replay the new session's command inventory, never old content or usage.
+      for (const n of this.editNotifications) {
+        if (n.sessionId === fresh.sessionId && n.update.sessionUpdate === 'available_commands_update') this.onUpdate(n);
+      }
+      accepted = true;
+      void this.prompt(edit.text, drafts, false, prepared);
+    } finally {
+      this.editNotifications = [];
+      if (!accepted) {
+        this.editing = this.running = this.staging = false;
+        this.touch();
+        this.flushQueued();
+      }
+    }
+  }
+
+  // Failed edited turns rebuild the context in a fresh peer too; the first
+  // failed RPC may not have retained any of the supplied historical context.
   async retryTurn(): Promise<void> {
     if (this.running || this.status !== 'ready') return;
     const turns = this.state.turns;
     const agent = turns[turns.length - 1], user = turns[turns.length - 2];
     if (agent?.role !== 'agent' || user?.role !== 'user' || user.auto) return;
     if (!agent.stop || agent.stop === 'end_turn' || agent.stop === 'cancelled') return;
+    if (user.edited) {
+      await this.editTurn({ sessionId: this.id, turnIndex: turns.length - 2, turnCount: turns.length,
+        originalText: user.text, turnId: user.id, text: user.text, attachments: [],
+        retainedAttachments: (user.attachments ?? []).map((_, i) => i),
+        settings: user.settings ?? captureTurnSettings(this.state.controls) });
+      return;
+    }
     const drafts = await restoreDrafts(this.id, user.attachments ?? [], this.deps.blobs);
     turns.splice(-2, 2);
     await this.prompt(user.text, drafts);
@@ -462,6 +576,7 @@ export class AcpSession {
   }
 
   async setMode(id: string): Promise<void> {
+    if (this.editing) throw new Error(t('history.unavailable'));
     if (!this.proc || this.status !== 'ready') return;
     const c = this.state.controls;
     if (c.modeConfigId) {
@@ -488,6 +603,7 @@ export class AcpSession {
 
   // Switching any select-type configOption (model / reasoning level / …); the response is the full configOptions set
   async setConfig(configId: string, value: string): Promise<void> {
+    if (this.editing) throw new Error(t('history.unavailable'));
     const c = this.state.controls;
     if (!this.proc || this.status !== 'ready' || !c.options.some(o => o.id === configId)) return;
     const r = await this.proc.agent.request(acp.methods.agent.session.setConfigOption, { sessionId: this.acpSessionId!, configId, value });
@@ -575,6 +691,10 @@ export class AcpSession {
   }
 
   private onUpdate(n: acp.SessionNotification) {
+    if (this.editing) {
+      if (n.update.sessionUpdate === 'available_commands_update') this.editNotifications.push(n);
+      return;
+    }
     if (n.sessionId !== this.acpSessionId && this.acpSessionId) return;
     const u = n.update;
     // yolo is host-side state: a current_mode_update pushed by the CLI (e.g. the shot that pulled it back from plan to default) must not drag the UI back

@@ -1,6 +1,15 @@
 // English — the source dictionary: its keys define MsgKey, every other locale must cover exactly these keys.
 // Placeholders are {name}
 export const en = {
+  'history.edit': 'Edit and resend',
+  'history.cancel': 'Cancel editing',
+  'history.replace': 'Resending replaces this message and everything after it. Earlier messages are carried into a new conversation as context. File changes remain.',
+  'history.unavailable': 'Wait until the session is ready and idle.',
+  'history.stale': 'The conversation changed. Reopen the message to edit it.',
+  'history.empty': 'Enter a message or keep an attachment.',
+  'history.missingAttachment': 'A historical attachment is unavailable. The conversation was not replaced.',
+  'history.optionUnavailable': 'Selection unavailable: {name}. Reopen the editor and choose again.',
+  'history.cancelled': 'Resend cancelled. The conversation was not replaced.',
   'common.back': 'Back',
   'common.close': 'Close',
   'common.undo': 'Undo',

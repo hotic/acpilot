@@ -223,7 +223,7 @@
             "block",
             "plain"
           ],
-          "default": "bubble",
+          "default": "block",
           "description": "%acpilot.conf.appearance.userMessage%"
         },
         "acpilot.appearance.toolLine": {

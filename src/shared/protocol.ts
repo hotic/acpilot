@@ -1,4 +1,4 @@
-import type { AccountInfo, AgentId, AgentInfo, ConfigControl, Draft, SessionSummary, SessionView } from './transcript';
+import type { AccountInfo, AgentId, AgentInfo, ConfigControl, Draft, SessionSummary, SessionView, TurnSettings } from './transcript';
 import type { Appearance } from './appearance';
 import type { HiddenMap, SettingKey, SettingsView } from './settings';
 import type { Locale } from './i18n';
@@ -7,6 +7,18 @@ import type { AgentInventory } from './inventory';
 // Message contract between host ↔ webview; both sides trust only this file
 
 export type WebviewHost = 'sidebar' | 'editor';
+
+export interface EditTurnRequest {
+  sessionId: string;
+  turnIndex: number;
+  turnCount: number;
+  originalText: string;
+  turnId?: string;
+  text: string;
+  retainedAttachments: number[];
+  attachments: Draft[];
+  settings: TurnSettings;
+}
 
 export interface InitState {
   host: WebviewHost;
@@ -43,6 +55,7 @@ export function isSafeExternalUrl(url: string): boolean {
 }
 
 export type HostMsg =
+  | { type: 'editTurnResult'; requestId: string; error?: string }
   | { type: 'init'; state: InitState }
   | { type: 'appearance'; appearance: Appearance }
   | { type: 'agents'; agents: AgentInfo[] }
@@ -73,6 +86,7 @@ export interface AccountAction {
 }
 
 export type WebviewMsg =
+  | { type: 'editTurn'; requestId: string; edit: EditTurnRequest }
   | { type: 'ready' }
   | { type: 'send'; text: string; attachments?: Draft[] }
   | { type: 'stop' }

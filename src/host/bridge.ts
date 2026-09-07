@@ -79,6 +79,15 @@ export class WebviewBridge implements vscode.Disposable {
       this.post({ type: 'files', seq: m.seq, files });
       return;
     }
+    if (m.type === 'editTurn') {
+      try {
+        await this.manager.editTurn(m.edit);
+        this.post({ type: 'editTurnResult', requestId: m.requestId });
+      } catch (e) {
+        this.post({ type: 'editTurnResult', requestId: m.requestId, error: e instanceof Error ? e.message : String(e) });
+      }
+      return;
+    }
     if (await this.onSettingsMessage(m)) return;
     await this.manager.handle(m);
   }

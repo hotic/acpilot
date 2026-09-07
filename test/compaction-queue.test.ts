@@ -45,7 +45,7 @@ describe('background compaction queue', () => {
       await until(() => !s.isRunning);
       expect(s.view().queued).toBeUndefined();
       expect(s.view().turns).toHaveLength(6);
-      expect(s.view().turns[4]).toEqual({ role: 'user', text: 'follow-up' });
+      expect(s.view().turns[4]).toMatchObject({ role: 'user', text: 'follow-up' });
       expect(s.view().turns[5]).toMatchObject({ role: 'agent', stop: 'end_turn', blocks: expect.arrayContaining([expect.objectContaining({ type: 'text', markdown: 'hello world' })]) });
       expect(logs.some(l => /\] cancel$/.test(l))).toBe(false);
     } finally { s.dispose(); }
