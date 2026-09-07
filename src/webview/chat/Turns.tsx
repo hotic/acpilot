@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
-import { Check, ChevronRight, Compass, FoldVertical, TriangleAlert, X } from 'lucide-react';
-import type { AgentBlock, AgentTurn, CompactionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
+import { Check, ChevronRight, Compass, FoldVertical, Hand, TriangleAlert, X } from 'lucide-react';
+import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
 import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { Disclosure } from '../ui/Disclosure';
@@ -12,6 +12,7 @@ import { Plan } from './Plan';
 import { ToolCall } from './ToolCall';
 import { Prose } from './Prose';
 import { Permission } from './Permission';
+import { PlanDocument } from './PlanDocument';
 import { TurnAttachments } from './Attachments';
 import { elapsedLabel, foldActivity, splitCodexBlocks } from './folding';
 
@@ -46,9 +47,21 @@ type OnPermission = (blockId: string, optionId: string) => void;
 // Agent message: consecutive "lines" (thought / plan / tool, commands included) are grouped together; prose / permission cards each stand alone as blocks.
 // The activity line only fills a "gap": the turn is running and this message has no in-progress tool line, streaming thought, or streaming text yet
 export function AgentMessage({ turn, index, running, onPermission }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission }) {
+  const plans = turn.blocks.filter(b => b.type === 'plan_document');
+  // Keep pending approvals in the activity input even when their controls live
+  // on the plan card; removing them makes the process heading report thinking.
+  const content = { ...turn, blocks: turn.blocks.filter(b => b.type !== 'plan_document') };
+  return <div className="flex flex-col gap-gap">
+    <AgentContent turn={content} index={index} running={running} onPermission={onPermission} />
+    {plans.map(plan => <PlanDocument key={plan.id} block={plan}
+      permission={turn.blocks.find((b): b is PermissionBlock => b.type === 'permission' && b.planId === plan.id)} onChoose={onPermission} />)}
+  </div>;
+}
+
+function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission }) {
   const { fold } = useAppearance();
   if (fold === 'codex') return <CodexMessage turn={turn} running={running} onPermission={onPermission} />;
-  const groups = groupBlocks(turn.blocks);
+  const groups = groupBlocks(turn.blocks.filter(b => b.type !== 'permission' || !b.planId));
   let i = index;
   const showActivity = running && !!turn.activity && !turn.blocks.some(isBusy);
   return (
@@ -106,10 +119,10 @@ function isBusy(b: AgentBlock): boolean {
   return false;
 }
 
-// What's happening: Orb + verb on a single non-clickable row. It's the only one of its kind in the message, no alignment concerns, so the Orb is placed unconditionally
+// Approval waits use a static icon; motion remains reserved for thinking.
 function Activity({ label }: { label: string }) {
   return (
-    <Row lead={<Orb kind="think" />} className="font-medium">
+    <Row lead={label === '等待批准' ? <Hand className="size-icon" strokeWidth={1.5} /> : <Orb kind="think" />} className="font-medium">
       <RowLabel>{label.split(' ')[0]}</RowLabel>
       <RowTarget mono className="font-normal">{label.split(' ').slice(1).join(' ')}</RowTarget>
     </Row>
@@ -217,7 +230,7 @@ function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; runnin
     <div className="flex flex-col gap-gap">
       {(process.length > 0 || (running && reply.length === 0)) && <CodexFold turn={turn} blocks={process} running={running} />}
       {reply.map((block, i) => <Prose key={i} block={block} />)}
-      {permissions.map(block => <Permission key={block.id} block={block} onChoose={id => onPermission(block.id, id)} />)}
+      {permissions.filter(block => !block.planId).map(block => <Permission key={block.id} block={block} onChoose={id => onPermission(block.id, id)} />)}
       {!running && outcomeOf(turn) && <Outcome turn={turn} />}
     </div>
   );
@@ -233,7 +246,7 @@ function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBl
     : <Icon className="size-icon" strokeWidth={1.5} />;
   const label = running ? activity.label : elapsedLabel(turn);
   const heading = <>
-    <RowLabel className={running ? 'shimmer' : undefined}>{label}</RowLabel>
+    <RowLabel className={running && activity.label !== '等待批准' ? 'shimmer' : undefined}>{label}</RowLabel>
     {running && activity.target && <RowTarget mono={activity.mono}>{activity.target}</RowTarget>}
   </>;
   if (blocks.length === 0) return <Row lead={lead}>{heading}</Row>;
@@ -282,6 +295,6 @@ function Compaction({ block }: { block: CompactionBlock }) {
 
 function Block({ block, onPermission }: { block: AgentBlock; onPermission: OnPermission }) {
   if (block.type === 'text') return <Prose block={block} />;
-  if (block.type === 'permission') return <Permission block={block} onChoose={id => onPermission(block.id, id)} />;
+  if (block.type === 'permission') return block.planId ? null : <Permission block={block} onChoose={id => onPermission(block.id, id)} />;
   return <LineBlock block={block} />;
 }

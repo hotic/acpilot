@@ -62,6 +62,7 @@ const app = acp.agent({ name: 'fake-agent' })
   })
   .onRequest(acp.methods.agent.session.setMode, () => ({}))
   .onRequest(acp.methods.agent.session.setConfigOption, async ({ params }) => {
+    if (params.value === 'unavailable') throw acp.RequestError.invalidParams(undefined, 'Model unavailable');
     if (background && params.configId === 'effort') {
       await background(params.value === 'low' ? 'start' : 'completed');
       if (params.value !== 'low') background = undefined;
@@ -78,6 +79,29 @@ const app = acp.agent({ name: 'fake-agent' })
     const text = params.prompt.map(p => (p.type === 'text' ? p.text : '')).join('');
     const send = (update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId: sid, update });
     cancelled.delete(sid);
+    if (text.startsWith('plan-')) {
+      const path = '/Users/test/.devin/plans/demo.md';
+      const markdown = '# Demo plan\n\nCreate hello.txt.';
+      await send({ sessionUpdate: 'tool_call', toolCallId: 'write-plan', title: 'Updated plan: Demo plan', kind: 'edit', rawInput: { file_path: path, content: markdown }, _meta: { 'cognition.ai/isPlanFileEdit': true } });
+      await send({ sessionUpdate: 'tool_call_update', toolCallId: 'write-plan', status: 'completed' });
+      if (text === 'plan-file') return { stopReason: 'end_turn' };
+      await send({ sessionUpdate: 'tool_call', toolCallId: 'exit-plan', title: 'Exit plan mode', kind: 'switch_mode', _meta: { 'cognition.ai/isExitPlan': true, 'cognition.ai/planFilePath': path } });
+      let approved = false;
+      if (text === 'plan-grok') {
+        const r = await client.request<{ outcome: string }>('_x.ai/exit_plan_mode', { sessionId: sid, toolCallId: 'exit-plan', planContent: markdown });
+        approved = r.outcome === 'approved';
+      } else {
+        const r = await client.request(acp.methods.client.session.requestPermission, {
+          sessionId: sid, toolCall: { toolCallId: 'exit-plan' },
+          options: [{ optionId: 'plan_accept_edits', name: 'Build', kind: 'allow_once' }, { optionId: 'reject_once', name: 'Revise', kind: 'reject_once' }],
+        });
+        approved = r.outcome.outcome === 'selected' && r.outcome.optionId === 'plan_accept_edits';
+      }
+      await send({ sessionUpdate: 'tool_call_update', toolCallId: 'exit-plan', status: 'completed' });
+      if (approved) await send({ sessionUpdate: 'current_mode_update', currentModeId: 'agent' });
+      await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `${approved ? 'APPROVED' : 'REJECTED'} model=${config.model}` } });
+      return { stopReason: cancelled.has(sid) ? 'cancelled' : 'end_turn' };
+    }
     if (background) {
       // Devin cancels background compaction on a new prompt; Kimi acknowledges
       // the follow-up without forwarding its reply through the original driver.

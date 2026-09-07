@@ -57,6 +57,16 @@ export class WebviewBridge implements vscode.Disposable {
       return;
     }
     if (m.type === 'openInEditor') { void vscode.commands.executeCommand('acpilot.openInEditor'); return; }
+    if (m.type === 'openPlan') {
+      const plan = this.manager.planDocument(m.sessionId, m.planId);
+      if (plan?.type === 'plan_document') {
+        const exists = plan.path && await stat(plan.path).catch(() => undefined);
+        const doc = exists && plan.path ? await vscode.workspace.openTextDocument(vscode.Uri.file(plan.path))
+          : await vscode.workspace.openTextDocument({ language: 'markdown', content: plan.markdown });
+        await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Beside });
+      }
+      return;
+    }
     if (m.type === 'openExternal') {
       if (isSafeExternalUrl(m.url)) void vscode.env.openExternal(vscode.Uri.parse(m.url));
       else this.env.log(`openExternal 拒绝：非白名单 scheme（${m.url.slice(0, 80)}）`);

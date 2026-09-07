@@ -45,6 +45,92 @@ async function until(pred: () => boolean, ms = 5000) {
 }
 
 describe('AcpSession', () => {
+  it.each(['plan-grok', 'plan-devin'])('plan approval %s: show full plan and change execution model before approval', async prompt => {
+    const { session } = deps();
+    const s = session();
+    try {
+      await s.start();
+      await s.setMode('plan');
+      const pending = s.prompt(prompt);
+      await until(() => s.view().turns.some(t => t.role === 'agent' && t.blocks.some(b => b.type === 'permission')));
+      const blocks = s.view().turns.flatMap(t => t.role === 'agent' ? t.blocks : []);
+      const permission = blocks.find(b => b.type === 'permission')!;
+      const plan = blocks.find(b => b.type === 'plan_document')!;
+      if (permission.type !== 'permission' || plan.type !== 'plan_document') throw new Error('Missing plan');
+      expect(permission.planId).toBe(plan.id);
+      expect(plan.markdown).toBe('# Demo plan\n\nCreate hello.txt.');
+      expect(plan.path).toBe('/Users/test/.devin/plans/demo.md');
+      const allow = permission.options.find(o => o.kind === 'allow_once')!;
+      s.resolvePermission(permission.id, 'invented');
+      expect(s.view().running).toBe(true);
+      await s.buildPlan(plan.id, { configId: 'model', value: 'm2' }, allow.id);
+      await pending;
+      expect(plan.status).toBe('approved');
+      expect(s.view().controls.modeId).toBe('agent');
+      expect(JSON.stringify(s.view().turns)).toContain('APPROVED model=m2');
+      expect(s.toRecord().turns.flatMap(t => t.role === 'agent' ? t.blocks : []).some(b => b.type === 'plan_document')).toBe(true);
+      const count = s.view().turns.length;
+      await s.buildPlan(plan.id, undefined, allow.id);
+      expect(s.view().turns).toHaveLength(count);
+    } finally { s.dispose(); }
+  });
+
+  it.each(['reject', 'cancel', 'dispose'])('Grok plan approval handles %s without leaving an orphaned permission', async action => {
+    const { session } = deps();
+    const s = session();
+    try {
+      await s.start();
+      await s.setMode('plan');
+      const pending = s.prompt('plan-grok');
+      await until(() => s.view().turns.some(t => t.role === 'agent' && t.blocks.some(b => b.type === 'permission')));
+      const b = s.view().turns.flatMap(t => t.role === 'agent' ? t.blocks : []).find(b => b.type === 'permission')!;
+      if (b.type !== 'permission') throw new Error();
+      if (action === 'reject') s.resolvePermission(b.id, 'rejected');
+      else if (action === 'cancel') await s.cancel();
+      else s.dispose();
+      await pending;
+      expect(s.view().running).toBe(false);
+      expect(s.view().turns.flatMap(t => t.role === 'agent' ? t.blocks : []).some(b => b.type === 'permission')).toBe(false);
+      expect(s.view().controls.modeId).toBe('plan');
+    } finally { s.dispose(); }
+  });
+
+  it('Build a saved plan switches mode/model and dispatches its full content once', async () => {
+    const { session } = deps();
+    const s = session();
+    try {
+      await s.start();
+      await s.setMode('plan');
+      await s.prompt('plan-file');
+      const plan = s.view().turns.flatMap(t => t.role === 'agent' ? t.blocks : []).find(b => b.type === 'plan_document')!;
+      if (plan.type !== 'plan_document') throw new Error();
+      await Promise.all([s.buildPlan(plan.id, { configId: 'model', value: 'm2' }), s.buildPlan(plan.id)]);
+      expect(s.view().turns).toHaveLength(4);
+      expect(s.view().turns[2]).toMatchObject({ role: 'user', text: `实施以下已批准的计划：\n\n${plan.markdown}` });
+      expect(s.view().controls.modeId).toBe('agent');
+      expect(s.view().controls.options.find(c => c.id === 'model')?.value).toBe('m2');
+    } finally { s.dispose(); }
+  });
+
+  it('a rejected model selection leaves the plan approval waiting', async () => {
+    const { session } = deps();
+    const s = session();
+    try {
+      await s.start();
+      const pending = s.prompt('plan-devin');
+      await until(() => s.view().turns.some(t => t.role === 'agent' && t.blocks.some(b => b.type === 'permission')));
+      const plan = s.view().turns.flatMap(t => t.role === 'agent' ? t.blocks : []).find(b => b.type === 'plan_document')!;
+      if (plan.type !== 'plan_document') throw new Error();
+      // An advertised model may still fail when the peer applies it.
+      s.view().controls.options.find(c => c.id === 'model')!.options.push({ id: 'unavailable', name: 'Unavailable' });
+      await expect(s.buildPlan(plan.id, { configId: 'model', value: 'unavailable' })).rejects.toThrow('Model unavailable');
+      expect(s.view().running).toBe(true);
+      expect(plan.status).toBe('ready');
+      await s.cancel();
+      await pending;
+    } finally { s.dispose(); }
+  });
+
   it('start session: receives modes and configOptions (model sorted before thought_level)', async () => {
     const { session } = deps();
     const s = session();

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Paperclip } from 'lucide-react';
-import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
+import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
 import type { HiddenMap } from '@shared/settings';
 import type { AccountAction, AddAccountVia, FileHit } from '@shared/protocol';
 import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
@@ -14,6 +14,7 @@ import { Notice } from './Notice';
 import { Toast } from './Toast';
 import { Alert, isShortStop } from './Alert';
 import { PlanBar } from './PlanBar';
+import { PlanDocumentContext } from './PlanDocument';
 
 // Every action the webview sends to the host; in the LAB a fake host implements these, the real build swaps in postMessage
 export interface ShellHandlers {
@@ -22,6 +23,8 @@ export interface ShellHandlers {
   searchFiles: (query: string) => Promise<FileHit[]>;
   stop: () => void;
   permission: (blockId: string, optionId: string) => void;
+  buildPlan?: (sessionId: string, planId: string, model?: { configId: string; value: string }, optionId?: string) => void;
+  openPlan?: (sessionId: string, planId: string) => void;
   setMode: (id: string) => void;
   setConfig: (configId: string, value: string) => void;
   selectAgent: (id: AgentInfo['id']) => void;
@@ -160,7 +163,13 @@ export function Shell(p: ShellProps) {
               onOpenSettings={p.onOpenSettings}
             />
             <div className="relative flex min-h-0 flex-1 flex-col">
-              <Thread turns={p.turns} running={p.running} wide={wide} replayKey={p.replayKey} blobUrl={blobUrl} onPermission={on.permission} />
+              <PlanDocumentContext.Provider value={{ controls: p.controls, hidden: p.hidden?.[p.agent.id], running: p.running, ready: p.status === 'ready',
+                permissions: p.turns.flatMap(t => t.role === 'agent' ? t.blocks.filter((b): b is PermissionBlock => b.type === 'permission') : []),
+                build: p.activeSessionId && on.buildPlan ? (id, model, optionId) => on.buildPlan!(p.activeSessionId!, id, model, optionId) : undefined,
+                open: p.activeSessionId && on.openPlan ? id => on.openPlan!(p.activeSessionId!, id) : undefined,
+              }}>
+                <Thread turns={p.turns} running={p.running} wide={wide} replayKey={p.replayKey} blobUrl={blobUrl} onPermission={on.permission} />
+              </PlanDocumentContext.Provider>
               {toasts.length > 0 && (
                 <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex flex-col items-center gap-1 px-page">
                   {toasts.map(t => <Toast key={t.key} text={t.text} icon={t.icon} onUndo={t.undo} onClose={() => dropToast(t.key)} />)}

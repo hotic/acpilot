@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
 import type { AgentDef } from './AgentRegistry';
+import { approveGrokPlan, GROK_EXIT_PLAN, parseGrokExitPlan } from './grokPlan';
 
 // What the client side has to accept: updates / permission requests / file reads & writes / questions the agent sends on its own initiative.
 // The optional handlers double as capability switches: a handler present is advertised in initialize, an absent one answers method-not-found
@@ -48,6 +49,7 @@ export class AgentProcess {
     const app = acp.client({ name: 'acpilot' })
       .onNotification(acp.methods.client.session.update, ctx => { h.onUpdate(ctx.params); })
       .onRequest(acp.methods.client.session.requestPermission, ctx => h.onPermission(ctx.params, ctx.signal))
+      .onRequest(GROK_EXIT_PLAN, parseGrokExitPlan, ctx => approveGrokPlan(ctx.params, ctx.signal, h.onPermission))
       .onRequest(acp.methods.client.fs.readTextFile, ctx => {
         if (!h.onReadFile) throw acp.RequestError.methodNotFound(acp.methods.client.fs.readTextFile);
         return h.onReadFile(ctx.params);

@@ -246,10 +246,25 @@ interface OptionMenuProps {
 
 // A single configOption, minus the families hidden in the settings: names that decompose into a "family × params" structure (Devin's 210 models)
 // get the model panel, otherwise one flat menu
-function OptionControl({ control, hidden, ...rest }: OptionMenuProps & { hidden?: string[] }) {
+export function OptionControl({ control, hidden, ...rest }: OptionMenuProps & { hidden?: string[] }) {
   const shown = useMemo(() => ({ ...control, options: visibleOptions(control.options, hidden, control.value) }), [control, hidden]);
   const families = useMemo(() => groupModels(shown.options), [shown.options]);
   return families.length < shown.options.length || families.some(f => f.source) ? <ModelControl {...rest} control={shown} families={families} /> : <OptionMenu {...rest} control={shown} />;
+}
+
+// The same model identity / variant picker can live behind a different trigger,
+// including a plan's Build menu. Selection is owned by the caller.
+export function ModelOptions({ control, hidden, onSelect, close }: {
+  control: ConfigControl;
+  hidden?: string[];
+  onSelect: (value: string) => void;
+  close: () => void;
+}) {
+  const shown = useMemo(() => visibleOptions(control.options, hidden, control.value), [control, hidden]);
+  const families = useMemo(() => groupModels(shown), [shown]);
+  const cur = families.find(f => f.variants.some(v => v.id === control.value));
+  const curVar = cur?.variants.find(v => v.id === control.value);
+  return <ModelPanel families={families} cur={cur} curVar={curVar} onSelect={onSelect} close={close} />;
 }
 
 // One chip for the whole model choice, "family + params" with the params faint (as in Cursor's toolbar and Devin's own composer). It opens one panel:

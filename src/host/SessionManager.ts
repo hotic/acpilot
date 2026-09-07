@@ -192,6 +192,11 @@ export class SessionManager {
     return this.activeId ? this.live.get(this.activeId) : undefined;
   }
 
+  planDocument(sessionId: string, planId: string) {
+    return this.live.get(sessionId)?.view().turns.flatMap(t => t.role === 'agent' ? t.blocks : [])
+      .find(b => b.type === 'plan_document' && b.id === planId);
+  }
+
   async handle(msg: WebviewMsg): Promise<void> {
     const s = this.current();
     try {
@@ -199,6 +204,7 @@ export class SessionManager {
         case 'send': await s?.prompt(msg.text, msg.attachments); break;
         case 'stop': await s?.cancel(); break;
         case 'permission': s?.resolvePermission(msg.blockId, msg.optionId); break;
+        case 'buildPlan': await this.live.get(msg.sessionId)?.buildPlan(msg.planId, msg.model, msg.optionId); break;
         case 'setMode': await s?.setMode(msg.id); break;
         case 'setConfig': await s?.setConfig(msg.configId, msg.value); break;
         case 'selectAgent': if (s?.agent !== msg.id) await this.newSession(msg.id); break;

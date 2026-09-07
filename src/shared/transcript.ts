@@ -134,7 +134,20 @@ export interface PermissionBlock {
   title: string;
   command?: string;
   description?: string;
+  planId?: string;
   options: { id: string; label: string; kind: PermissionKind }[];
+}
+
+// A saved implementation plan, separate from the live to-do list.
+export interface PlanDocumentBlock {
+  type: 'plan_document';
+  id: string;
+  title: string;
+  markdown: string;
+  path?: string;
+  toolCallId: string;
+  approvalToolCallId?: string;
+  status: 'draft' | 'ready' | 'approved' | 'rejected' | 'executing';
 }
 
 // Context compaction (ACP compaction_update): a single status line
@@ -146,7 +159,7 @@ export interface CompactionBlock {
   status: CompactionStatus;
 }
 
-export type AgentBlock = ThoughtBlock | PlanBlock | ToolCallBlock | TextBlock | PermissionBlock | CompactionBlock;
+export type AgentBlock = ThoughtBlock | PlanBlock | ToolCallBlock | TextBlock | PermissionBlock | CompactionBlock | PlanDocumentBlock;
 
 // What the composer attaches to a prompt before the host has seen it: images and dropped text carry their payload (base64 / text),
 // files carry a URI (Explorer drag / @ mention) that the host resolves — image files become `image`, everything else stays a link

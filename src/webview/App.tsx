@@ -86,6 +86,8 @@ export function App() {
     searchFiles,
     stop: () => post({ type: 'stop' }),
     permission: (blockId, optionId) => post({ type: 'permission', blockId, optionId }),
+    buildPlan: (sessionId, planId, model, optionId) => post({ type: 'buildPlan', sessionId, planId, model, optionId }),
+    openPlan: (sessionId, planId) => post({ type: 'openPlan', sessionId, planId }),
     setMode: id => post({ type: 'setMode', id }),
     setConfig: (configId, value) => post({ type: 'setConfig', configId, value }),
     selectAgent: id => post({ type: 'selectAgent', id }),

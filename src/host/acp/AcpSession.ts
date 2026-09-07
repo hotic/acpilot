@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { readFile, stat } from 'node:fs/promises';
 import * as acp from '@agentclientprotocol/sdk';
 import type { AgentId, AuthMethodInfo, Draft, PermissionBlock, SessionControls, SessionView, SlashCommand, ToolCallBlock, Turn, TurnError, Usage } from '@shared/transcript';
 import type { AgentRuntimeInfo } from '@shared/inventory';
 import type { AgentRegistry } from './AgentRegistry';
 import { AgentProcess } from './AgentProcess';
+import { capturePlan, planDocuments, setPlanContent } from './plans';
 import { CompactionCompletion, isCompactCommand } from './compaction';
 import { applyModelSources, type ModelSources } from '@shared/modelSources';
 import { readModelSources } from './modelSources';
@@ -61,6 +63,7 @@ interface PendingPermission {
   resolve: (r: acp.RequestPermissionResponse) => void;
   blockId: string;
   options: acp.PermissionOption[];
+  planId?: string;
 }
 
 // One session = one agent subprocess + one transcript. State machine:
@@ -87,6 +90,8 @@ export class AcpSession {
   private proc?: AgentProcess;
   private pending = new Map<string, PendingPermission>();
   private permSeq = 0;
+  private permissionEpoch = 0;
+  private buildingPlan = false;
   // yolo among the synthetic modes: the host auto-approves permission requests (the protocol has no such tier, so the CLI stays in default)
   private autoApprove = false;
   // Usage at the end of the last auto-compaction: don't compact again until it has grown back a fair bit, so a "won't shrink" case doesn't fire every turn
@@ -420,6 +425,7 @@ export class AcpSession {
   }
 
   private settle(stop: acp.StopReason, error?: TurnError) {
+    this.permissionEpoch++;
     this.compactionCompletion?.close();
     this.compactionCompletion = undefined;
     if (error) failTurn(this.state, error); else endTurn(this.state, stop);
@@ -443,6 +449,7 @@ export class AcpSession {
 
   async cancel(): Promise<void> {
     if (!this.running || !this.proc) return;
+    this.permissionEpoch++;
     this.log('cancel');
     // Nothing is on the wire yet: just make sure the prompt being staged never goes out
     if (this.staging) { this.stagingAborted = true; return; }
@@ -474,9 +481,7 @@ export class AcpSession {
 
   // When switching into yolo, approve the permission requests already waiting in one go, so the user doesn't have to click through each card
   private flushPermissions() {
-    for (const p of this.pending.values()) p.resolve({ outcome: { outcome: 'selected', optionId: bestAllow(p.options) } });
-    this.pending.clear();
-    this.removePermissionBlocks();
+    for (const p of this.pending.values()) this.resolvePermission(p.blockId, bestAllow(p.options));
   }
 
   // Switching any select-type configOption (model / reasoning level / …); the response is the full configOptions set
@@ -504,13 +509,59 @@ export class AcpSession {
   resolvePermission(blockId: string, optionId: string) {
     const p = this.pending.get(blockId);
     if (!p) return;
+    const option = p.options.find(o => o.optionId === optionId);
+    if (!option) return;
+    const plan = planDocuments(this.state.turns).find(b => b.id === p.planId);
+    if (plan) plan.status = option.kind.startsWith('allow') ? 'approved' : 'rejected';
     this.pending.delete(blockId);
     this.removePermissionBlocks(blockId);
     p.resolve({ outcome: { outcome: 'selected', optionId } });
     this.touch();
   }
 
+  // Apply the selected execution model before releasing approval or dispatching
+  // a new implementation turn. A failed model switch leaves approval pending.
+  async buildPlan(planId: string, model?: { configId: string; value: string }, optionId?: string): Promise<void> {
+    if (this.buildingPlan || this.status !== 'ready') return;
+    const plan = planDocuments(this.state.turns).find(p => p.id === planId);
+    if (!plan || !plan.markdown || plan.status === 'executing') return;
+    const permission = [...this.pending.values()].find(p => p.planId === planId);
+    if (this.running && !permission) return;
+    // An expired approval click must never become a fresh implementation prompt.
+    if (optionId && !permission) return;
+    const option = permission?.options.find(o => o.optionId === optionId && o.kind.startsWith('allow'))
+      ?? (optionId ? undefined : permission?.options.find(o => o.kind === 'allow_once'));
+    if (permission && !option) throw new Error('计划审批选项已失效');
+    this.buildingPlan = true;
+    try {
+      if (model) {
+        const c = this.state.controls.options.find(c => c.id === model.configId && c.category === 'model');
+        if (!c?.options.some(o => o.id === model.value)) throw new Error('执行模型不可用');
+        if (c.value !== model.value) await this.setConfig(model.configId, model.value);
+      }
+      if (this.status !== 'ready') return;
+      if (permission) {
+        if (!this.pending.has(permission.blockId)) return;
+        this.resolvePermission(permission.blockId, option!.optionId);
+      } else {
+        if (this.running) return;
+        const mode = this.state.controls.modes.find(m => ['default', 'accept-edits', 'agent', 'code'].includes(m.id));
+        if (this.state.controls.modeId === 'plan') {
+          if (!mode) throw new Error('Agent 未提供可执行的模式');
+          await this.setMode(mode.id);
+        }
+        if (this.status !== 'ready' || this.running) return;
+        plan.status = 'executing';
+        await this.prompt(`实施以下已批准的计划：\n\n${plan.markdown}`);
+      }
+    } finally {
+      this.buildingPlan = false;
+      this.touch();
+    }
+  }
+
   dispose() {
+    this.permissionEpoch++;
     this.status = 'closed';
     this.queued = undefined;
     if (this.running) this.settle('cancelled');
@@ -530,16 +581,43 @@ export class AcpSession {
     // A user_message_chunk echoed by the agent mid-turn is the one we just sent; it's already in turns
     if (this.running && u.sessionUpdate === 'user_message_chunk') return;
     if (!applyUpdate(this.state, u)) return;
+    if (u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update') {
+      const plan = capturePlan(this.state.turns, u);
+      // Kimi 0.41.0 confirms the exit in tool output but omits current_mode_update.
+      // Never infer an exit from the approval click alone: cancellation may win.
+      if (this.agent === 'kimi' && plan?.approvalToolCallId === u.toolCallId && u.status === 'completed'
+        && typeof u.rawOutput === 'string' && u.rawOutput.startsWith('Exited plan mode. Plan mode deactivated.')) {
+        this.state.controls.modeId = 'default';
+      }
+    }
     const last = this.state.turns[this.state.turns.length - 1];
     if (this.running && last?.role === 'agent') last.activity = activityOf(this.state.turns);
     this.touch();
   }
 
   // Permission request → insert a card into the current assistant turn and wait for the webview's answer; if the agent cancels, withdraw the card
-  private onPermission(req: acp.RequestPermissionRequest, signal: AbortSignal): Promise<acp.RequestPermissionResponse> {
+  private async onPermission(req: acp.RequestPermissionRequest, signal: AbortSignal): Promise<acp.RequestPermissionResponse> {
+    if (signal.aborted) return Promise.resolve({ outcome: { outcome: 'cancelled' } });
+    const epoch = this.permissionEpoch;
     applyUpdate(this.state, { sessionUpdate: 'tool_call_update', ...req.toolCall });
+    const plan = capturePlan(this.state.turns, req.toolCall);
+    // A resumed Devin session may send only the plan path. Load that exact file
+    // before presenting approval; missing files retain the normal permission UI.
+    if (plan && !plan.markdown && plan.path) {
+      try {
+        const file = await stat(plan.path);
+        if (file.isFile() && file.size <= 1_048_576) {
+          setPlanContent(plan, await readFile(plan.path, 'utf8'));
+          if (plan.markdown) plan.status = 'ready';
+        }
+      } catch { /* The permission choices remain usable without a local preview. */ }
+    }
+    if (signal.aborted || epoch !== this.permissionEpoch) return { outcome: { outcome: 'cancelled' } };
     // yolo: approve directly without showing a card, preferring allow_always so the same tool doesn't keep coming back
-    if (this.autoApprove) return Promise.resolve({ outcome: { outcome: 'selected', optionId: bestAllow(req.options) } });
+    if (this.autoApprove) {
+      if (plan?.approvalToolCallId === req.toolCall.toolCallId) plan.status = 'approved';
+      return { outcome: { outcome: 'selected', optionId: bestAllow(req.options) } };
+    }
     const blockId = `perm-${++this.permSeq}`;
     const raw = req.toolCall.rawInput as Record<string, unknown> | undefined;
     const last = this.state.turns[this.state.turns.length - 1];
@@ -547,21 +625,22 @@ export class AcpSession {
     const tool = last?.role === 'agent' ? last.blocks.find((b): b is ToolCallBlock => b.type === 'tool_call' && b.id === req.toolCall.toolCallId) : undefined;
     const block: PermissionBlock = {
       type: 'permission', id: blockId,
+      planId: plan?.markdown && plan.approvalToolCallId === req.toolCall.toolCallId ? plan.id : undefined,
       title: tool ? `需要批准 · ${tool.verb}${tool.kind !== 'execute' && tool.target ? ` ${tool.target}` : ''}` : req.toolCall.title ? `需要批准 · ${req.toolCall.title}` : '需要批准',
       command: typeof raw?.command === 'string' ? raw.command : typeof raw?.cmd === 'string' ? raw.cmd : tool?.kind === 'execute' ? tool.target : undefined,
       description: typeof raw?.description === 'string' ? raw.description : undefined,
       options: req.options.map(o => ({ id: o.optionId, label: o.name, kind: o.kind })),
     };
     if (last?.role === 'agent') { last.blocks.push(block); last.activity = activityOf(this.state.turns); }
-    this.touch();
     return new Promise(resolve => {
-      this.pending.set(blockId, { resolve, blockId, options: req.options });
+      this.pending.set(blockId, { resolve, blockId, options: req.options, planId: block.planId });
       signal.addEventListener('abort', () => {
         if (!this.pending.delete(blockId)) return;
         this.removePermissionBlocks(blockId);
         resolve({ outcome: { outcome: 'cancelled' } });
         this.touch();
       }, { once: true });
+      this.touch();
     });
   }
 

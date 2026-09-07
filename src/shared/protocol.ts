@@ -79,6 +79,8 @@ export type WebviewMsg =
   // @ mention: fuzzy search over workspace files, answered with a `files` message
   | { type: 'searchFiles'; query: string; seq: number }
   | { type: 'permission'; blockId: string; optionId: string }
+  | { type: 'buildPlan'; sessionId: string; planId: string; optionId?: string; model?: { configId: string; value: string } }
+  | { type: 'openPlan'; sessionId: string; planId: string }
   | { type: 'setMode'; id: string }
   | { type: 'setConfig'; configId: string; value: string }
   | { type: 'selectAgent'; id: AgentId }
