@@ -10,7 +10,7 @@ export interface UsageSegment {
   id: UsageSegmentId;
   label: string;
   tokens: number;
-  // One line of explanation shown when the segment is selected: what this category is and how it's computed
+  // Native tooltip on the legend row: what this category is and how it's computed
   hint: string;
 }
 

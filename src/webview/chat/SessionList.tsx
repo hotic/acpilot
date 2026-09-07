@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Pencil, Pin, PinOff, Search, Trash2 } from 'lucide-react';
+import { LoaderCircle, Pencil, Pin, PinOff, Search, Trash2 } from 'lucide-react';
 import type { AgentInfo, SessionSummary } from '@shared/transcript';
 import { cn } from '../ui/cn';
 import { t } from '../i18n';
 import { AgentMark } from './AgentMark';
 
-const STATE_DOT: Record<NonNullable<SessionSummary['state']>, string> = {
-  working: 'bg-accent animate-[acp-pulse_1.8s_ease-in-out_infinite]',
+// A running session shows a spinning ring (the one place a spinner is allowed: a list has no verb to shimmer); the other states are plain dots
+const STATE_DOT: Record<Exclude<NonNullable<SessionSummary['state']>, 'working'>, string> = {
   waiting: 'bg-warn',
   unread: 'bg-fg-2',
   error: 'bg-danger',
 };
+
+function StateMark({ state }: { state: NonNullable<SessionSummary['state']> }) {
+  if (state === 'working') return <LoaderCircle className="size-3 animate-spin text-accent" strokeWidth={2} aria-label={t('session.state.working')} />;
+  return <span className={cn('size-1.5 rounded-full', STATE_DOT[state])} />;
+}
 
 export interface SessionListProps {
   sessions: SessionSummary[];
@@ -145,7 +150,7 @@ function Item({ session: s, agentName, active, time, editing, onSelect, onEdit, 
       {!editing && (
         <span className="ml-auto flex shrink-0 items-center text-3 text-fg-3 tabular-nums">
           <span className="flex items-center gap-2 group-hover:hidden group-focus-within:hidden">
-            {s.state && <span className={cn('size-1.5 rounded-full', STATE_DOT[s.state])} />}
+            {s.state && <StateMark state={s.state} />}
             <span>{time}</span>
           </span>
           <span className="hidden items-center gap-0.5 group-hover:flex group-focus-within:flex">

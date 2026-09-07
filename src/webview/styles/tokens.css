@@ -328,6 +328,11 @@
   /* Something attachable is being dragged over it */
   &[data-drag] { background: var(--cmp-bg-lift); outline: 1px dashed var(--fg-3); outline-offset: -1px; }
 }
+/* A queued prompt's row above the composer: the composer's resting surface and outline, without its hover lift */
+@utility queue-card {
+  background: var(--cmp-bg);
+  box-shadow: inset 0 0 0 1px var(--conversation-line);
+}
 @utility send-btn {
   background: var(--send-bg);
   box-shadow: var(--send-ring);
@@ -378,13 +383,32 @@
 /* Thinking lead swaps from Orb to a static icon when the thought ends: the Orb shrinks out, the icon grows in */
 @utility swap-out { animation: acp-swap-out var(--dur-open) ease both; }
 @utility swap-in { animation: acp-swap-in var(--dur-open) ease both; }
+/* Content that replaces something in place (a prompt card ↔ its inline editor): a plain fade, the container animates its own height */
+@utility fade-in { animation: acp-fade-in var(--dur-open) ease both; }
 @utility enter {
   animation: acp-enter var(--enter-dur) cubic-bezier(0.2, 0.7, 0.2, 1) both;
   animation-delay: calc(var(--i, 0) * var(--enter-stagger));
 }
-@utility caret {
-  display: inline-block; width: 0.5em; height: 1em; vertical-align: -0.12em; margin-left: 2px;
-  background: var(--fg-2); border-radius: 1px; animation: acp-caret 1s steps(2) infinite;
+/* Quiet dots fill the same lead slot as thinking rows, without glow or a text caret. */
+.waiting-dots {
+  --wait-dot: 3px;
+  --wait-gap: 3px;
+  --wait-lift: 0px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--lead); height: var(--lead); gap: var(--wait-gap); flex-shrink: 0;
+  color: var(--fg-2);
+}
+.waiting-dots > span {
+  width: var(--wait-dot); height: var(--wait-dot); border-radius: 50%;
+  background: currentColor; opacity: 0.45;
+  animation: acp-wait-dot 1.4s ease-in-out infinite;
+}
+.waiting-dots > span:nth-child(2) { animation-delay: 160ms; }
+.waiting-dots > span:nth-child(3) { animation-delay: 320ms; }
+[data-motion="full"] .waiting-dots { --wait-lift: -2px; }
+@keyframes acp-wait-dot {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  30% { opacity: 0.85; transform: translateY(var(--wait-lift)); }
 }
 @utility beam-wrap { display: block !important; width: 100%; }
 @utility scroll-stable { scrollbar-gutter: stable; }
@@ -403,7 +427,10 @@
   background-color: var(--bg-0);
   background-image: linear-gradient(var(--chip), var(--chip));
   box-shadow: inset 0 0 0 1px var(--conversation-line);
+  transition: box-shadow var(--dur) ease;
 }
+/* An editable prompt opens its editor on click (Cursor-style): the outline firms up on hover as the only hint, the pencil fades in beside it */
+.user-message-card.user-message-editable:hover { box-shadow: inset 0 0 0 1px var(--conversation-line-focus); }
 
 /* Agent prose (streamdown output): all markdown typography lives here — Tailwind never scans node_modules,
    so the library's own utility classes don't resolve and every element needs an explicit rule. */
@@ -437,19 +464,21 @@
 .acp-mermaid { display: flex; justify-content: center; }
 .acp-mermaid svg { max-width: 100%; height: auto; }
 .acp-mermaid-pending { min-height: 40px; border-radius: var(--r-md); background: var(--bg-code); animation: acp-pulse 1.5s ease infinite; }
-/* streamdown's caret is a --streamdown-caret char on the root; its own ::after rule is a Tailwind class we never generate, so it is redone here */
-.acp-prose[style*="--streamdown-caret"] > *:last-child::after {
-  content: var(--streamdown-caret);
-  color: var(--fg-2);
-  animation: acp-caret 1s steps(2) infinite;
-}
+/* streamdown's animate plugin (Prose `animated`) wraps each newly streamed word in a span stamped with --sd-animation / --sd-duration /
+   --sd-easing / --sd-delay; its stylesheet is not imported, so the rules are redone here (list markers can't be wrapped, so they fade via color).
+   The global motion=none / reduced-motion rules below switch these off with everything else */
+[data-sd-animate] { animation: var(--sd-animation, sd-fadeIn) var(--sd-duration, 150ms) var(--sd-easing, ease) var(--sd-delay, 0ms) both; }
+[data-sd-animate-marker]::marker { animation: sd-markerIn var(--sd-marker-duration, 150ms) var(--sd-marker-easing, ease) var(--sd-marker-delay, 0ms) both; }
+@keyframes sd-fadeIn { from { opacity: 0; } }
+@keyframes sd-blurIn { from { opacity: 0; filter: blur(4px); } }
+@keyframes sd-markerIn { from { color: transparent; } }
 
 @keyframes acp-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes acp-enter { from { opacity: 0; transform: translateY(var(--enter-y)); } }
-@keyframes acp-caret { to { opacity: 0; } }
 @keyframes acp-pulse { 50% { opacity: 0.3; } }
 @keyframes acp-swap-out { to { opacity: 0; transform: scale(0.5); } }
 @keyframes acp-swap-in { from { opacity: 0; transform: scale(0.5); } }
+@keyframes acp-fade-in { from { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   .acp-shell * { animation: none !important; transition: none !important; }
