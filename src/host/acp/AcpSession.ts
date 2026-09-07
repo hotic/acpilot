@@ -4,6 +4,7 @@ import type { AgentId, AuthMethodInfo, Draft, PermissionBlock, SessionControls, 
 import type { AgentRuntimeInfo } from '@shared/inventory';
 import type { AgentRegistry } from './AgentRegistry';
 import { AgentProcess } from './AgentProcess';
+import { CompactionCompletion, isCompactCommand } from './compaction';
 import { describeDrafts, preparePrompt, restoreDrafts, type BlobStore, type PreparedPrompt } from './attachments';
 import { activityOf, applyUpdate, endTurn, failTurn, initControls, applyConfigOptions, type NormalizeState } from './normalize';
 
@@ -88,6 +89,7 @@ export class AcpSession {
   private autoApprove = false;
   // Usage at the end of the last auto-compaction: don't compact again until it has grown back a fair bit, so a "won't shrink" case doesn't fire every turn
   private compactedAt?: number;
+  private compactionCompletion?: CompactionCompletion;
   // The last auth-related line the CLI wrote to stderr since the session was (re)opened. -32000 carries no reason, but the CLI usually logs one right before
   // (Kimi: "provider managed:kimi-code has no credential configured"), and that is what the Notice should show instead of a generic "log in"
   private authHint?: string;
@@ -350,6 +352,9 @@ export class AcpSession {
       }
     }
     for (const p of prepared.problems) { this.log(p); this.deps.notify?.(p); }
+    const compacting = isCompactCommand(text);
+    const completion = new CompactionCompletion(compacting ? this.agent : undefined);
+    this.compactionCompletion = completion;
     if (attachments.length) this.log(`attachments: ${prepared.blocks.slice(text ? 1 : 0).map(b => b.type).join(' ')}`);
     this.state.turns.push(auto ? { role: 'user', text, auto: true } : { role: 'user', text, ...(prepared.attachments.length ? { attachments: prepared.attachments } : {}) });
     if (!auto && (!this.state.title || this.state.title === '新会话')) this.state.title = summarizePrompt({ text, attachments }).slice(0, 40);
@@ -360,6 +365,13 @@ export class AcpSession {
       const r = await this.proc!.agent.request(acp.methods.agent.session.prompt, { sessionId: this.acpSessionId!, prompt: prepared.blocks });
       this.log(`prompt done: ${r.stopReason}`);
       stop = r.stopReason;
+      // Keep running and the queue intact until the background operation ends.
+      // Never infer this from the presence of a streaming text block or a timer.
+      if (stop === 'end_turn') {
+        const pending = completion.wait();
+        if (pending) { this.log('waiting for compaction completion'); await pending; }
+        if (this.status !== 'ready') return;
+      }
       this.settle(stop);
     } catch (e) {
       // The error stays on the turn (the webview shows it as a card, history keeps the row); the session itself is still usable, so status stays ready —
@@ -369,7 +381,7 @@ export class AcpSession {
       if (isAuth(e)) this.status = 'auth_required';
     }
     // A hand-typed /compact counts as a compaction too; likewise record the usage right after it
-    if (auto || text.trim() === '/compact') this.compactedAt = this.state.usage?.used ?? 0;
+    if (auto || compacting) this.compactedAt = this.state.usage?.used ?? 0;
     this.touch();
     if (this.flushQueued()) return;
     if (!auto && stop === 'end_turn' && this.shouldAutoCompact()) {
@@ -403,6 +415,8 @@ export class AcpSession {
   }
 
   private settle(stop: acp.StopReason, error?: TurnError) {
+    this.compactionCompletion?.close();
+    this.compactionCompletion = undefined;
     if (error) failTurn(this.state, error); else endTurn(this.state, stop);
     for (const p of this.pending.values()) p.resolve({ outcome: { outcome: 'cancelled' } });
     this.pending.clear();
@@ -493,6 +507,8 @@ export class AcpSession {
 
   dispose() {
     this.status = 'closed';
+    this.queued = undefined;
+    if (this.running) this.settle('cancelled');
     for (const p of this.pending.values()) p.resolve({ outcome: { outcome: 'cancelled' } });
     this.pending.clear();
     this.proc?.kill();
@@ -505,6 +521,7 @@ export class AcpSession {
     // yolo is host-side state: a current_mode_update pushed by the CLI (e.g. the shot that pulled it back from plan to default) must not drag the UI back
     if (this.autoApprove && u.sessionUpdate === 'current_mode_update') u.currentModeId = 'yolo';
     if (this.replaying && ['user_message_chunk', 'agent_message_chunk', 'agent_thought_chunk', 'tool_call', 'tool_call_update', 'plan'].includes(u.sessionUpdate)) return;
+    if (!this.replaying) this.compactionCompletion?.update(u);
     // A user_message_chunk echoed by the agent mid-turn is the one we just sent; it's already in turns
     if (this.running && u.sessionUpdate === 'user_message_chunk') return;
     if (!applyUpdate(this.state, u)) return;

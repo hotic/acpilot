@@ -13,6 +13,10 @@ const sessions = new Set<string>();
 let seq = 0;
 let usedTokens = 1234;
 let compactions = 0;
+// Background-compaction fixtures are released explicitly through setConfig so
+// tests can place a follow-up between the RPC acknowledgement and status events.
+const backgroundStyle = process.env.FAKE_COMPACTION;
+let background: ((status: 'start' | 'completed' | 'cancelled') => Promise<void>) | undefined;
 
 const app = acp.agent({ name: 'fake-agent' })
   .onRequest(acp.methods.agent.initialize, () => ({
@@ -53,16 +57,29 @@ const app = acp.agent({ name: 'fake-agent' })
     return {};
   })
   .onRequest(acp.methods.agent.session.setMode, () => ({}))
-  .onRequest(acp.methods.agent.session.setConfigOption, ({ params }) => {
+  .onRequest(acp.methods.agent.session.setConfigOption, async ({ params }) => {
+    if (background && params.configId === 'effort') {
+      await background(params.value === 'low' ? 'start' : 'completed');
+      if (params.value !== 'low') background = undefined;
+    }
     config[params.configId] = String(params.value);
     return { configOptions: configOptions() };
   })
-  .onNotification(acp.methods.agent.session.cancel, ({ params }) => { cancelled.add(params.sessionId); })
+  .onNotification(acp.methods.agent.session.cancel, async ({ params }) => {
+    cancelled.add(params.sessionId);
+    if (background) { await background('cancelled'); background = undefined; }
+  })
   .onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
     const sid = params.sessionId;
     const text = params.prompt.map(p => (p.type === 'text' ? p.text : '')).join('');
     const send = (update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId: sid, update });
     cancelled.delete(sid);
+    if (background) {
+      // Devin cancels background compaction on a new prompt; Kimi acknowledges
+      // the follow-up without forwarding its reply through the original driver.
+      if (backgroundStyle === 'devin') { await background('cancelled'); background = undefined; }
+      else return { stopReason: 'end_turn' };
+    }
 
     // Typed upstream failure, once per distinct prompt text, before anything is streamed — the retry of the same prompt then runs the normal script
     if (text.includes('fail') && !failed.has(text)) {
@@ -73,6 +90,27 @@ const app = acp.agent({ name: 'fake-agent' })
     // the first compaction drops usage to 20%; afterwards "nothing left to compact" leaves usage unchanged — simulating a compaction that can't shrink
     if (text.trim() === '/compact') {
       const id = `cp${++compactions}`;
+      if (backgroundStyle) {
+        background = async status => {
+          if (backgroundStyle === 'structured') {
+            await send({ sessionUpdate: 'compaction_update', compactionId: id, status: status === 'start' ? 'in_progress' : status });
+          } else {
+            const value = status === 'start'
+              ? backgroundStyle === 'devin' ? 'Compacting context…' : 'Context compaction started — it runs in the background and the compacted context applies once it finishes.'
+              : status === 'completed' ? backgroundStyle === 'devin' ? 'Context compacted' : 'Compaction completed.\n- Messages compacted: 3'
+                : backgroundStyle === 'devin' ? 'Compaction canceled.' : 'Compaction cancelled.';
+            await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: value } });
+          }
+          if (status === 'completed') {
+            usedTokens = Math.round(usedTokens * 0.2);
+            await send({ sessionUpdate: 'usage_update', used: usedTokens, size: 1_000_000 });
+          }
+        };
+        // Structured agents must announce the work before returning; Devin's
+        // first status can arrive after the acknowledgement itself.
+        if (backgroundStyle !== 'devin') await background('start');
+        return { stopReason: 'end_turn' };
+      }
       await send({ sessionUpdate: 'compaction_update', compactionId: id, status: 'in_progress' });
       if (compactions === 1) usedTokens = Math.round(usedTokens * 0.2);
       await send({ sessionUpdate: 'compaction_update', compactionId: id, status: 'completed' });
