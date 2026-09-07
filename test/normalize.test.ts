@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { applyUpdate, diffLines, emptyState, endTurn, failTurn } from '../src/host/acp/normalize';
 
 describe('diffLines', () => {
@@ -18,6 +18,25 @@ describe('diffLines', () => {
 });
 
 describe('applyUpdate', () => {
+  it('records the full live turn duration once, without inventing replay timestamps', () => {
+    const s = emptyState();
+    s.turns.push({ role: 'agent', blocks: [], startedAt: 1000 });
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(287000);
+    try {
+      endTurn(s, 'end_turn');
+      expect(s.turns[0]).toMatchObject({ startedAt: 1000, endedAt: 287000 });
+      clock.mockReturnValue(300000);
+      endTurn(s, 'end_turn');
+      expect(s.turns[0]).toMatchObject({ endedAt: 287000 });
+      const replay = emptyState();
+      replay.turns.push({ role: 'agent', blocks: [] });
+      endTurn(replay, 'end_turn');
+      expect(replay.turns[0]).not.toHaveProperty('endedAt');
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('switching from a thought block to a text block finalizes it and records the duration', () => {
     const s = emptyState();
     applyUpdate(s, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'a' } });

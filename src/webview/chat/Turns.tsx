@@ -1,8 +1,8 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { Check, ChevronRight, Compass, FoldVertical, Layers, TriangleAlert, X } from 'lucide-react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import { Check, ChevronRight, Compass, FoldVertical, TriangleAlert, X } from 'lucide-react';
 import type { AgentBlock, AgentTurn, CompactionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
-import { Row, RowTarget } from '../ui/Row';
+import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { Disclosure } from '../ui/Disclosure';
 import { Orb } from '../effects/Orb';
 import { cn } from '../ui/cn';
@@ -13,6 +13,7 @@ import { ToolCall } from './ToolCall';
 import { Prose } from './Prose';
 import { Permission } from './Permission';
 import { TurnAttachments } from './Attachments';
+import { elapsedLabel, foldActivity, splitCodexBlocks } from './folding';
 
 // User message: color block / right-aligned bubble / plain text; ones ACPilot sends automatically (/compact) render as a note line, not a bubble.
 // Attachments (image thumbnails / file pills) sit above the text inside the same bubble
@@ -21,7 +22,7 @@ export function UserMessage({ turn, index, blobUrl }: { turn: UserTurn; index: n
   if (turn.auto) {
     return (
       <div className="enter" style={{ '--i': index } as CSSProperties}>
-        <Row className="text-fg-3"><span>上下文到阈值，自动发送</span><RowTarget mono className="text-fg-2">{turn.text}</RowTarget></Row>
+        <Row className="text-fg-3"><RowLabel>上下文到阈值，自动发送</RowLabel><RowTarget mono className="text-fg-2">{turn.text}</RowTarget></Row>
       </div>
     );
   }
@@ -46,20 +47,16 @@ type OnPermission = (blockId: string, optionId: string) => void;
 // The activity line only fills a "gap": the turn is running and this message has no in-progress tool line, streaming thought, or streaming text yet
 export function AgentMessage({ turn, index, running, onPermission }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission }) {
   const { fold } = useAppearance();
-  const codex = fold === 'codex';
+  if (fold === 'codex') return <CodexMessage turn={turn} running={running} onPermission={onPermission} />;
   const groups = groupBlocks(turn.blocks);
   let i = index;
-  // While the codex mode is running, the head row of the last line group is the working label and carries the activity state, so no separate activity line is added
-  const lastLines = groups[groups.length - 1]?.kind === 'lines';
-  const showActivity = running && !!turn.activity && !turn.blocks.some(isBusy) && !(codex && lastLines);
+  const showActivity = running && !!turn.activity && !turn.blocks.some(isBusy);
   return (
     <div className="flex flex-col gap-gap">
       {groups.map((g, gi) => (
         <div key={gi} className="enter" style={{ '--i': Math.min(i++, 12) } as CSSProperties}>
           {g.kind === 'lines'
-            ? codex
-              ? <CodexFold blocks={g.blocks} working={running && gi === groups.length - 1} activity={turn.activity?.label} />
-              : <Lines blocks={g.blocks} fold={fold} />
+            ? <Lines blocks={g.blocks} fold={fold} />
             : <Block block={g.block} onPermission={onPermission} />}
         </div>
       ))}
@@ -97,7 +94,7 @@ function Outcome({ turn }: { turn: AgentTurn }) {
   const lead = toolLine === 'text' || !warn ? undefined : <TriangleAlert className="size-icon" strokeWidth={1.5} />;
   return (
     <Row lead={lead} className="text-fg-3">
-      <span>{outcomeOf(turn)}</span>
+      <RowLabel>{outcomeOf(turn)}</RowLabel>
       {turn.stop === 'error' && turn.error?.message && <RowTarget className="text-fg-3">{turn.error.message}</RowTarget>}
     </Row>
   );
@@ -113,7 +110,7 @@ function isBusy(b: AgentBlock): boolean {
 function Activity({ label }: { label: string }) {
   return (
     <Row lead={<Orb kind="think" />} className="font-medium">
-      <span>{label.split(' ')[0]}</span>
+      <RowLabel>{label.split(' ')[0]}</RowLabel>
       <RowTarget mono className="font-normal">{label.split(' ').slice(1).join(' ')}</RowTarget>
     </Row>
   );
@@ -202,41 +199,58 @@ function CursorFold({ blocks }: { blocks: ToolCallBlock[] }) {
   );
 }
 
-// Codex mode: the whole run of lines sits under one head row. While running, the head row is the activity text (shimmer) with the body expanded; when the turn ends
-// the head row switches to "took <duration> · <action summary>" and auto-collapses, then can be reopened manually. Consecutive turns share the same structure, just open vs. closed.
-// Duration: the transcript has no per-turn start/end timestamps, so we sum the durationSec of the thoughts in this run; if there are none, the duration part is omitted.
-// Summary: action kinds deduplicated, in order of appearance, worded in the completed form; Thinking is excluded from the summary
-const ACTION_LABEL: Partial<Record<ToolKind, string>> = {
-  edit: '编辑了文件',
-  read: '读取了文件',
-  search: '搜索了代码',
-  execute: '运行了命令',
-  fetch: '抓取了网页',
-};
-
-function CodexFold({ blocks, working, activity }: { blocks: AgentBlock[]; working: boolean; activity?: string }) {
-  const [open, setOpen] = useState(working);
-  useEffect(() => { if (!working) setOpen(false); }, [working]);
-  const secs = blocks.reduce((n, b) => n + (b.type === 'thought' ? b.durationSec ?? 0 : 0), 0);
-  const actions: string[] = [];
-  for (const b of blocks) {
-    const l = b.type === 'tool_call' ? ACTION_LABEL[b.kind] : undefined;
-    if (l && !actions.includes(l)) actions.push(l);
+// One fold per turn. New chunks update its heading and history without resetting the manual toggle.
+// Permission cards stay outside; the latest reply remains visible while it streams.
+function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; running: boolean; onPermission: OnPermission }) {
+  // Thoughts keep their normal disclosure. A turn without tools needs no enclosing process fold.
+  if (!turn.blocks.some(block => block.type === 'tool_call')) {
+    return (
+      <div className="flex flex-col gap-gap">
+        {turn.blocks.map((block, i) => <Block key={'id' in block ? block.id : i} block={block} onPermission={onPermission} />)}
+        {running && turn.blocks.length === 0 && <Activity label={turn.activity?.label ?? '正在思考'} />}
+        {!running && outcomeOf(turn) && <Outcome turn={turn} />}
+      </div>
+    );
   }
-  const parts = [...(secs > 0 ? [`用时 ${fmtSecs(secs)}`] : []), ...actions];
+  const { process, reply, permissions } = splitCodexBlocks(turn.blocks);
   return (
-    <FoldRow icon={<Layers className="size-icon" strokeWidth={1.5} />} open={open} onToggle={setOpen} body={blocks.map((b, i) => <LineBlock key={i} block={b} />)}>
-      {working
-        ? <span className="shimmer">{activity ?? '正在工作'}</span>
-        : <span>{parts.length ? parts.join(' · ') : '已完成'}</span>}
-    </FoldRow>
+    <div className="flex flex-col gap-gap">
+      {(process.length > 0 || (running && reply.length === 0)) && <CodexFold turn={turn} blocks={process} running={running} />}
+      {reply.map((block, i) => <Prose key={i} block={block} />)}
+      {permissions.map(block => <Permission key={block.id} block={block} onChoose={id => onPermission(block.id, id)} />)}
+      {!running && outcomeOf(turn) && <Outcome turn={turn} />}
+    </div>
   );
 }
 
-function fmtSecs(s: number): string {
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60), r = s % 60;
-  return r ? `${m}m ${r}s` : `${m}m`;
+function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBlock[]; running: boolean }) {
+  const [open, setOpen] = useState(false);
+  const { toolLine, thought } = useAppearance();
+  const activity = foldActivity(turn);
+  const Icon = activity.kind === 'compaction' ? FoldVertical : TOOL_ICON[activity.kind];
+  const lead = !running || toolLine === 'text' ? undefined
+    : activity.kind === 'think' && thought === 'orb' ? <Orb kind="think" />
+    : <Icon className="size-icon" strokeWidth={1.5} />;
+  const label = running ? activity.label : elapsedLabel(turn);
+  const heading = <>
+    <RowLabel className={running ? 'shimmer' : undefined}>{label}</RowLabel>
+    {running && activity.target && <RowTarget mono={activity.mono}>{activity.target}</RowTarget>}
+  </>;
+  if (blocks.length === 0) return <Row lead={lead}>{heading}</Row>;
+  return (
+    <Disclosure
+      lead={lead} indent={false} open={open} onToggle={setOpen}
+      title={running ? [label, activity.target].filter(Boolean).join(' ') : label}
+      body={<div className="flex flex-col gap-0.5">{blocks.map((block, i) => (
+        block.type === 'tool_call' ? <ToolCall key={block.id} block={block} grouped />
+          : block.type === 'text' ? <Prose key={i} block={block} />
+          : <LineBlock key={'id' in block ? block.id : i} block={block} />
+      ))}</div>}
+    >
+      {heading}
+      <ChevronRight className={cn('size-3 shrink-0 self-center transition-transform', open && 'rotate-90')} strokeWidth={1.75} />
+    </Disclosure>
+  );
 }
 
 function LineBlock({ block }: { block: AgentBlock }) {

@@ -33,6 +33,11 @@ export function Row({ lead, trailing, children, interactive, as = 'div', classNa
   );
 }
 
+// Keep short labels intact; the adjacent target gives up space and truncates first.
+export function RowLabel({ children, className }: { children: ReactNode; className?: string }) {
+  return <span className={cn('shrink-0 whitespace-nowrap', className)}>{children}</span>;
+}
+
 // Target text within a row (file name / command), one step brighter than the verb
 export function RowTarget({ children, mono, className }: { children: ReactNode; mono?: boolean; className?: string }) {
   return <span className={cn('truncate text-fg-1/85', mono && 'font-mono text-mono', className)}>{children}</span>;

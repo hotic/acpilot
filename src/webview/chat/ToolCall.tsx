@@ -2,16 +2,17 @@ import { Check, FileText, Globe, X } from 'lucide-react';
 import type { ToolCallBlock } from '@shared/transcript';
 import { useAppearance } from '../appearance';
 import { Disclosure } from '../ui/Disclosure';
-import { Row, RowTarget } from '../ui/Row';
+import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { cn } from '../ui/cn';
 import { TOOL_ICON } from './icons';
 import { CodeSurface, DiffBlock } from './CodeBlock';
 import { TerminalOutput } from './Terminal';
+import { toolVerb } from './folding';
 
 // One tool call = one expandable row, command execution included (Codex-style: the command sits on the row, the output is a card below).
 // Three modes: text only / with icon / icon + meta. No Orb while running: icon mode uses the same static icon as the completed state, with the verb shimmering.
 // Bodies (diff / output / list) are not indented — they align with the row's left edge, like Codex
-export function ToolCall({ block }: { block: ToolCallBlock }) {
+export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; grouped?: boolean }) {
   const { toolLine } = useAppearance();
   const running = block.status === 'in_progress' || block.status === 'pending';
   const execute = block.kind === 'execute';
@@ -29,11 +30,17 @@ export function ToolCall({ block }: { block: ToolCallBlock }) {
       </>
     : undefined;
 
-  // A running command opens by default so the output can be watched live
+  const label = <>
+    <RowLabel className={running ? 'shimmer' : undefined}>{grouped ? toolVerb(block) : block.verb}</RowLabel>
+    {block.target && <RowTarget mono={block.targetMono}>{block.target}</RowTarget>}
+  </>;
+  // A history row without details has no second disclosure to open.
+  if (grouped && !block.content) return <Row lead={lead} trailing={trailing}>{label}</Row>;
+
+  // Opening a process fold reveals action rows; outputs only expand on an explicit click.
   return (
-    <Disclosure lead={lead} trailing={trailing} indent={false} defaultOpen={execute && running} body={<ToolBody block={block} />}>
-      <span className={running ? 'shimmer' : undefined}>{block.verb}</span>
-      {block.target && <RowTarget mono={block.targetMono}>{block.target}</RowTarget>}
+    <Disclosure lead={lead} trailing={trailing} indent={false} defaultOpen={!grouped && execute && running} body={<ToolBody block={block} />}>
+      {label}
     </Disclosure>
   );
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronRight, ListTodo } from 'lucide-react';
 import type { PlanBlock, Turn } from '@shared/transcript';
 import { Card } from '../ui/Card';
-import { Row, RowTarget } from '../ui/Row';
+import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { Collapse } from '../ui/Collapse';
 import { cn } from '../ui/cn';
 import { PlanEntries } from './Plan';
@@ -29,7 +29,7 @@ export function PlanBar({ turns, running }: { turns: Turn[]; running: boolean })
             <ChevronRight className="size-3 transition-transform group-data-[open]:rotate-90" strokeWidth={1.75} />
           </>}
         >
-          <span className={cn('shrink-0', running && current && 'shimmer')}>计划</span>
+          <RowLabel className={cn(running && current && 'shimmer')}>计划</RowLabel>
           {current && <RowTarget>{current.title}</RowTarget>}
         </Row>
         <Collapse open={open}>

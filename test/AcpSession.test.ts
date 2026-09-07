@@ -72,6 +72,9 @@ describe('AcpSession', () => {
     const agent = v.turns[1]!;
     expect(agent.role).toBe('agent');
     if (agent.role !== 'agent') return;
+    expect(agent.startedAt).toEqual(expect.any(Number));
+    expect(agent.endedAt).toEqual(expect.any(Number));
+    expect(agent.endedAt!).toBeGreaterThanOrEqual(agent.startedAt!);
     expect(agent.blocks.map(b => b.type)).toEqual(['thought', 'plan', 'text']);
     expect(agent.blocks[0]).toMatchObject({ type: 'thought', text: 'thinking hard', streaming: false });
     expect(agent.blocks[2]).toMatchObject({ type: 'text', markdown: 'hello world', streaming: false });

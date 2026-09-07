@@ -14,7 +14,7 @@ export interface Appearance {
   send: 'accent' | 'icon' | 'metal';
   accent: 'brand' | 'agent' | 'vscode';
   motion: 'subtle' | 'none' | 'full';
-  // How an agent message's lines fold: codex wraps the whole run under one "took · did" row once the turn ends;
+  // Codex keeps one manual process fold per turn: current activity while running, elapsed time when done;
   // cursor only folds runs of read-only actions, edits and commands stay visible
   fold: 'codex' | 'cursor';
 }

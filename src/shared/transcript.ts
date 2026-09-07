@@ -182,6 +182,9 @@ export interface TurnError {
 export interface AgentTurn {
   role: 'agent';
   blocks: AgentBlock[];
+  // Wall-clock prompt duration, including tools and permission waits. Absent on older transcripts.
+  startedAt?: number;
+  endedAt?: number;
   // What it's currently doing (inferred from usage and tool states); empty when the turn ends
   activity?: { kind: ToolKind; label: string };
   // How the turn ended; absent while it runs (and on turns persisted before this field existed)

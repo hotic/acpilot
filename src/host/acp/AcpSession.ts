@@ -358,7 +358,7 @@ export class AcpSession {
     if (attachments.length) this.log(`attachments: ${prepared.blocks.slice(text ? 1 : 0).map(b => b.type).join(' ')}`);
     this.state.turns.push(auto ? { role: 'user', text, auto: true } : { role: 'user', text, ...(prepared.attachments.length ? { attachments: prepared.attachments } : {}) });
     if (!auto && (!this.state.title || this.state.title === '新会话')) this.state.title = summarizePrompt({ text, attachments }).slice(0, 40);
-    this.state.turns.push({ role: 'agent', blocks: [], activity: activityOf(this.state.turns) });
+    this.state.turns.push({ role: 'agent', blocks: [], startedAt: Date.now(), activity: activityOf(this.state.turns) });
     this.touch();
     let stop: acp.StopReason = 'cancelled';
     try {

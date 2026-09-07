@@ -163,6 +163,8 @@ export function endTurn(s: NormalizeState, stopReason: acp.StopReason) {
   const t = s.turns[s.turns.length - 1];
   if (t?.role !== 'agent') return;
   sealStreaming(s, t);
+  // Replay-only turns have no live start time; never invent a duration for them.
+  if (t.startedAt !== undefined) t.endedAt ??= Date.now();
   t.activity = undefined;
   t.stop = stopReason;
   for (const b of t.blocks) {
