@@ -61,8 +61,11 @@ export function Composer(p: ComposerProps) {
   const beamActive = focused || openMenus > 0;
   const mode = p.controls.modes.find(m => m.id === p.controls.modeId);
   const dim = p.running || p.disabled;
-  // Model options (the ones that decompose into families) leave the left row and join the right, next to the send button
+  // Model options leave the left row and join the right, next to the send button. ACP's category=model is the signal when the agent
+  // provides it (Grok's monolithic names decompose into nothing, so the name heuristic alone would leave its model on the left);
+  // agents without categories fall back to that heuristic (Devin's 210-option list decomposes into families)
   const isModel = (c: ConfigControl) => {
+    if (c.category) return c.category === 'model';
     const shown = visibleOptions(c.options, p.hidden?.[c.id], c.value);
     return groupModels(shown).length < shown.length;
   };
@@ -203,7 +206,7 @@ export function Composer(p: ComposerProps) {
                 const Icon = mode ? modeIcon(mode) : undefined;
                 return (
                   <Chip
-                    ref={ref} variant="solid" className="shrink-0" narrow="icon" data-open={open || undefined} onClick={toggle}
+                    ref={ref} variant="solid" className="ml-0.5 shrink-0" narrow="icon" data-open={open || undefined} onClick={toggle}
                     title={mode ? [mode.name, mode.description].filter(Boolean).join(' · ') : '模式'} icon={Icon && <Icon strokeWidth={1.75} />}
                   >
                     {mode?.name ?? '模式'}
@@ -218,7 +221,7 @@ export function Composer(p: ComposerProps) {
         </div>
         {p.usage && <ContextRing usage={p.usage} turns={p.turns} canCompact={!!p.canCompact && !dim} onCompact={p.onCompact} onOpenChange={onOpenChange} />}
         {modelControls.map(c => (
-          <OptionControl key={c.id} control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
+          <OptionControl key={c.id} end control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
         ))}
         <SendButton running={p.running} filled={canSend} theme={p.theme} onClick={p.running ? p.onStop : send} />
       </div>
@@ -236,6 +239,8 @@ interface OptionMenuProps {
   control: ConfigControl;
   onSelect: (value: string) => void;
   onOpenChange: (open: boolean) => void;
+  // Right-side controls (the model slot) align their panel to the chip's right edge so it doesn't overflow the composer
+  end?: boolean;
 }
 
 // A single configOption, minus the families hidden in the settings: names that decompose into a "family × params" structure (Devin's 210 models)
@@ -322,30 +327,30 @@ function ModelParams({ family: f, variant: v, onSelect }: { family: ModelFamily;
 
 // Flat configOption menu; long lists are searchable. Vendor marks only appear when at least one option names a known brand
 // (Grok's monolithic model list) — a thought_level menu of "Low / High" stays text-only instead of earning letter tiles
-function OptionMenu({ control: c, onSelect, onOpenChange }: OptionMenuProps) {
+function OptionMenu({ control: c, end, onSelect, onOpenChange }: OptionMenuProps) {
   const branded = c.options.some(o => modelBrand(o.name));
   const items = c.options.map((o): MenuItem => ({ id: o.id, label: o.name, description: o.description, icon: branded ? <ModelMark family={o.name} /> : undefined, checked: o.id === c.value }));
   const curName = c.options.find(o => o.id === c.value)?.name;
   const curIcon = branded && curName && modelBrand(curName) ? <ModelMark family={curName} /> : undefined;
   return (
-    <Menu side="top" width="md" items={items} searchable={c.options.length >= SEARCH_FROM} onSelect={onSelect} onOpenChange={onOpenChange}>
+    <Menu side="top" align={end ? 'end' : undefined} width="md" items={items} searchable={c.options.length >= SEARCH_FROM} onSelect={onSelect} onOpenChange={onOpenChange}>
       {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={c.name} icon={curIcon}>{curName ?? c.name}</Chip>}
     </Menu>
   );
 }
 
-// Context usage: a --icon-sized ring inside a --ctl-square button; opens to show the breakdown, and agents with /compact can be compacted manually here
+// Context usage: a --icon-sized ring inside a --ctl-square button; hovering shows the breakdown card (Cursor-style), and agents with /compact can be compacted from its title row
 function ContextRing({ usage, turns, canCompact, onCompact, onOpenChange }: { usage: Usage; turns: Turn[]; canCompact: boolean; onCompact: () => void; onOpenChange: (open: boolean) => void }) {
   const pct = Math.min(1, usage.used / usage.size);
   const segments = useMemo(() => estimateUsage(turns, usage), [turns, usage]);
   const r = 6, c = 2 * Math.PI * r;
   return (
-    <Popover side="top" align="end" width="lg" onOpenChange={onOpenChange} content={close => <UsagePanel usage={usage} pct={pct} segments={segments} onCompact={canCompact ? () => { onCompact(); close(); } : undefined} />}>
-      {({ open, toggle, ref }) => (
+    <Popover side="top" align="end" width="lg" trigger="hover" onOpenChange={onOpenChange} content={close => <UsagePanel usage={usage} pct={pct} segments={segments} onCompact={canCompact ? () => { onCompact(); close(); } : undefined} />}>
+      {({ open, hover, ref }) => (
         <button
           ref={ref}
           type="button"
-          onClick={toggle}
+          {...hover}
           data-open={open || undefined}
           aria-label={`上下文已用 ${Math.round(pct * 100)}%`}
           className="inline-flex size-ctl shrink-0 items-center justify-center rounded-md text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 data-[open]:bg-active data-[open]:text-fg-1"

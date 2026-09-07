@@ -18,12 +18,22 @@ export interface PopoverApi {
   open: boolean;
   toggle: () => void;
   ref: RefObject<HTMLButtonElement | null>;
+  // Hover-trigger mode only: spread onto the trigger element
+  hover?: {
+    onMouseEnter: () => void;
+    onMouseLeave: () => void;
+    onFocus: () => void;
+    onBlur: () => void;
+  };
 }
 
 export interface PopoverProps {
   side?: Side;
   align?: Align;
   width?: PopoverWidth;
+  // click (default): toggle on click, close on outside / Esc. hover: open while the trigger or the panel is hovered / focused
+  // (Cursor's context card) — the panel joins the hover area so its buttons stay reachable, a short close grace bridges the gap
+  trigger?: 'click' | 'hover';
   content: (close: () => void) => ReactNode;
   children: (api: PopoverApi) => ReactNode;
   panelClassName?: string;
@@ -33,7 +43,7 @@ export interface PopoverProps {
 }
 
 // Trigger + panel. The panel position is computed from the anchor, with coordinates relative to the shell root; in the LAB the shell is CSS-zoomed, so measured width / layout width corrects for it
-export function Popover({ side = 'bottom', align = 'start', width, content, children, panelClassName, role = 'dialog', onOpenChange }: PopoverProps) {
+export function Popover({ side = 'bottom', align = 'start', width, trigger = 'click', content, children, panelClassName, role = 'dialog', onOpenChange }: PopoverProps) {
   const layer = useContext(ShellLayerContext);
   const anchor = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -41,6 +51,16 @@ export function Popover({ side = 'bottom', align = 'start', width, content, chil
   const [style, setStyle] = useState<CSSProperties>();
   const id = useId();
   const close = () => setOpen(false);
+
+  const hoverMode = trigger === 'hover';
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  // Enter opens after a beat so sweeping past doesn't flash the panel; leaving either surface starts the close grace
+  const enter = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setOpen(true), 120); };
+  const leave = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setOpen(false), 250); };
+  // Keyboard focus opens immediately — no dwell for focus
+  const focusIn = () => { clearTimeout(timer.current); setOpen(true); };
+  const hoverHandlers = hoverMode ? { onMouseEnter: enter, onMouseLeave: leave, onFocus: focusIn, onBlur: leave } : undefined;
 
   const notify = useRef(onOpenChange);
   notify.current = onOpenChange;
@@ -79,13 +99,14 @@ export function Popover({ side = 'bottom', align = 'start', width, content, chil
 
   return (
     <>
-      {children({ open, toggle: () => setOpen(o => !o), ref: anchor })}
+      {children({ open, toggle: () => setOpen(o => !o), ref: anchor, hover: hoverHandlers })}
       {open && layer?.current && createPortal(
         <div
           ref={panel}
           id={id}
           role={role}
           style={style}
+          {...hoverHandlers}
           className={cn(
             'absolute z-30 max-w-[calc(100%-2*var(--pad))] rounded-lg border border-line bg-bg-1 p-1 shadow-pop',
             width && WIDTH[width],
