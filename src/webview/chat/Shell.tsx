@@ -26,7 +26,8 @@ export interface ShellHandlers {
   setConfig: (configId: string, value: string) => void;
   selectAgent: (id: AgentInfo['id']) => void;
   selectSession: (id: string) => void;
-  newSession: () => void;
+  // Without an agent the host falls back to the configured defaultAgent
+  newSession: (agent?: AgentInfo['id']) => void;
   renameSession: (id: string, title: string) => void;
   deleteSession: (id: string) => void;
   restoreSession: (id: string) => void;

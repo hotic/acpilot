@@ -1,8 +1,9 @@
-import { History, Menu as MenuIcon, Plus, Settings2, UserRound } from 'lucide-react';
+import { ChevronDown, History, Menu as MenuIcon, Plus, Settings2, UserRound } from 'lucide-react';
 import type { AccountInfo, AgentInfo, SessionSummary } from '@shared/transcript';
 import { useAppearance } from '../appearance';
 import { IconButton } from '../ui/Button';
-import { Popover } from '../ui/Popover';
+import { Menu, Popover } from '../ui/Popover';
+import { AgentMark } from './AgentMark';
 import { AgentPanel } from './AgentPanel';
 import { SessionList } from './SessionList';
 import type { ShellHandlers } from './Shell';
@@ -87,9 +88,27 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
                   </IconButton>
                 )}
               </Popover>
-              <IconButton onClick={() => on.newSession()} title="新会话" aria-label="新会话">
-                <Plus strokeWidth={1.5} />
-              </IconButton>
+              {/* Split new-session: the plus goes with the configured default agent, the caret opens an agent picker */}
+              <div className="flex items-center">
+                <IconButton onClick={() => on.newSession()} title="新会话" aria-label="新会话">
+                  <Plus strokeWidth={1.5} />
+                </IconButton>
+                <Menu
+                  side="bottom" align="end" width="sm"
+                  items={agents.map(a => ({ id: a.id, label: a.name, icon: <AgentMark id={a.id} name={a.name} />, disabled: a.available === false }))}
+                  onSelect={id => on.newSession(id)}
+                >
+                  {({ open, toggle, ref }) => (
+                    <IconButton
+                      ref={ref} data-open={open || undefined} onClick={toggle}
+                      title="选择新会话的 Agent" aria-label="选择新会话的 Agent"
+                      className="-ml-1.5 data-[open]:bg-active data-[open]:text-fg-1"
+                    >
+                      <ChevronDown strokeWidth={1.5} />
+                    </IconButton>
+                  )}
+                </Menu>
+              </div>
               {settingsButton}
             </div>
           </>

@@ -86,7 +86,7 @@ export function App() {
     setConfig: (configId, value) => post({ type: 'setConfig', configId, value }),
     selectAgent: id => post({ type: 'selectAgent', id }),
     selectSession: id => post({ type: 'selectSession', id }),
-    newSession: () => post({ type: 'newSession' }),
+    newSession: agent => post({ type: 'newSession', ...(agent ? { agent } : {}) }),
     renameSession: (id, title) => post({ type: 'renameSession', id, title }),
     deleteSession: id => post({ type: 'deleteSession', id }),
     restoreSession: id => post({ type: 'restoreSession', id }),
