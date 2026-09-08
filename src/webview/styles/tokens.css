@@ -145,6 +145,9 @@
   --question-focus-width: 2px;
   /* Only the pinned to-do list has a bounded viewport; historical plans grow naturally. */
   --plan-rows: 7;
+  --plan-pad-y: 6px;
+  --plan-section-gap: 4px;
+  --plan-entry-pad-y: 2px;
   /* Max rows shown in a menu; beyond that it scrolls inside the menu (Devin's 210 models) */
   --pop-rows: 8;
 
@@ -205,9 +208,21 @@
   overscroll-behavior-y: contain;
 }
 
-.plan-current { align-items: flex-start; }
-.plan-current > .row-lead { margin-top: calc((var(--text-2-lh) - var(--lead)) / 2); }
+.plan-card { gap: var(--plan-section-gap); padding-block: var(--plan-pad-y); }
+.plan-entry-row { align-items: flex-start; }
+.plan-entry-row > .row-lead { margin-top: calc((var(--text-2-lh) - var(--lead)) / 2); }
+/* Dock entries use balanced text padding; the header retains its full hit area. */
+.plan-card .plan-entry-row {
+  min-height: calc(var(--text-2-lh) + var(--plan-entry-pad-y) * 2);
+  padding-block: var(--plan-entry-pad-y);
+}
+.plan-card .plan-entry-row > .row-lead {
+  margin-block: calc((var(--text-2-lh) - var(--lead)) / 2);
+}
 .plan-entry-viewport {
+  --scroll-fade-size: var(--gap);
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
   max-height: calc(var(--row-dense) * var(--plan-rows));
   overflow-y: auto;
   overscroll-behavior-y: contain;
