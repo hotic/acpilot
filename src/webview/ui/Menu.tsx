@@ -97,6 +97,9 @@ export function MenuList({ items, onSelect, searchable, empty, header, footer }:
   };
 
   const twoLine = shown.some(it => it.description || it.extra);
+  // When any shown row is checked, reserve the check's slot on the others so content columns (and extra lines like
+  // quota bars) keep one width across rows — otherwise the checked row's column ends up narrower than its siblings'
+  const hasCheck = shown.some(it => it.checked);
   return (
     <div ref={ref} onKeyDown={onKey} className="flex flex-col">
       {header}
@@ -145,7 +148,9 @@ export function MenuList({ items, onSelect, searchable, empty, header, footer }:
                   {it.extra}
                 </span>
                 {it.meta && <span className="shrink-0 text-3 text-fg-3">{it.meta}</span>}
-                {it.checked && <Check className="size-icon shrink-0 text-fg-1" strokeWidth={2} />}
+                {it.checked
+                  ? <Check className="size-icon shrink-0 text-fg-1" strokeWidth={2} />
+                  : hasCheck && <span className="size-icon shrink-0" aria-hidden />}
               </button>
               {it.onRemove && (
                 <TrailingButton label={t('common.removeNamed', { name: it.label })} title={t('common.remove')} onClick={it.onRemove}>
