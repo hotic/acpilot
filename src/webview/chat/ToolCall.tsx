@@ -6,7 +6,7 @@ import { Disclosure } from '../ui/Disclosure';
 import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { cn } from '../ui/cn';
 import { IconButton } from '../ui/Button';
-import { Collapse } from '../ui/Collapse';
+import { Collapsible } from '../ui/Collapsible';
 import { ConnectedRail } from '../ui/ConnectedRail';
 import { t } from '../i18n';
 import { TOOL_ICON } from './icons';
@@ -23,7 +23,8 @@ export const OpenToolFileContext = createContext<((path: string, line?: number) 
 // Bodies (diff / output / list) are not indented — they align with the row's left edge, like Codex
 export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; grouped?: boolean }) {
   const { toolLine } = useAppearance();
-  const running = block.status === 'in_progress' || block.status === 'pending';
+  // Announced calls can wait behind another tool; only execution shimmers.
+  const running = block.status === 'in_progress';
   const execute = block.kind === 'execute';
   const seconds = useToolSeconds(block);
   const files = toolFiles(block);
@@ -128,18 +129,18 @@ function FileResultRow({ hit, lead, aside, body, children }: { hit: string; lead
   const openFile = useContext(OpenToolFileContext);
   const [open, setOpen] = useState(false);
   const file = fileReference(hit);
-  return <div className="flex min-w-0 flex-col">
+  return <Collapsible.Root open={open} onOpenChange={setOpen} className="flex min-w-0 flex-col">
     <Row dense lead={lead} title={hit} trailing={<>
       {aside}
-      {body && <IconButton size="sm" title={t('tool.toggleOutput')} aria-label={t('tool.toggleOutput')} aria-expanded={open} onClick={() => setOpen(!open)}>
+      {body && <Collapsible.Trigger render={<IconButton size="sm" title={t('tool.toggleOutput')} aria-label={t('tool.toggleOutput')}>
         <ChevronRight className={cn('transition-transform', open && 'rotate-90')} strokeWidth={1.5} />
-      </IconButton>}
+      </IconButton>} />}
     </>}>
       {openFile ? <button type="button" title={hit} className="flex min-w-0 max-w-full cursor-pointer text-left hover:underline focus-visible:underline"
         onClick={() => openFile(file.path, file.line)}>{children}</button> : children}
     </Row>
-    {body && <Collapse open={open} className="disclosure-body"><div className="pt-1 pb-1.5">{body}</div></Collapse>}
-  </div>;
+    {body && <Collapsible.Panel className="-mx-hit [&>div]:px-hit"><div className="pt-1 pb-1.5">{body}</div></Collapsible.Panel>}
+  </Collapsible.Root>;
 }
 
 function splitHit(hit: string): { main: string; aside?: string } {

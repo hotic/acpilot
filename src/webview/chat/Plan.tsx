@@ -4,11 +4,14 @@ import type { PlanBlock, PlanEntry, PlanStatus } from '@shared/transcript';
 import { useAppearance } from '../appearance';
 import { t } from '../i18n';
 import { Card } from '../ui/Card';
-import { Collapse } from '../ui/Collapse';
+import { Collapsible } from '../ui/Collapsible';
 import { Disclosure } from '../ui/Disclosure';
 import { Row, RowLabel } from '../ui/Row';
 import { cn } from '../ui/cn';
 import { useScrollFade } from '../ui/useScrollFade';
+
+// Dock entries use balanced text padding; the header retains its full hit area.
+const dockEntryClass = 'min-h-[calc(var(--text-2-lh)+var(--plan-entry-pad-y)*2)] py-(--plan-entry-pad-y)';
 
 // Keep the current entry mounted while the surrounding rows expand. Sharing
 // the same row avoids a disappearing summary and a shrinking first frame.
@@ -20,7 +23,7 @@ export function PlanCard({ entries, live }: { entries: PlanEntry[]; live?: boole
   const current = entries.find(e => e.status === 'in_progress') ?? entries.find(e => e.status === 'pending');
   const lead = toolLine === 'text' ? undefined : <ListTodo className="size-icon" strokeWidth={1.5} />;
   return (
-    <Card className="plan-card flex min-w-0 flex-col px-pad" data-open={open || undefined}>
+    <Card className="flex min-w-0 flex-col gap-(--plan-section-gap) px-pad py-(--plan-pad-y)" data-open={open || undefined}>
       <Row
         as="button" interactive dense aria-expanded={open} onClick={() => setOpen(o => !o)}
         lead={lead}
@@ -31,13 +34,13 @@ export function PlanCard({ entries, live }: { entries: PlanEntry[]; live?: boole
       >
         <RowLabel className={cn(live && current && 'shimmer')}>{t('plan.todoTitle')}</RowLabel>
       </Row>
-      <div ref={fade} className="plan-entry-viewport scroll-thin scroll-fade">
-        <Collapse open={!open && !current}>
-          <Row className="plan-entry-row" dense lead={toolLine === 'text' ? undefined : <PlanDot status="completed" />}>
+      <div ref={fade} className="scroll-fade scroll-thin scroll-stable max-h-plan overflow-y-auto overscroll-y-contain [--scroll-fade-size:var(--gap)] [overflow-anchor:none]">
+        <Collapsible.Root open={!open && !current}><Collapsible.Panel>
+          <Row className={cn('items-start lead-top', dockEntryClass)} dense lead={toolLine === 'text' ? undefined : <PlanDot status="completed" />}>
             <span className="text-fg-2">{t('plan.completed', { n: entries.length })}</span>
           </Row>
-        </Collapse>
-        <PlanEntries entries={entries} expanded={open} current={current} showStatus={toolLine !== 'text'} />
+        </Collapsible.Panel></Collapsible.Root>
+        <PlanEntries entries={entries} expanded={open} current={current} showStatus={toolLine !== 'text'} entryClass={dockEntryClass} />
       </div>
     </Card>
   );
@@ -67,29 +70,30 @@ function PlanCaret({ open }: { open: boolean }) {
 }
 
 // The entry list shared by the transcript block and the PlanBar: status dot in the lead slot, the title dimming once done, a faint priority glyph on the right for high / low
-export function PlanEntries({ entries, expanded, current, showStatus = true }: {
+export function PlanEntries({ entries, expanded, current, showStatus = true, entryClass }: {
   entries: PlanEntry[];
   expanded?: boolean;
   current?: PlanEntry;
   showStatus?: boolean;
+  entryClass?: string;
 }) {
   return (
     <ol className="flex flex-col">
       {entries.map((entry, index) => {
         const key = `${index}:${entry.title}`;
-        const row = <PlanEntryRow key={key} entry={entry} showStatus={showStatus} />;
+        const row = <PlanEntryRow key={key} entry={entry} showStatus={showStatus} className={entryClass} />;
         // History keeps its natural layout. Only the live dock folds individual rows.
         return expanded === undefined ? row : (
-          <Collapse key={key} open={expanded || entry === current}>{row}</Collapse>
+          <Collapsible.Root key={key} open={expanded || entry === current}><Collapsible.Panel>{row}</Collapsible.Panel></Collapsible.Root>
         );
       })}
     </ol>
   );
 }
 
-function PlanEntryRow({ entry, showStatus }: { entry: PlanEntry; showStatus: boolean }) {
+function PlanEntryRow({ entry, showStatus, className }: { entry: PlanEntry; showStatus: boolean; className?: string }) {
   return (
-    <Row className="plan-entry-row" dense lead={showStatus ? <PlanDot status={entry.status} /> : undefined} trailing={priorityGlyph(entry.priority)}>
+    <Row className={cn('items-start lead-top', className)} dense lead={showStatus ? <PlanDot status={entry.status} /> : undefined} trailing={priorityGlyph(entry.priority)}>
       <span className={cn('min-w-0 break-words', entry.status === 'completed' ? 'text-fg-2' : 'text-fg-1', entry.status === 'in_progress' && 'text-fg-strong')}>
         {entry.title}
       </span>

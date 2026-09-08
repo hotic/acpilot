@@ -1,6 +1,5 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { Check, ChevronRight, Compass, Copy, Hand, MessageCircleQuestion, Pencil, TriangleAlert, X } from 'lucide-react';
-import { IconButton } from '../ui/Button';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import { Check, ChevronRight, Compass, Hand, MessageCircleQuestion, TriangleAlert, X } from 'lucide-react';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
 import { t } from '../i18n';
@@ -8,6 +7,7 @@ import { Row, RowLabel, RowTarget, RowEntranceContext } from '../ui/Row';
 import { Disclosure } from '../ui/Disclosure';
 import { Orb } from '../effects/Orb';
 import { cn } from '../ui/cn';
+import { useScrollFade } from '../ui/useScrollFade';
 import { TOOL_ICON } from './icons';
 import { Thought } from './Thought';
 import { Plan } from './Plan';
@@ -24,10 +24,12 @@ import { compactionForDisplay } from './compactionDisplay';
 
 // User message: color block / right-aligned bubble / plain text; ones Acpira sends automatically (/compact) render as a note line, not a bubble.
 // Attachments (image thumbnails / file pills) sit above the text inside the same bubble.
-// Hover actions occupy the existing reply gap, without adding height; clicking the card opens its inline editor.
-// Sticking within the exchange is the caller's job (`HistoryMessage` wraps it), so the editor can take the card's place without a layout jump
-export function UserMessage({ turn, index, blobUrl, onEdit }: { turn: UserTurn; index: number; blobUrl?: (blob: string) => string; onEdit?: () => void }) {
+// Clicking the card opens its inline editor, which also gives the full text for copying; no separate hover actions.
+// Sticking within the exchange is the caller's job (`HistoryMessage` wraps it), so the editor can take the card's place without a layout jump;
+// `compact` is its stuck state: the text folds to a few lines with a fading edge so a long prompt does not wall off the reply.
+export function UserMessage({ turn, index, blobUrl, onEdit, compact }: { turn: UserTurn; index: number; blobUrl?: (blob: string) => string; onEdit?: () => void; compact?: boolean }) {
   const { userMessage } = useAppearance();
+  const fade = useScrollFade<HTMLDivElement>();
   if (turn.auto) {
     return (
       <div className="enter px-pad" style={{ '--i': index } as CSSProperties}>
@@ -36,7 +38,7 @@ export function UserMessage({ turn, index, blobUrl, onEdit }: { turn: UserTurn; 
     );
   }
   return (
-    <div className={cn('user-message-frame relative flex w-full min-w-0 flex-col', userMessage === 'bubble' && 'self-end max-w-[88%]')}>
+    <div className={cn('flex w-full min-w-0 flex-col', userMessage === 'bubble' && 'self-end max-w-[88%]')}>
       <div
         onClick={onEdit ? e => {
           // Preserve text selection and attachment preview controls inside the card.
@@ -44,36 +46,24 @@ export function UserMessage({ turn, index, blobUrl, onEdit }: { turn: UserTurn; 
           onEdit();
         } : undefined}
         className={cn(
-          'user-message relative flex w-full shrink-0 flex-col gap-gap text-1 text-fg-1 [overflow-wrap:anywhere]',
-          userMessage !== 'plain' && 'user-message-card rounded-lg px-pad py-gap',
-          onEdit && 'user-message-editable cursor-pointer',
+          'relative flex max-h-(--user-message-max) w-full shrink-0 flex-col gap-gap px-pad text-1 text-fg-1 [overflow-wrap:anywhere]',
+          // Cards stick within an exchange; an opaque surface under the translucent chip color stops replies bleeding through.
+          userMessage !== 'plain' && 'user-message-card rounded-lg py-gap bg-bg-0 bg-[linear-gradient(var(--chip),var(--chip))] shadow-[inset_0_0_0_1px_var(--conversation-line)] transition-shadow',
+          // An editable prompt opens on click; its outline firms up while the actions appear below.
+          onEdit && 'cursor-pointer',
+          onEdit && userMessage !== 'plain' && 'hover:shadow-[inset_0_0_0_1px_var(--conversation-line-focus)]',
           userMessage === 'plain' && 'bg-bg-0 py-gap font-medium',
         )}
       >
         {turn.attachments?.length ? <TurnAttachments attachments={turn.attachments} blobUrl={blobUrl} /> : null}
-        {turn.text && <div className="scroll-thin min-h-0 overflow-y-auto whitespace-pre-wrap">{turn.text}</div>}
+        {turn.text && <div ref={fade} className={cn(
+          'scroll-fade scroll-thin min-h-0 whitespace-pre-wrap transition-[max-height] duration-(--dur-open) ease-out [--scroll-fade-size:var(--text-1-lh)]',
+          // Folded text does not take the wheel: scrolling over a stuck card keeps moving the conversation.
+          compact ? 'max-h-(--user-message-stuck-max) overflow-hidden' : 'max-h-(--user-message-max) overflow-y-auto',
+        )}>{turn.text}</div>}
       </div>
-      <UserMessageActions text={turn.text} onEdit={onEdit} />
     </div>
   );
-}
-
-function UserMessageActions({ text, onEdit }: { text: string; onEdit?: () => void }) {
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
-  useEffect(() => {
-    if (copyState === 'idle') return;
-    const timer = setTimeout(() => setCopyState('idle'), 1500);
-    return () => clearTimeout(timer);
-  }, [copyState, text]);
-  if (!text && !onEdit) return null;
-  const copyLabel = t(copyState === 'copied' ? 'history.copied' : copyState === 'failed' ? 'history.copyFailed' : 'history.copy');
-  return <Row dense className="message-actions" trailing={<>
-    {text && <IconButton size="sm" title={copyLabel} aria-label={copyLabel} onClick={() => {
-      void navigator.clipboard.writeText(text).then(() => setCopyState('copied'), () => setCopyState('failed'));
-    }}>{copyState === 'copied' ? <Check /> : copyState === 'failed' ? <TriangleAlert /> : <Copy />}</IconButton>}
-    {onEdit && <IconButton size="sm" title={t('history.edit')} aria-label={t('history.edit')} onClick={onEdit}><Pencil /></IconButton>}
-    <span role="status" className="sr-only">{copyState !== 'idle' ? copyLabel : ''}</span>
-  </>}>{null}</Row>;
 }
 
 type OnPermission = (blockId: string, optionId: string) => void;
@@ -88,7 +78,7 @@ export function AgentMessage({ turn, index, running, onPermission, compacting }:
   // Older persisted sessions can contain empty thought blocks from ACP deltas.
   // Filter before grouping so they leave neither a disclosure nor a rail/spacing slot.
   const content = { ...turn, blocks: turn.blocks.filter(b => b.type !== 'plan_document' && (b.type !== 'thought' || !!b.text.trim())) };
-  return <RowEntranceContext.Provider value={running}><div className="agent-message flex min-w-0 flex-col gap-gap">
+  return <RowEntranceContext.Provider value={running}><div className="flex min-w-0 flex-col gap-gap px-pad [--row:var(--chat-row)]">
     <AgentContent turn={content} index={index} running={running} onPermission={onPermission} />
     {plans.map(plan => <PlanDocument key={plan.id} block={plan}
       permission={turn.blocks.find((b): b is PermissionBlock => b.type === 'permission' && b.planId === plan.id)} onChoose={onPermission} />)}
@@ -99,7 +89,7 @@ function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn;
   const { fold } = useAppearance();
   if (fold === 'codex') return <CodexMessage turn={turn} running={running} onPermission={onPermission} />;
   // Plan approvals live on the plan card and the open question card above the composer; neither takes a slot in the message
-  const groups = groupBlocks(turn.blocks.filter(b => (b.type !== 'permission' || !b.planId) && (b.type !== 'question' || !!b.outcome)));
+  const groups = groupBlocks(detailBlocks(turn, running).filter(b => (b.type !== 'permission' || !b.planId) && (b.type !== 'question' || !!b.outcome)));
   return (
     <div className="flex flex-col gap-gap">
       {running && <Activity turn={turn} />}
@@ -147,6 +137,18 @@ function Outcome({ turn }: { turn: AgentTurn }) {
 
 // Turn-level activity is independent of the latest tool and the fold's expansion state.
 // A pending user decision suspends the animation until the turn can continue.
+function compactionInActivity(turn: AgentTurn) {
+  return !turn.blocks.some(b => b.type === 'permission' || (b.type === 'question' && !b.outcome))
+    && turn.blocks.some(b => b.type === 'compaction' && b.status === 'in_progress');
+}
+
+// The activity owns live compaction; terminal statuses stay in transcript history.
+function detailBlocks(turn: AgentTurn, running: boolean) {
+  return running && compactionInActivity(turn)
+    ? turn.blocks.filter(b => b.type !== 'compaction' || b.status !== 'in_progress')
+    : turn.blocks;
+}
+
 function liveActivity(turn: AgentTurn) {
   if (turn.blocks.some(b => b.type === 'permission')) {
     return { label: t('host.awaitingApproval'), active: false, lead: <Hand className="size-icon" strokeWidth={1.5} /> };
@@ -154,7 +156,7 @@ function liveActivity(turn: AgentTurn) {
   if (turn.blocks.some(b => b.type === 'question' && !b.outcome)) {
     return { label: t('host.awaitingAnswers'), active: false, lead: <MessageCircleQuestion className="size-icon" strokeWidth={1.5} /> };
   }
-  return { label: t('host.working'), active: true, lead: <Orb kind="think" /> };
+  return { label: t(compactionInActivity(turn) ? 'turns.compacting' : 'host.working'), active: true, lead: <Orb kind="think" /> };
 }
 
 function Activity({ turn }: { turn: AgentTurn }) {
@@ -185,7 +187,7 @@ function groupBlocks(blocks: AgentBlock[]): Group[] {
 function Lines({ blocks, fold, running }: { blocks: AgentBlock[]; fold: Appearance['fold']; running: boolean }) {
   const items = fold === 'cursor' ? foldReadOnly(blocks) : blocks.map(b => ({ kind: 'one' as const, block: b }));
   return (
-    <div className="process-lines flex flex-col gap-0.5">
+    <div className="process-rows flex flex-col gap-0.5">
       {items.map((it, i) => it.kind === 'one'
         ? <LineBlock key={i} block={it.block} />
         : <CursorFold key={it.blocks[0]!.id} blocks={it.blocks} />)}
@@ -259,12 +261,12 @@ function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; runnin
     return (
       <div className="flex flex-col gap-gap">
         {running && <Activity turn={turn} />}
-        {turn.blocks.map((block, i) => <Block key={'id' in block ? block.id : i} block={block} onPermission={onPermission} />)}
+        {detailBlocks(turn, running).map((block, i) => <Block key={'id' in block ? block.id : i} block={block} onPermission={onPermission} />)}
         {!running && outcomeOf(turn) && <Outcome turn={turn} />}
       </div>
     );
   }
-  const { process, reply, permissions, questions } = splitCodexBlocks(turn.blocks);
+  const { process, reply, permissions, questions } = splitCodexBlocks(detailBlocks(turn, running));
   return (
     <div className="flex flex-col gap-gap">
       {(process.length > 0 || (running && reply.length === 0)) && <CodexFold turn={turn} blocks={process} running={running} />}

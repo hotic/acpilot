@@ -1,0 +1,60 @@
+/* Animation: shimmer / enter utilities, streamed graphemes, row entrance, the ConnectedRail growth, keyframes and the reduced-motion kill switch. */
+@utility shimmer {
+  background: linear-gradient(90deg, #9a9a9a 0%, var(--fg-strong) 50%, #9a9a9a 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: acp-shimmer 2s linear infinite;
+}
+/* Content that replaces something in place (a prompt card ↔ its inline editor): a plain fade, the container animates its own height */
+@utility fade-in { animation: acp-fade-in var(--dur-open) ease both; }
+@utility enter {
+  animation: acp-enter var(--enter-dur) cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * var(--enter-stagger));
+}
+
+/* streamdown's animate plugin (Prose `animated`) wraps each newly streamed word in a span stamped with --sd-animation / --sd-duration /
+   --sd-easing / --sd-delay; its stylesheet is not imported, so the rules are redone here (list markers can't be wrapped, so they fade via color).
+   The global motion=none / reduced-motion rules below switch these off with everything else */
+[data-sd-animate] { animation: var(--sd-animation, sd-fadeIn) var(--sd-duration, 150ms) var(--sd-easing, ease) var(--sd-delay, 0ms) both; }
+[data-sd-animate-marker]::marker { animation: sd-markerIn var(--sd-marker-duration, 150ms) var(--sd-marker-easing, ease) var(--sd-marker-delay, 0ms) both; }
+@keyframes sd-fadeIn { from { opacity: 0; } }
+@keyframes sd-blurIn { from { opacity: 0; filter: blur(4px); } }
+@keyframes sd-markerIn { from { color: transparent; } }
+
+/* New graphemes enter immediately; incoming chunks are never batched by the UI. */
+[data-sd-animate][style*="sd-acpCharIn"], .stream-glyph { display: inline-block; white-space: pre-wrap; }
+.stream-glyph { animation: sd-acpCharIn var(--stream-char-duration) ease var(--glyph-delay, 0ms) both; }
+@keyframes sd-acpCharIn { from { opacity: 0; transform: translateY(var(--stream-char-y)); } to { opacity: 1; transform: none; } }
+
+/* Row slots enter once, independently of the active verb's continuous shimmer. */
+.process-row-enter { --row-enter-delay: 0ms; }
+.tool-results .process-row-enter { --row-enter-delay: var(--row-enter-file); }
+.process-row-enter > .row-lead { animation: acp-row-part-in var(--row-enter-duration) var(--row-enter-delay) ease-out both; }
+.process-row-enter > .row-content > * { --row-part-delay: calc(var(--row-enter-delay) + var(--row-enter-part)); animation: acp-row-part-in var(--row-enter-duration) var(--row-part-delay) ease-out both; }
+.process-row-enter > .row-content > :nth-child(n + 2), .process-row-enter > .row-trailing { --row-part-delay: calc(var(--row-enter-delay) + var(--row-enter-part) * 2); }
+.process-row-enter > .row-trailing { animation: acp-row-part-in var(--row-enter-duration) var(--row-part-delay) ease-out both; }
+.process-row-enter > .row-content > .shimmer { animation: acp-row-part-in var(--row-enter-duration) var(--row-part-delay) ease-out both, acp-shimmer 2s linear infinite; }
+@keyframes acp-row-part-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* One measured path from the icon to a short solid-dot endpoint. Scaling only
+   the line keeps the dot circular and synchronized during streamed growth. */
+.connected-rail { position: relative; isolation: isolate; }
+.rail-segment { position: absolute; z-index: -1; width: var(--rail-width); transform: translateX(-50%); pointer-events: none; }
+.rail-segment::before { content: ''; position: absolute; inset: 0 auto auto 0; width: 100%; height: 1px; background: var(--rail-color); transform-origin: top; transform: scaleY(var(--rail-length)); transition: transform var(--rail-grow-duration) var(--rail-grow-ease); }
+.rail-segment[data-terminal]::after { content: ''; position: absolute; left: 50%; top: 0; width: var(--rail-dot-size); height: var(--rail-dot-size); border-radius: 50%; background: var(--rail-color); transform: translate(-50%, -50%) translateY(calc(var(--rail-length) * 1px)); transition: transform var(--rail-grow-duration) var(--rail-grow-ease); }
+.connected-rail:has(> .process-row-enter) > .rail-segment { animation: acp-row-part-in var(--row-enter-duration) var(--row-enter-file) ease-out both; }
+
+@keyframes acp-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes acp-enter { from { opacity: 0; transform: translateY(var(--enter-y)); } }
+@keyframes acp-pulse { 50% { opacity: 0.3; } }
+@keyframes acp-fade-in { from { opacity: 0; } }
+
+/* acpira.appearance.motion = none: the same kill switch as the OS preference. */
+[data-motion="none"] * { transition: none !important; animation: none !important; }
+[data-motion="none"] *::before, [data-motion="none"] *::after { transition: none !important; animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .acp-shell *, .acp-shell *::before, .acp-shell *::after { animation: none !important; transition: none !important; }
+  .acp-shell .shimmer { background: none; color: var(--fg-2); }
+}

@@ -8,7 +8,8 @@ import { useAppearance } from '../appearance';
 import { t } from '../i18n';
 import { cn } from '../ui/cn';
 import { Chip, IconButton } from '../ui/Button';
-import { Menu } from '../ui/Menu';
+import { DropdownMenu } from '../ui/DropdownMenu';
+import { OptionContent } from '../ui/Panel';
 import { WorkingBeam } from '../effects/WorkingBeam';
 import { SendButton } from '../effects/SendButton';
 import { DraftChips } from './Attachments';
@@ -32,6 +33,8 @@ export interface ComposerProps {
   hidden?: HiddenMap[string];
   usage?: Usage;
   canCompact?: boolean;
+  // Auto-compact threshold: caps the context ring when smaller than the agent's reported window
+  compactAt?: number;
   // Workspace root: dropped and mentioned files are labeled relative to it
   cwd: string;
   onSend: (text: string, attachments: Draft[]) => void | Promise<void>;
@@ -63,6 +66,7 @@ export function Composer(p: ComposerProps) {
   const onOpenChange = useCallback((open: boolean) => setOpenMenus(n => n + (open ? 1 : -1)), []);
   const beamActive = focused || openMenus > 0;
   const mode = p.controls.modes.find(m => m.id === p.controls.modeId);
+  const ModeIcon = mode ? modeIcon(mode) : undefined;
   const dim = p.running || p.disabled;
   const { models, reasoning, other } = composerControls(p.controls.options);
   // Files are read asynchronously after a paste / drop; sending is held until every read has landed, so a message never leaves without its attachments
@@ -202,35 +206,30 @@ export function Composer(p: ComposerProps) {
           <div className="flex shrink-0 items-center gap-1">
             {/* Mode is the one solid chip and never truncates; single-line rows with a glyph each, the description rides along as a tooltip */}
             {p.controls.modes.length > 0 && (
-              <Menu
-                side="top"
-                width="sm"
-                items={p.controls.modes.map(m => {
-                  const Icon = modeIcon(m);
-                  return { id: m.id, label: m.name, hint: m.description, icon: <Icon strokeWidth={1.75} />, checked: m.id === p.controls.modeId };
-                })}
-                onSelect={p.onSetMode}
-                onOpenChange={onOpenChange}
-              >
-                {({ open, toggle, ref }) => {
-                  const Icon = mode ? modeIcon(mode) : undefined;
-                  return (
-                    <Chip
-                      ref={ref} variant="solid" className="ml-0.5 shrink-0" narrow="icon" data-open={open || undefined} onClick={toggle}
-                      title={mode ? [mode.name, mode.description].filter(Boolean).join(' · ') : t('composer.mode')} icon={Icon && <Icon strokeWidth={1.75} />}
-                    >
-                      {mode?.name ?? t('composer.mode')}
-                    </Chip>
-                  );
-                }}
-              </Menu>
+              <DropdownMenu.Root onOpenLifecycle={onOpenChange}>
+                <DropdownMenu.Trigger render={<Chip variant="solid" className="ml-0.5 shrink-0" narrow="icon"
+                  title={mode ? [mode.name, mode.description].filter(Boolean).join(' · ') : t('composer.mode')}
+                  icon={ModeIcon && <ModeIcon strokeWidth={1.75} />}>
+                  {mode?.name ?? t('composer.mode')}
+                </Chip>} />
+                <DropdownMenu.Portal><DropdownMenu.Positioner side="top" width="sm"><DropdownMenu.Popup>
+                  <DropdownMenu.RadioGroup value={p.controls.modeId} className="scroll-thin flex max-h-pop flex-col overflow-y-auto">
+                    {p.controls.modes.map(m => {
+                      const Icon = modeIcon(m);
+                      return <DropdownMenu.RadioItem key={m.id} value={m.id} title={m.description} onClick={() => p.onSetMode(m.id)}>
+                        <OptionContent icon={<Icon strokeWidth={1.75} />} checked={m.id === p.controls.modeId} checkSlot={!!mode}>{m.name}</OptionContent>
+                      </DropdownMenu.RadioItem>;
+                    })}
+                  </DropdownMenu.RadioGroup>
+                </DropdownMenu.Popup></DropdownMenu.Positioner></DropdownMenu.Portal>
+              </DropdownMenu.Root>
             )}
           </div>
           <div className="min-w-0 flex-1" />
           {other.map(c => (
             <OptionControl key={c.id} end control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
           ))}
-          {p.usage && <ContextRing usage={p.usage} turns={p.turns} canCompact={!!p.canCompact && !dim} onCompact={p.onCompact} onOpenChange={onOpenChange} />}
+          {p.usage && <ContextRing usage={p.usage} turns={p.turns} canCompact={!!p.canCompact && !dim} compactAt={p.compactAt} onCompact={p.onCompact} onOpenChange={onOpenChange} />}
           {models.map((c, i) => (
             <ModelControl key={c.id} control={c} hidden={p.hidden?.[c.id]} reasoning={i === 0 ? reasoning : undefined}
               onSetReasoning={p.onSetConfig} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
+import { useImperativeHandle, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode, type Ref } from 'react';
 import { cn } from './cn';
 
 type Anchor = { x: number; top: number; bottom: number };
@@ -75,7 +75,8 @@ function leadAnchor(lead: Element): Anchor | null {
 }
 
 export interface ConnectedRailProps extends HTMLAttributes<HTMLDivElement> {
-  children: ReactNode;
+  children?: ReactNode;
+  ref?: Ref<HTMLDivElement>;
   enabled?: boolean;
   className?: string;
   /** Select lead elements owned by this rail; nested rails are always excluded. */
@@ -86,8 +87,9 @@ export interface ConnectedRailProps extends HTMLAttributes<HTMLDivElement> {
 
 // Line scaling and terminal-dot translation use the same --rail-length in CSS.
 // Only endpoints are measured here; new text is never buffered for rail animation.
-export function ConnectedRail({ children, enabled = true, className, selector = '.row-lead:not(.row-lead-empty)', endAtLastRow = false, ...rest }: ConnectedRailProps) {
+export function ConnectedRail({ ref: forwardedRef, children, enabled = true, className, selector = '.row-lead:not(.row-lead-empty)', endAtLastRow = false, ...rest }: ConnectedRailProps) {
   const ref = useRef<HTMLDivElement>(null);
+  useImperativeHandle(forwardedRef, () => ref.current!, []);
   const observerRef = useRef<ResizeObserver | null>(null);
   const observedLeads = useRef(new Set<Element>());
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -158,6 +160,11 @@ export function ConnectedRail({ children, enabled = true, className, selector = 
     });
     mutations?.observe(root, { childList: true, subtree: true, attributes: true,
       attributeFilter: ['inert', 'class', 'style', 'd', 'points', 'viewBox', 'stroke-width'] });
+    // Kept-mounted descendants can retain their size while an ancestor opens.
+    // Observe that inert boundary too so their rails refresh without a resize.
+    for (let parent = root.parentElement; parent; parent = parent.parentElement) {
+      mutations?.observe(parent, { attributes: true, attributeFilter: ['inert'] });
+    }
     window.addEventListener('resize', schedule);
     return () => {
       if (frame !== undefined) cancelAnimationFrame(frame);

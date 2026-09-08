@@ -15,9 +15,6 @@ export const zhCN = {
   'permission.commands': '允许 {command} 命令',
   // Shared verbs / labels
   'history.edit': '编辑并重新发送',
-  'history.copy': '复制消息',
-  'history.copied': '已复制',
-  'history.copyFailed': '复制失败',
   'history.cancel': '取消编辑',
   'history.unavailable': '请等待会话就绪并结束当前回复。',
   'history.stale': '对话已更新，请重新打开此条消息进行编辑。',
@@ -43,6 +40,7 @@ export const zhCN = {
   'common.previewImage': '预览 {name}',
   'common.removeNamed': '移除 {name}',
   'common.account': '账号',
+  'common.agent': '智能体',
   'common.listSep': '、',
 
   // Header / session list

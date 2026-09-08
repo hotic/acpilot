@@ -5,21 +5,24 @@ import { t } from '../i18n';
 import { cn } from '../ui/cn';
 import { IconButton } from '../ui/Button';
 import { Popover } from '../ui/Popover';
-import { estimateUsage, type UsageSegment } from './usageBreakdown';
+import { estimateUsage, usageWindow, type UsageSegment } from './usageBreakdown';
 
 // Context usage: a --icon-sized ring inside a --ctl-square button; hovering shows the breakdown card (Cursor-style), and agents with /compact can be compacted from its title row
-export function ContextRing({ usage, turns, canCompact, onCompact, onOpenChange }: { usage: Usage; turns: Turn[]; canCompact: boolean; onCompact: () => void; onOpenChange: (open: boolean) => void }) {
-  const pct = Math.min(1, usage.used / usage.size);
-  const segments = useMemo(() => estimateUsage(turns, usage), [turns, usage]);
+export function ContextRing({ usage, turns, canCompact, compactAt, onCompact, onOpenChange }: {
+  usage: Usage; turns: Turn[]; canCompact: boolean; compactAt?: number; onCompact: () => void; onOpenChange: (open: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const display = useMemo<Usage>(() => {
+    const size = usageWindow(usage.size, compactAt);
+    return size === usage.size ? usage : { ...usage, size };
+  }, [usage, compactAt]);
+  const pct = Math.min(1, display.used / display.size);
+  const segments = useMemo(() => estimateUsage(turns, display), [turns, display]);
   const r = 6, c = 2 * Math.PI * r;
   return (
-    <Popover side="top" align="end" width="lg" trigger="hover" onOpenChange={onOpenChange} content={close => <UsagePanel usage={usage} pct={pct} segments={segments} onCompact={canCompact ? () => { onCompact(); close(); } : undefined} />}>
-      {({ open, hover, ref }) => (
-        <button
-          ref={ref}
-          type="button"
-          {...hover}
-          data-open={open || undefined}
+    <Popover.Root open={open} onOpenChange={setOpen} onOpenLifecycle={onOpenChange}>
+      <Popover.Trigger openOnHover delay={120} closeDelay={250} onFocus={() => setOpen(true)}
+        render={<button type="button" data-open={open || undefined}
           aria-label={t('usage.usedPct', { pct: Math.round(pct * 100) })}
           className="inline-flex size-ctl shrink-0 items-center justify-center rounded-md text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 data-[open]:bg-active data-[open]:text-fg-1"
         >
@@ -27,9 +30,11 @@ export function ContextRing({ usage, turns, canCompact, onCompact, onOpenChange 
             <circle cx="8" cy="8" r={r} stroke="currentColor" strokeOpacity="0.25" strokeWidth="2" />
             <circle cx="8" cy="8" r={r} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray={`${c * pct} ${c}`} />
           </svg>
-        </button>
-      )}
-    </Popover>
+        </button>} />
+      <Popover.Portal><Popover.Positioner side="top" align="end" width="lg"><Popover.Popup>
+        <UsagePanel usage={display} pct={pct} segments={segments} onCompact={canCompact ? () => { onCompact(); setOpen(false); } : undefined} />
+      </Popover.Popup></Popover.Positioner></Popover.Portal>
+    </Popover.Root>
   );
 }
 

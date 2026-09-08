@@ -99,7 +99,7 @@ function AgentFacts({ agent, inventory, env }: { agent: AgentInfo; inventory?: A
         {inventory === undefined
           ? <span className="shimmer font-sans text-2">{t('settings.agent.probing')}</span>
           : inventory.binary
-            ? <><Dot ok /><PathText path={inventory.binary} env={env} className="text-fg-1" /></>
+            ? <><Dot ok /><PathText path={inventory.binary} env={env} /></>
             : <><Dot ok={false} /><span className="truncate font-sans text-2 text-fg-2">{t('settings.agent.notInstalled', { command: agent.id })}</span></>}
       </FactRow>
       <FactRow label={t('settings.fact.version')}>{version ?? <span className="text-fg-2">{t('settings.fact.noLive')}</span>}</FactRow>
@@ -187,7 +187,8 @@ function Grouped<T>({ items, sourceOf, row, env, on, empty, loading }: { items: 
   }, [items, sourceOf]);
   if (loading) return <Note shimmer>{t('settings.loading')}</Note>;
   if (bySource.length === 0) return <Note>{empty}</Note>;
-  return <>{bySource.map(([source, list]) => <Group key={source}>{list.map(row)}<SourceLink path={source} env={env} onOpen={on.openPath} /></Group>)}</>;
+  // Stacked groups separate with a line, like the rows inside them.
+  return <>{bySource.map(([source, list], i) => <Group key={source} className={i > 0 ? 'border-t border-t-line' : undefined}>{list.map(row)}<SourceLink path={source} env={env} onOpen={on.openPath} /></Group>)}</>;
 }
 
 // Does the list come as several cards (so the Section must not wrap them in one)?

@@ -81,18 +81,25 @@ export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, o
         <FilterChip active={!agentFilter} onClick={() => setAgentFilter(undefined)}>{t('common.all')}</FilterChip>
         {agents.map(a => (
           <FilterChip key={a.id} active={agentFilter === a.id} onClick={() => setAgentFilter(a.id)}>
-            <AgentMark id={a.id} name={a.name} className="size-3" />{a.name}
+            <AgentMark id={a.id} name={a.name} />{a.name}
           </FilterChip>
         ))}
       </div>
       <div className="mt-1 flex min-h-0 flex-col overflow-y-auto border-t border-line pb-1" role="listbox" aria-label={t('session.listAria')}>
         {!shown.length && <div className="px-3 py-3 text-2 text-fg-3">{q ? t('session.noMatch') : agentFilter ? t('session.noneAgent', { name: nameOf(agentFilter) }) : t('session.none')}</div>}
         {pinned.length > 0 && (
-          <div className="flex flex-col">
-            <div className="px-2 pt-2.5 pb-1 text-3 text-fg-3">{t('session.group.pinned')}</div>
+          <div className="flex flex-col pt-1" role="group" aria-label={t('session.group.pinned')}>
             {pinned.map(renderItem)}
           </div>
         )}
+        {/* Keep the divider mounted so both pinning and unpinning can transition. */}
+        <div
+          role="presentation"
+          className={cn(
+            'shrink-0 bg-linear-to-r from-transparent via-line to-transparent transition-[height,margin,opacity,scale] duration-(--dur-open) ease-out',
+            pinned.length > 0 && rest.length > 0 ? 'my-1 h-px scale-x-100 opacity-100' : 'my-0 h-0 scale-x-0 opacity-0',
+          )}
+        />
         {rest.length > 0 && <div className="flex flex-col pt-1">{rest.map(renderItem)}</div>}
       </div>
     </div>

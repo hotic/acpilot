@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useAppearance } from '../appearance';
 import { STREAM_BACKLOG_MS, STREAM_STAGGER_MS } from './streamMotion';
 
@@ -7,12 +7,14 @@ const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 // Thought text is plain text on the wire. Preserve its literal Markdown, emoji
 // and line breaks while sharing the prose animation instead of parsing it anew.
 export function StreamText({ text, streaming }: { text: string; streaming?: boolean }) {
-  const [animateRun] = useState(!!streaming);
-  return animateRun ? <LiveStreamText text={text} streaming={streaming} /> : text;
+  const [animateRun, setAnimateRun] = useState(!!streaming);
+  const settle = useCallback(() => setAnimateRun(false), []);
+  return animateRun ? <LiveStreamText text={text} streaming={streaming} onSettled={settle} /> : text;
 }
 
-function LiveStreamText({ text, streaming }: { text: string; streaming?: boolean }) {
+function LiveStreamText({ text, streaming, onSettled }: { text: string; streaming?: boolean; onSettled: () => void }) {
   const { motion } = useAppearance();
+  const ref = useRef<HTMLSpanElement>(null);
   const previous = useRef({ text: '', count: 0, lastStart: 0 });
   const glyphs = useMemo(() => [...segmenter.segment(text)].map(part => part.segment), [text]);
   const now = performance.now();
@@ -24,8 +26,22 @@ function LiveStreamText({ text, streaming }: { text: string; streaming?: boolean
   useLayoutEffect(() => {
     previous.current = { text, count: glyphs.length, lastStart: count ? base + (count - 1) * stagger : previous.current.lastStart };
   });
-  return <span className="stream-text">{glyphs.map((glyph, index) => /^\s+$/u.test(glyph) ? glyph : <Glyph key={`${index}:${glyph}`} value={glyph}
-    enter={!!streaming && motion !== 'none' && appended && index >= start}
+  useLayoutEffect(() => {
+    if (streaming) return;
+    // Finished CSS animations with fill-mode both retain their effects. Release
+    // the glyph tree after the actual final animation settles, including cancellation.
+    const pending = ref.current?.getAnimations({ subtree: true }).filter(animation => animation.playState !== 'finished') ?? [];
+    if (!pending.length) { onSettled(); return; }
+    let disposed = false;
+    void Promise.allSettled(pending.map(animation => animation.finished)).then(() => {
+      if (!disposed) onSettled();
+    });
+    return () => { disposed = true; };
+  }, [streaming, text, motion, onSettled]);
+  // Motion-off retains the live cursor state without creating per-glyph DOM.
+  if (motion === 'none') return text;
+  return <span ref={ref} className="stream-text">{glyphs.map((glyph, index) => /^\s+$/u.test(glyph) ? glyph : <Glyph key={`${index}:${glyph}`} value={glyph}
+    enter={!!streaming && appended && index >= start}
     delay={Math.max(0, base - now + (index - start) * stagger)} />)}</span>;
 }
 

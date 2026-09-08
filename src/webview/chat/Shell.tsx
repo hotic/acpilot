@@ -7,13 +7,14 @@ import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appe
 import { t } from '../i18n';
 import { ShellLayerContext } from '../ui/Popover';
 import { cn } from '../ui/cn';
+import { useScrollReveal } from '../ui/useScrollReveal';
 import { Header } from './Header';
 import { SessionList } from './SessionList';
 import { AgentMessage } from './Turns';
 import { HistoryContext, HistoryMessage } from './HistoryMessage';
 import { Composer, type ComposerProps } from './Composer';
 import { Notice } from './Notice';
-import { Toast } from './Toast';
+import { Toast } from '../ui/Toast';
 import { Alert, isShortStop } from './Alert';
 import { Questions, type OnAnswer } from './Questions';
 import { PlanBar } from './PlanBar';
@@ -86,6 +87,7 @@ export interface ShellProps {
   usage?: Usage;
   // The context panel only gets a compact button when the agent has a /compact command
   canCompact?: boolean;
+  compactAt?: number;
   sessions: SessionSummary[];
   activeSessionId?: string;
   // Workspace root of the session; attachments are labeled relative to it
@@ -112,6 +114,7 @@ export function Shell(p: ShellProps) {
   const { appearance: a, on } = p;
   const wide = p.host === 'editor';
   const root = useRef<HTMLDivElement>(null);
+  useScrollReveal(root);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<{ sessionId: string; index: number }>();
   useEffect(() => setEditing(undefined), [p.activeSessionId]);
@@ -153,10 +156,10 @@ export function Shell(p: ShellProps) {
     running: p.running, disabled: p.status !== 'ready' && p.status !== 'starting',
     controlsLocked: p.status !== 'ready',
     theme: p.theme, turns: p.turns, controls: p.controls, hidden: p.hidden?.[p.agent.id],
-    usage: p.usage, canCompact: p.canCompact, cwd: p.cwd ?? '',
+    usage: p.usage, canCompact: p.canCompact, compactAt: p.compactAt, cwd: p.cwd ?? '',
     onSend: on.send, onSearchFiles: on.searchFiles, onNotice: notice, onStop: on.stop,
     onSetMode: on.setMode, onSetConfig: on.setConfig, onCompact: on.compact,
-  }), [p.running, p.status, p.theme, p.turns, p.controls, p.hidden, p.agent.id, p.usage, p.canCompact, p.cwd, on.send, on.searchFiles, notice, on.stop, on.setMode, on.setConfig, on.compact]);
+  }), [p.running, p.status, p.theme, p.turns, p.controls, p.hidden, p.agent.id, p.usage, p.canCompact, p.compactAt, p.cwd, on.send, on.searchFiles, notice, on.stop, on.setMode, on.setConfig, on.compact]);
   const planDoc = useMemo(() => ({
     controls: p.controls, hidden: p.hidden?.[p.agent.id], running: p.running, ready: p.status === 'ready', theme: p.theme,
     permissions: p.turns.flatMap(t => t.role === 'agent' ? t.blocks.filter((b): b is PermissionBlock => b.type === 'permission') : []),
@@ -307,10 +310,11 @@ function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: Thre
       : <AgentMessage key={ti} turn={turn} index={index} compacting={compacting} running={running && ti === turns.length - 1} onPermission={onPermission} />);
   });
   return (
-    <div ref={ref} className="thread-scroll scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto px-page">
+    <div ref={ref} data-thread className="scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto px-page [container-type:size]">
       <div key={replayKey} className={cn('mx-auto flex flex-col gap-msg pt-pad-y pb-gap', wide && 'max-w-(--content-w)')}>
         {exchanges.map(exchange => (
-          <section key={exchange.key} className="flex min-w-0 flex-col gap-msg">
+          // Positioned so the prompt's stuck-state sentinel can sit at the exchange's top edge.
+          <section key={exchange.key} className="relative flex min-w-0 flex-col gap-msg">
             {exchange.messages}
           </section>
         ))}

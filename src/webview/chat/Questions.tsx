@@ -35,6 +35,7 @@ function answerOf(q: Question, p: Pick): QuestionAnswer | undefined {
 // navigation a single meaning; selecting an answer never changes the page.
 export function Questions({ block, onAnswer }: { block: QuestionBlock; onAnswer: OnAnswer }) {
   const root = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [active, setActive] = useState(0);
   const [focusField, setFocusField] = useState(false);
@@ -116,24 +117,25 @@ export function Questions({ block, onAnswer }: { block: QuestionBlock; onAnswer:
   };
   if (!current) return null;
   return (
-    <div className="px-page pt-gap">
-      <Card ref={root} tabIndex={-1} role="form" aria-label={t('question.title')} onKeyDown={onKeyDown} className="question-card flex min-w-0 flex-col overflow-hidden">
-        <Row className="question-header" lead={<MessageCircleQuestion className="size-icon" strokeWidth={1.5} />}
-          trailing={<span aria-live="polite">{t('question.of', { n: page + 1, total })}</span>}>
-          <RowLabel className="text-fg-1">{t('question.title')}</RowLabel>
-        </Row>
-        <div key={current.id} ref={fade} className="question-body scroll-fade scroll-thin">
+    <div className="px-page">
+      <Card ref={root} tabIndex={-1} role="form" aria-label={t('question.title')} onKeyDown={onKeyDown} className="flex min-w-0 flex-col overflow-hidden">
+        <div key={current.id} ref={fade} className="scroll-fade scroll-thin flex max-h-question-body flex-col gap-(--question-section-gap) overflow-y-auto overscroll-y-contain px-pad pt-(--question-top-pad) pb-(--question-section-gap) [--scroll-fade-size:var(--question-section-gap)] [&>*]:shrink-0">
+          {/* The question itself labels the card; a separate title row adds no context. */}
+          <Row dense className="items-start lead-top" lead={<MessageCircleQuestion className="size-icon" strokeWidth={1.5} />}
+            trailing={<span aria-live="polite">{t('question.of', { n: page + 1, total })}</span>}>
+            <h3 id={titleId} className="m-0 min-w-0 text-2 font-medium text-fg-strong [overflow-wrap:anywhere]">{current.text}</h3>
+          </Row>
           {block.message && page === 0 && <p className="m-0 text-2 text-fg-2 [overflow-wrap:anywhere]">{block.message}</p>}
-          <QuestionItem question={current} pick={picks[current.id] ?? EMPTY}
+          <QuestionItem question={current} titleId={titleId} pick={picks[current.id] ?? EMPTY}
             onChoose={id => choose(current, id)} onOther={() => chooseOther(current)}
             onOtherFocus={() => update(current.id, p => ({ ...p, other: true, ...(current.kind === 'single' ? { options: [] } : {}) }))}
             onText={text => update(current.id, p => ({ ...p, text, ...(current.kind !== 'text' ? { other: true } : {}), ...(current.kind === 'single' ? { options: [] } : {}) }))} />
         </div>
-        <div className="question-footer flex items-center justify-between gap-gap">
-          <Button variant="secondary" onClick={skip}>{t('question.skip')}</Button>
+        <div className="flex shrink-0 items-center justify-between gap-gap border-t border-line px-pad py-(--question-section-gap)">
+          <Button variant="secondary" onClick={skip} className={cn(focusRing, 'h-ctl-sm border-line/50')}>{t('question.skip')}</Button>
           <div className="flex items-center gap-gap">
-            {page > 0 && <Button variant="secondary" onClick={() => go(page - 1)}>{t('question.prev')}</Button>}
-            <Button variant="primary" disabled={!canAdvance} onClick={advance}>
+            {page > 0 && <Button variant="secondary" onClick={() => go(page - 1)} className={cn(focusRing, 'h-ctl-sm border-line/50')}>{t('question.prev')}</Button>}
+            <Button variant="primary" disabled={!canAdvance} onClick={advance} className={cn(focusRing, 'h-ctl-sm disabled:cursor-not-allowed disabled:border-line/50 disabled:bg-transparent disabled:text-fg-3')}>
               {t(last ? 'question.submit' : 'question.next')}
             </Button>
           </div>
@@ -143,8 +145,16 @@ export function Questions({ block, onAnswer }: { block: QuestionBlock; onAnswer:
   );
 }
 
+// Hallmark · component: question card · theme: existing Acpira tokens.
+// One question per page, compact type, shared row alignment and persistent actions.
+// Every focusable control in the card shows the same inset ring; the "other" row lights up while its input has focus.
+const focusRing = 'focus-visible:shadow-[inset_0_0_0_var(--question-focus-width)_var(--fg-2)]';
+const optionRowClass = 'w-full rounded-md p-(--question-option-pad) active:bg-active';
+const optionKeyClass = 'flex size-lead items-center justify-center rounded-sm border border-line-strong text-3 text-fg-2';
+
 interface ItemProps {
   question: Question;
+  titleId: string;
   pick: Pick;
   onChoose: (optionId: string) => void;
   onOther: () => void;
@@ -152,13 +162,11 @@ interface ItemProps {
   onText: (text: string) => void;
 }
 
-function QuestionItem({ question: q, pick, onChoose, onOther, onOtherFocus, onText }: ItemProps) {
-  const titleId = useId();
+function QuestionItem({ question: q, titleId, pick, onChoose, onOther, onOtherFocus, onText }: ItemProps) {
   const groupRole = q.kind === 'multiple' ? 'group' : q.kind === 'single' ? 'radiogroup' : undefined;
   const placeholder = q.kind === 'text' ? t(q.numeric ? 'question.numberPlaceholder' : 'question.textPlaceholder') : t('question.otherPlaceholder');
   return (
-    <section className="flex min-w-0 flex-col gap-gap">
-      <h3 id={titleId} className="m-0 text-2 font-medium text-fg-strong [overflow-wrap:anywhere]">{q.text}</h3>
+    <section className="flex min-w-0 flex-col gap-(--question-section-gap)">
       {q.kind === 'multiple' && <p className="m-0 text-3 text-fg-2">{t('question.multiple')}</p>}
       <div role={groupRole} aria-labelledby={titleId} className="flex min-w-0 flex-col">
         {q.options.map((o, i) => (
@@ -169,9 +177,9 @@ function QuestionItem({ question: q, pick, onChoose, onOther, onOtherFocus, onTe
           </OptionRow>
         ))}
         {q.kind !== 'text' && q.other && (
-          <Row className={cn('question-option question-other w-full rounded-md hover:bg-hover', pick.other && 'bg-active')}
+          <Row className={cn(optionRowClass, 'items-start hover:not-focus-within:bg-hover focus-within:bg-active focus-within:shadow-[inset_0_0_0_var(--question-focus-width)_var(--fg-2)]', pick.other && 'bg-active')}
             lead={
-              <button type="button" data-question-option="" className="question-option-key"
+              <button type="button" data-question-option="" className={cn(optionKeyClass, focusRing, pick.other && 'text-fg-1')}
                 role={q.kind === 'multiple' ? 'checkbox' : 'radio'} aria-checked={pick.other}
                 aria-label={t('question.other')} aria-keyshortcuts={KEYS[q.options.length]}
                 onClick={onOther}>
@@ -188,7 +196,7 @@ function QuestionItem({ question: q, pick, onChoose, onOther, onOtherFocus, onTe
       {q.kind === 'text' && (
         <input type="text" value={pick.text} inputMode={q.numeric ? 'decimal' : undefined}
           placeholder={placeholder} aria-labelledby={titleId} onChange={e => onText(e.target.value)}
-          className="question-input h-ctl w-full min-w-0 rounded-md border border-line-strong bg-transparent px-gap text-2 text-fg-1 placeholder:text-fg-3" />
+          className={cn('h-ctl w-full min-w-0 rounded-md border border-line-strong bg-transparent px-gap text-2 text-fg-1 placeholder:text-fg-3', focusRing)} />
       )}
     </section>
   );
@@ -201,9 +209,9 @@ function OptionRow({ keyLabel, selected, role, onClick, children }: {
 }) {
   return (
     <Row as="button" data-question-option="" role={role} aria-checked={selected} aria-keyshortcuts={keyLabel} onClick={onClick}
-      className={cn('question-option w-full rounded-md hover:bg-hover focus-visible:bg-hover', selected && 'bg-active')}
-      lead={<span className="question-option-key">{selected ? <Check className="size-icon" strokeWidth={1.75} /> : keyLabel}</span>}>
-      <span className="question-option-copy flex min-w-0 flex-1 flex-col">{children}</span>
+      className={cn(optionRowClass, 'items-start lead-top hover:bg-hover focus-visible:bg-hover', focusRing, selected && 'bg-active')}
+      lead={<span className={cn(optionKeyClass, selected && 'text-fg-1')}>{selected ? <Check className="size-icon" strokeWidth={1.75} /> : keyLabel}</span>}>
+      <span className="flex min-w-0 flex-1 flex-col gap-(--question-description-gap)">{children}</span>
     </Row>
   );
 }

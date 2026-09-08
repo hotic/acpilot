@@ -1,9 +1,8 @@
-import { useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { FileText, Image as ImageIcon } from 'lucide-react';
 import type { FileHit } from '@shared/protocol';
 import { imageMimeOf } from '@shared/attachments';
-import { ShellLayerContext } from '../ui/Popover';
+import { Popover } from '../ui/Popover';
 import { cn } from '../ui/cn';
 import { t } from '../i18n';
 
@@ -52,32 +51,24 @@ interface MentionListProps {
 // The file list floating over the composer: as wide as the field, one --row per hit (name bright, directory faint). Keyboard handling stays in the textarea;
 // the list only reflects the active row. Portals to the shell root like every overlay, since the composer's beam wrapper clips overflow
 export function MentionList({ anchor, hits, active, empty, onHover, onPick }: MentionListProps) {
-  const layer = useContext(ShellLayerContext);
   const panel = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<CSSProperties>();
-
-  // Re-anchor whenever the field changes size (chips added, text wrapping to a new line) — the field's top edge is what the list sits on
-  useLayoutEffect(() => {
-    const a = anchor.current, l = layer?.current;
-    if (!a || !l) return;
-    const place = () => {
-      const ar = a.getBoundingClientRect(), lr = l.getBoundingClientRect();
-      const k = lr.width / l.offsetWidth || 1;
-      setStyle({ bottom: `calc(${(lr.bottom - ar.top) / k}px + var(--pop-gap))`, left: (ar.left - lr.left) / k, width: ar.width / k });
-    };
-    place();
-    const ro = new ResizeObserver(place);
-    ro.observe(a);
-    return () => ro.disconnect();
-  }, [anchor, layer]);
-
   useEffect(() => {
-    panel.current?.querySelector<HTMLElement>('[data-active]')?.scrollIntoView({ block: 'nearest' });
+    const list = panel.current, item = list?.querySelector<HTMLElement>('[data-active]');
+    if (!list || !item) return;
+    const lr = list.getBoundingClientRect(), ir = item.getBoundingClientRect();
+    if (ir.top < lr.top) list.scrollTop += ir.top - lr.top;
+    else if (ir.bottom > lr.bottom) list.scrollTop += ir.bottom - lr.bottom;
   }, [active]);
 
-  if (!layer?.current || (!hits.length && !empty)) return null;
-  return createPortal(
-    <div ref={panel} role="listbox" style={style} className={cn('scroll-thin absolute z-30 flex max-h-pop flex-col overflow-y-auto rounded-lg border border-line bg-bg-1 p-1 shadow-pop', !style && 'invisible')}>
+  if (!hits.length && !empty) return null;
+  return <Popover.Root open>
+    <Popover.Portal><Popover.Positioner anchor={anchor} width="anchor" side="top"
+      // Base UI measures at temporary coordinates with opacity zero. Those rows
+      // must not receive hover and change the keyboard selection before placement.
+      render={attributes => <div {...attributes} style={{ ...attributes.style,
+        pointerEvents: attributes.style?.opacity === 0 ? 'none' : attributes.style?.pointerEvents,
+      }} />}>
+      <Popover.Popup finalFocus={false} ref={panel} role="listbox" className="scroll-thin flex max-h-pop flex-col overflow-y-auto">
       {!hits.length && <div className="flex min-h-row items-center px-2 text-3 text-fg-3">{t('mention.noFiles')}</div>}
       {hits.map((h, i) => {
         const cut = h.path.lastIndexOf('/');
@@ -89,7 +80,9 @@ export function MentionList({ anchor, hits, active, empty, onHover, onPick }: Me
             role="option"
             aria-selected={i === active}
             data-active={i === active || undefined}
-            onMouseEnter={() => onHover(i)}
+            // Layout can dispatch enter events under a stationary pointer. Only
+            // deliberate mouse movement changes the keyboard's active result.
+            onMouseMove={() => onHover(i)}
             // mousedown would blur the textarea before click fires; preventing it keeps the caret where the @ is
             onMouseDown={e => e.preventDefault()}
             onClick={() => onPick(h)}
@@ -101,7 +94,7 @@ export function MentionList({ anchor, hits, active, empty, onHover, onPick }: Me
           </button>
         );
       })}
-    </div>,
-    layer.current,
-  );
+      </Popover.Popup>
+    </Popover.Positioner></Popover.Portal>
+  </Popover.Root>;
 }

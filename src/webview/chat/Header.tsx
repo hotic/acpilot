@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { History, Menu as MenuIcon, Plus, Settings2, UserRound } from 'lucide-react';
 import type { AccountInfo, AgentInfo, SessionSummary } from '@shared/transcript';
 import { useAppearance } from '../appearance';
 import { t } from '../i18n';
 import { IconButton } from '../ui/Button';
 import { Popover } from '../ui/Popover';
-import { Menu } from '../ui/Menu';
+import { DropdownMenu } from '../ui/DropdownMenu';
+import { OptionContent } from '../ui/Panel';
 import { quotaSummary } from '../ui/QuotaBars';
 import { AgentMark } from './AgentMark';
 import { AgentPanel } from './AgentPanel';
@@ -31,6 +33,8 @@ export interface HeaderProps {
 // (the common layout of Claude Code / Codex / Cursor); one divider below. The drawer axis swaps the left side for a menu button.
 // The person icon is the account layer's home (login state, switching, adding): it opens the agent panel, whose footer leads to the accounts page
 export function Header({ title, sessions, agent, agents, accounts, accountId, activeSessionId, on, onToggleDrawer, onOpenSettings, drawerOpen }: HeaderProps) {
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const { sessions: mode } = useAppearance();
   const account = accounts?.find(a => a.id === accountId);
   // Tooltip: agent · account, with the remaining allowance appended once known ("Devin · s@x.io · Weekly 94%")
@@ -41,23 +45,13 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
     </IconButton>
   );
   const accountButton = (
-    <Popover side="bottom" align="end" width="md" role="menu" content={close => (
-      <AgentPanel
-        agent={agent} agents={agents} accounts={accounts?.filter(a => a.agent === agent.id) ?? []} accountId={accountId} close={close}
-        onSelectAgent={on.selectAgent} onSelectAccount={on.selectAccount} onAddAccount={on.addAccount} onRemoveAccount={on.removeAccount}
-        onRefreshQuota={on.refreshQuota}
-      />
-    )}>
-      {({ open, toggle, ref }) => (
-        <IconButton
-          ref={ref} data-open={open || undefined} onClick={toggle}
-          title={accountTitle} aria-label={t('common.account')}
-          className="data-[open]:bg-active data-[open]:text-fg-1"
-        >
-          <UserRound strokeWidth={1.5} />
-        </IconButton>
-      )}
-    </Popover>
+    <Popover.Root open={accountOpen} onOpenChange={setAccountOpen}>
+      <Popover.Trigger render={<IconButton title={accountTitle} aria-label={t('common.account')}><UserRound strokeWidth={1.5} /></IconButton>} />
+      <Popover.Portal><Popover.Positioner side="bottom" align="end" width="md"><Popover.Popup>
+        <AgentPanel agent={agent} agents={agents} accounts={accounts?.filter(a => a.agent === agent.id) ?? []} accountId={accountId} close={() => setAccountOpen(false)}
+          onSelectAgent={on.selectAgent} onSelectAccount={on.selectAccount} onAddAccount={on.addAccount} onRemoveAccount={on.removeAccount} onRefreshQuota={on.refreshQuota} />
+      </Popover.Popup></Popover.Positioner></Popover.Portal>
+    </Popover.Root>
   );
   return (
     <div className="flex h-hdr shrink-0 items-center gap-gap px-page shadow-[inset_0_-1px_0_0_var(--line)]">
@@ -77,39 +71,24 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
             {/* The icon is 6px smaller than the button box; the negative margin makes the right edge of the last icon bite into the page-margin line */}
             <div className="-mr-1.5 flex shrink-0 items-center gap-0.5">
               {/* New sessions start after choosing an agent from the plus menu. */}
-              <Menu
-                side="bottom" align="end" width="md"
-                items={agents.map(a => ({ id: a.id, label: a.name, icon: <AgentMark id={a.id} name={a.name} />, disabled: a.available === false }))}
-                onSelect={id => on.newSession(id)}
-              >
-                {({ open, toggle, ref }) => (
-                  <IconButton
-                    ref={ref} data-open={open || undefined} onClick={toggle}
-                    title={t('session.new')} aria-label={t('session.new')} aria-haspopup="menu" aria-expanded={open}
-                    className="data-[open]:bg-active data-[open]:text-fg-1"
-                  >
-                    <Plus strokeWidth={1.5} />
-                  </IconButton>
-                )}
-              </Menu>
-              <Popover side="bottom" align="end" width="xl" content={close => (
-                <SessionList
-                  sessions={sessions}
-                  agents={agents}
-                  activeId={activeSessionId}
-                  autoFocus
-                  onSelect={id => { on.selectSession(id); close(); }}
-                  onRename={on.renameSession}
-                  onDelete={on.deleteSession}
-                  onPin={on.pinSession}
-                />
-              )}>
-                {({ open, toggle, ref }) => (
-                  <IconButton ref={ref} data-open={open || undefined} onClick={toggle} title={t('session.history')} aria-label={t('session.history')} className="data-[open]:bg-active data-[open]:text-fg-1">
-                    <History strokeWidth={1.5} />
-                  </IconButton>
-                )}
-              </Popover>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger render={<IconButton title={t('session.new')} aria-label={t('session.new')}><Plus strokeWidth={1.5} /></IconButton>} />
+                <DropdownMenu.Portal><DropdownMenu.Positioner side="bottom" align="end" width="md"><DropdownMenu.Popup>
+                  <div className="scroll-thin flex max-h-pop flex-col overflow-y-auto">
+                    {agents.map(a => <DropdownMenu.Item key={a.id} disabled={a.available === false} onClick={() => on.newSession(a.id)}>
+                      <OptionContent icon={<AgentMark id={a.id} name={a.name} />}>{a.name}</OptionContent>
+                    </DropdownMenu.Item>)}
+                  </div>
+                </DropdownMenu.Popup></DropdownMenu.Positioner></DropdownMenu.Portal>
+              </DropdownMenu.Root>
+              <Popover.Root open={historyOpen} onOpenChange={setHistoryOpen}>
+                <Popover.Trigger render={<IconButton title={t('session.history')} aria-label={t('session.history')}><History strokeWidth={1.5} /></IconButton>} />
+                <Popover.Portal><Popover.Positioner side="bottom" align="end" width="xl"><Popover.Popup initialFocus={interaction => interaction === 'keyboard'}>
+                  <SessionList sessions={sessions} agents={agents} activeId={activeSessionId}
+                    onSelect={id => { on.selectSession(id); setHistoryOpen(false); }}
+                    onRename={on.renameSession} onDelete={on.deleteSession} onPin={on.pinSession} />
+                </Popover.Popup></Popover.Positioner></Popover.Portal>
+              </Popover.Root>
               {accountButton}
               {settingsButton}
             </div>

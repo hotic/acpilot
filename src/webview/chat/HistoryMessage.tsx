@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { EditTurnRequest } from '@shared/protocol';
 import type { UserTurn } from '@shared/transcript';
 import { captureTurnSettings, controlsForTurn } from '@shared/turnSettings';
@@ -19,25 +19,42 @@ interface HistoryContextValue {
 export const HistoryContext = createContext<HistoryContextValue | undefined>(undefined);
 
 // One frame per prompt, kept mounted while the card and its inline editor swap inside it: it carries the sticky positioning
-// (so a card stuck at the top opens its editor right there instead of jumping back to its natural place) and animates its own
-// height across the swap while the incoming content fades in — the card → editor step Cursor makes. Automatic prompts are plain rows.
-// Keep an opaque base outside the fade so replies cannot show through the editor or the swapping content.
+// (so a card stuck at the top opens its editor right there instead of jumping back to its natural place); the opaque base inside
+// animates its own height across the swap while the incoming content fades in — the card → editor step Cursor makes. Automatic
+// prompts are plain rows. Keep the base outside the fade so replies cannot show through the editor or the swapping content.
+// A stuck card folds to a few lines: the sentinel at the exchange's top leaving the scroller marks the stuck state, and the frame
+// keeps its natural flow height meanwhile so the fold never moves the conversation under the reader; the freed area is transparent
+// and lets pointer events through to the reply scrolling beneath it.
 export function HistoryMessage(p: { turn: UserTurn; index: number; turnIndex: number; blobUrl?: (blob: string) => string }) {
   const context = useContext(HistoryContext);
   const { motion } = useAppearance();
   const frame = useRef<HTMLDivElement>(null);
+  const base = useRef<HTMLDivElement>(null);
   // Height measured right before a swap; the layout effect animates from it once the replacement has laid out
   const from = useRef<number>(undefined);
   const [swaps, setSwaps] = useState(0);
+  const [stuck, setStuck] = useState(false);
+  const sentinel = useCallback((el: HTMLDivElement | null) => {
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => {
+      const below = !!entry && !entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0);
+      const target = frame.current;
+      // Measure before React applies the fold, while the frame still has its natural height.
+      if (target) target.style.minHeight = below ? `${target.offsetHeight}px` : '';
+      setStuck(below);
+    }, { root: el.closest('[data-thread]'), threshold: 0 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const editor = context && context.editing === p.turnIndex ? context : undefined;
   const editing = !!editor;
   const swap = (index?: number) => {
-    from.current = frame.current?.offsetHeight;
+    from.current = base.current?.offsetHeight;
     setSwaps(n => n + 1);
     context!.select(index);
   };
   useLayoutEffect(() => {
-    const el = frame.current;
+    const el = base.current;
     const start = from.current;
     from.current = undefined;
     if (!el || start === undefined) return;
@@ -54,13 +71,18 @@ export function HistoryMessage(p: { turn: UserTurn; index: number; turnIndex: nu
   if (p.turn.auto) return <UserMessage {...p} />;
   const editable = !!context && !context.composer.disabled && !context.composer.running;
   return (
-    <div ref={frame} className="sticky top-0 z-10 flex min-w-0 shrink-0 flex-col rounded-lg bg-bg-0">
-      <div key={swaps} className={cn('flex min-w-0 flex-col', swaps > 0 && 'fade-in')}>
-        {editor
-          ? <HistoryEditor {...p} context={editor} onClose={() => swap(undefined)} />
-          : <UserMessage {...p} onEdit={editable ? () => swap(p.turnIndex) : undefined} />}
+    <>
+      <div ref={sentinel} aria-hidden="true" className="pointer-events-none absolute top-0 left-0 size-px" />
+      <div ref={frame} className="pointer-events-none sticky top-0 z-10 flex min-w-0 shrink-0 flex-col">
+        <div ref={base} className="pointer-events-auto flex min-w-0 flex-col rounded-lg bg-bg-0">
+          <div key={swaps} className={cn('flex min-w-0 flex-col', swaps > 0 && 'fade-in')}>
+            {editor
+              ? <HistoryEditor {...p} context={editor} onClose={() => swap(undefined)} />
+              : <UserMessage {...p} compact={stuck} onEdit={editable ? () => swap(p.turnIndex) : undefined} />}
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

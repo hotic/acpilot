@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Trash2, X } from 'lucide-react';
-import { Button, IconButton } from '../ui/Button';
+import { Button, IconButton } from './Button';
 import { t } from '../i18n';
 
 export interface ToastProps {

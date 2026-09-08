@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from './cn';
+import { cva } from 'class-variance-authority';
 
 type Variant = 'primary' | 'secondary';
 
@@ -12,10 +13,15 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 // Two neutral tiers (picked in the buttons LAB, scheme "tonal"): primary is a tonal grey fill with strong text and a firmer outline, secondary is an outline that fills on hover.
 // No inverted solid (that look belongs to the send button alone) and no colored buttons (accent is reserved for status dots)
-const VARIANT: Record<Variant, string> = {
-  primary: 'border border-line-strong bg-active text-fg-strong font-medium hover:bg-chip-hover focus-visible:bg-chip-hover',
-  secondary: 'border border-line text-fg-2 hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1',
-};
+const buttonVariants = cva('inline-flex h-ctl items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-2 transition-colors', {
+  variants: { variant: {
+    primary: 'border border-line-strong bg-active text-fg-strong font-medium hover:bg-chip-hover focus-visible:bg-chip-hover',
+    secondary: 'border border-line text-fg-2 hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1',
+  } }, defaultVariants: { variant: 'secondary' },
+});
+const iconVariants = cva('inline-flex shrink-0 items-center justify-center rounded-md text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 data-[popup-open]:bg-active data-[popup-open]:text-fg-1', {
+  variants: { size: { sm: 'size-ctl-sm [&_svg]:size-icon', default: 'size-ctl [&_svg]:size-icon-ctl' } }, defaultVariants: { size: 'default' },
+});
 
 // All buttons share --ctl height, --r-md radius, and 12px horizontal padding
 export function Button({ variant = 'secondary', kbd, className, children, ...rest }: ButtonProps) {
@@ -23,8 +29,7 @@ export function Button({ variant = 'secondary', kbd, className, children, ...res
     <button
       type="button"
       className={cn(
-        'inline-flex h-ctl items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-2 transition-colors',
-        VARIANT[variant],
+        buttonVariants({ variant }),
         className,
       )}
       {...rest}
@@ -41,8 +46,7 @@ export function IconButton({ className, children, size = 'default', ...rest }: B
     <button
       type="button"
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-md text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1',
-        size === 'sm' ? 'size-ctl-sm [&_svg]:size-icon' : 'size-ctl [&_svg]:size-icon-ctl',
+        iconVariants({ size }),
         className,
       )}
       {...rest}
@@ -58,10 +62,12 @@ export function IconButton({ className, children, size = 'default', ...rest }: B
 // Splitting the hierarchy this way keeps a long mode name from reading as "buttons crowding buttons" when it pushes its neighbours
 type ChipVariant = 'quiet' | 'solid';
 
-const CHIP: Record<ChipVariant, string> = {
-  quiet: 'text-fg-2 hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 data-[open]:bg-active data-[open]:text-fg-1',
-  solid: 'bg-chip text-fg-1 hover:bg-chip-hover focus-visible:bg-chip-hover data-[open]:bg-chip-hover',
-};
+const chipVariants = cva('inline-flex h-ctl-sm min-w-0 items-center gap-1 rounded-sm px-1.5 text-3 transition-colors', {
+  variants: { variant: {
+    quiet: 'text-fg-2 hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 data-[open]:bg-active data-[open]:text-fg-1 data-[popup-open]:bg-active data-[popup-open]:text-fg-1',
+    solid: 'bg-chip text-fg-1 hover:bg-chip-hover focus-visible:bg-chip-hover data-[open]:bg-chip-hover data-[popup-open]:bg-chip-hover',
+  } }, defaultVariants: { variant: 'quiet' },
+});
 
 export interface ChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   ref?: Ref<HTMLButtonElement>;
@@ -81,7 +87,7 @@ export function Chip({ className, children, variant = 'quiet', caret = true, ico
   return (
     <button
       type="button"
-      className={cn('inline-flex h-ctl-sm min-w-0 items-center gap-1 rounded-sm px-1.5 text-3 transition-colors', CHIP[variant], className)}
+      className={cn(chipVariants({ variant }), className)}
       {...rest}
     >
       {icon && <span className={cn('flex shrink-0 items-center [&_svg]:size-icon', variant === 'quiet' && 'text-fg-3')}>{icon}</span>}

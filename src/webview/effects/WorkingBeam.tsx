@@ -31,7 +31,7 @@ export function WorkingBeam({ active, theme, children }: WorkingBeamProps) {
   return (
     <BorderBeam
       key={beam}
-      className="beam-wrap"
+      className="block! w-full"
       size={beam === 'none' ? 'line' : BEAM_SIZE[beam]}
       colorVariant={beamColor}
       theme={theme}

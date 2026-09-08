@@ -11,9 +11,6 @@ export const en = {
   'permission.bypass': 'Switch to bypass mode',
   'permission.commands': 'Allow {command} commands',
   'history.edit': 'Edit and resend',
-  'history.copy': 'Copy message',
-  'history.copied': 'Copied',
-  'history.copyFailed': 'Copy failed',
   'history.cancel': 'Cancel editing',
   'history.unavailable': 'Wait until the session is ready and idle.',
   'history.stale': 'The conversation changed. Reopen the message to edit it.',
@@ -39,6 +36,7 @@ export const en = {
   'common.previewImage': 'Preview {name}',
   'common.removeNamed': 'Remove {name}',
   'common.account': 'Account',
+  'common.agent': 'Agent',
   'common.listSep': ', ',
 
   'session.untitled': 'New session',

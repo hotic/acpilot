@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { ConfigControl } from '@shared/transcript';
 import { findVariant, groupModels, optionBrand, variantLabel, visibleOptions, type ModelFamily, type ModelVariant } from '@shared/models';
 import { presentReasoning, reasoningChip, reasoningVisible } from '@shared/composerControls';
@@ -7,7 +7,9 @@ import { cn } from '../ui/cn';
 import { Chip } from '../ui/Button';
 import { RadioPills, SwitchRow } from '../ui/Field';
 import { Popover } from '../ui/Popover';
-import { Menu, MenuList, type MenuItem } from '../ui/Menu';
+import { DropdownMenu } from '../ui/DropdownMenu';
+import { Command } from '../ui/Command';
+import { OptionContent } from '../ui/Panel';
 import { ModelMark } from './ModelMark';
 
 // Only offer search once the option count passes this threshold; short lists are scannable at a glance
@@ -49,6 +51,7 @@ export function ModelControl({ control, hidden, reasoning = [], onSetReasoning, 
   reasoning?: ConfigControl[];
   onSetReasoning: (id: string, value: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const c = useMemo(() => ({ ...control, options: visibleOptions(control.options, hidden, control.value) }), [control, hidden]);
   const families = useMemo(() => groupModels(c.options), [c.options]);
   const cur = families.find(f => f.variants.some(v => v.id === c.value));
@@ -58,29 +61,31 @@ export function ModelControl({ control, hidden, reasoning = [], onSetReasoning, 
   // Provider identity stays in the expanded list; the chip reads as one model name.
   const meta = [params, ...levels].filter(Boolean).join(' ') || undefined;
   return (
-    <Popover
-      side="top" align="end" width="md" role="menu" onOpenChange={onOpenChange}
-      content={close => <ModelPanel families={families} cur={cur} curVar={curVar} onSelect={onSelect} close={close}
-        reasoning={reasoning} onSetReasoning={onSetReasoning} />}
-    >
-      {({ open, toggle, ref }) => (
-        <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={[cur?.name ?? c.name, meta].filter(Boolean).join(' ')} meta={meta} icon={<ModelMark family={cur?.name ?? c.name} brand={cur?.brand} />}>
+    <Popover.Root open={open} onOpenChange={setOpen} onOpenLifecycle={onOpenChange}>
+      <Popover.Trigger render={
+        <Chip narrow="text" title={[cur?.name ?? c.name, meta].filter(Boolean).join(' ')} meta={meta} icon={<ModelMark family={cur?.name ?? c.name} brand={cur?.brand} />}>
           {cur?.name ?? c.options.find(o => o.id === c.value)?.name ?? c.name}
         </Chip>
-      )}
-    </Popover>
+      } />
+      <Popover.Portal><Popover.Positioner side="top" align="end" width="md"><Popover.Popup>
+        <ModelPanel families={families} cur={cur} curVar={curVar} onSelect={onSelect} close={() => setOpen(false)}
+          reasoning={reasoning} onSetReasoning={onSetReasoning} />
+      </Popover.Popup></Popover.Positioner></Popover.Portal>
+    </Popover.Root>
   );
 }
 
 // Agents without a model selector still use the same reasoning field and labels.
 export function ReasoningControl({ control: c, onSelect, onOpenChange }: OptionMenuProps) {
   if (!reasoningVisible(c)) return null;
-  return <Popover side="top" align="end" width="md" onOpenChange={onOpenChange}
-    content={() => <ReasoningParams control={c} onChange={onSelect} />}>
-    {({ open, toggle, ref }) => <Chip ref={ref} narrow="text" data-open={open || undefined} onClick={toggle} title={t('composer.effort')}>
+  return <Popover.Root onOpenLifecycle={onOpenChange}>
+    <Popover.Trigger render={<Chip narrow="text" title={t('composer.effort')}>
       {reasoningChip(c) ?? t('composer.effort')}
-    </Chip>}
-  </Popover>;
+    </Chip>} />
+    <Popover.Portal><Popover.Positioner side="top" align="end" width="md"><Popover.Popup>
+      <ReasoningParams control={c} onChange={onSelect} />
+    </Popover.Popup></Popover.Positioner></Popover.Portal>
+  </Popover.Root>;
 }
 
 interface ModelPanelProps {
@@ -94,7 +99,6 @@ interface ModelPanelProps {
 }
 
 function ModelPanel({ families, cur, curVar, onSelect, close, reasoning = [], onSetReasoning }: ModelPanelProps) {
-  const items = families.map((f): MenuItem => ({ id: f.key, label: f.name, description: f.source, icon: <ModelMark family={f.name} brand={f.brand} />, checked: f === cur }));
   const pickFamily = (key: string) => {
     const f = families.find(x => x.key === key);
     if (f) onSelect(((curVar && findVariant(f, curVar.effort, curVar.fast, curVar.long)) ?? f.variants[0]!).id);
@@ -103,17 +107,23 @@ function ModelPanel({ families, cur, curVar, onSelect, close, reasoning = [], on
   const shown = reasoning.filter(reasoningVisible);
   const showParams = !!(cur && curVar && cur.variants.length > 1);
   return (
-    <MenuList
-      items={items}
-      searchable={families.length >= SEARCH_FROM}
-      onSelect={pickFamily}
-      footer={showParams || shown.length ? (
-        <div className="mt-1 flex flex-col border-t border-line pt-1">
-          {showParams && <ModelParams family={cur!} variant={curVar!} onSelect={onSelect} />}
-          {shown.map(c => <ReasoningParams key={c.id} control={c} onChange={value => onSetReasoning?.(c.id, value)} />)}
-        </div>
-      ) : undefined}
-    />
+    <>
+      <Command.Root items={families} value={cur ?? null} itemToStringLabel={f => [f.name, f.source].filter(Boolean).join(' ')}
+        itemToStringValue={f => f.key} isItemEqualToValue={(a, b) => a.key === b.key}>
+        <Command.Input visible={families.length >= SEARCH_FROM} />
+        <Command.Empty />
+        <Command.List searchable={families.length >= SEARCH_FROM}>
+          {(f: ModelFamily) => <Command.Item key={f.key} value={f} onClick={() => pickFamily(f.key)}
+            className={families.some(family => family.source) ? 'min-h-0 py-1.5' : undefined}>
+            <OptionContent icon={<ModelMark family={f.name} brand={f.brand} />} description={f.source} checked={f === cur} checkSlot={!!cur}>{f.name}</OptionContent>
+          </Command.Item>}
+        </Command.List>
+      </Command.Root>
+      {(showParams || shown.length > 0) && <div className="mt-1 flex flex-col border-t border-line pt-1">
+        {showParams && <ModelParams family={cur!} variant={curVar!} onSelect={onSelect} />}
+        {shown.map(c => <ReasoningParams key={c.id} control={c} onChange={value => onSetReasoning?.(c.id, value)} />)}
+      </div>}
+    </>
   );
 }
 
@@ -171,12 +181,31 @@ function EffortField({ options, value, onChange, label = t('composer.effort') }:
 // (Grok's monolithic model list) — a thought_level menu of "Low / High" stays text-only instead of earning letter tiles
 function OptionMenu({ control: c, end, onSelect, onOpenChange }: OptionMenuProps) {
   const branded = c.options.some(o => optionBrand(o));
-  const items = c.options.map((o): MenuItem => ({ id: o.id, label: o.name, description: o.description, icon: branded ? <ModelMark family={o.name} brand={optionBrand(o)} /> : undefined, checked: o.id === c.value }));
   const cur = c.options.find(o => o.id === c.value);
   const curIcon = branded && cur && optionBrand(cur) ? <ModelMark family={cur.name} brand={optionBrand(cur)} /> : undefined;
-  return (
-    <Menu side="top" align={end ? 'end' : undefined} width="md" items={items} searchable={c.options.length >= SEARCH_FROM} onSelect={onSelect} onOpenChange={onOpenChange}>
-      {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={c.name} icon={curIcon}>{cur?.name ?? c.name}</Chip>}
-    </Menu>
-  );
+  const [open, setOpen] = useState(false);
+  const trigger = <Chip narrow="text" title={c.name} icon={curIcon}>{cur?.name ?? c.name}</Chip>;
+  const twoLine = c.options.some(o => o.description);
+  const content = (o: ConfigControl['options'][number]) => <OptionContent
+    icon={branded ? <ModelMark family={o.name} brand={optionBrand(o)} /> : undefined}
+    description={o.description} checked={o.id === c.value} checkSlot={!!cur}>{o.name}</OptionContent>;
+  if (c.options.length >= SEARCH_FROM) return <Popover.Root open={open} onOpenChange={setOpen} onOpenLifecycle={onOpenChange}>
+    <Popover.Trigger render={trigger} />
+    <Popover.Portal><Popover.Positioner side="top" align={end ? 'end' : 'start'} width="md"><Popover.Popup>
+      <Command.Root items={c.options} value={cur ?? null} itemToStringValue={o => o.id} itemToStringLabel={o => [o.name, o.description].filter(Boolean).join(' ')}
+        isItemEqualToValue={(a, b) => a.id === b.id}>
+        <Command.Input /><Command.Empty />
+        <Command.List searchable>{(o: ConfigControl['options'][number]) => <Command.Item key={o.id} value={o}
+          className={twoLine ? 'min-h-0 py-1.5' : undefined} onClick={() => { onSelect(o.id); setOpen(false); }}>{content(o)}</Command.Item>}</Command.List>
+      </Command.Root>
+    </Popover.Popup></Popover.Positioner></Popover.Portal>
+  </Popover.Root>;
+  return <DropdownMenu.Root onOpenLifecycle={onOpenChange}>
+    <DropdownMenu.Trigger render={trigger} />
+    <DropdownMenu.Portal><DropdownMenu.Positioner side="top" align={end ? 'end' : 'start'} width="md"><DropdownMenu.Popup>
+      <DropdownMenu.RadioGroup value={c.value} className="scroll-thin flex max-h-pop flex-col overflow-y-auto">
+        {c.options.map(o => <DropdownMenu.RadioItem key={o.id} value={o.id} onClick={() => onSelect(o.id)} className={twoLine ? 'min-h-0 py-1.5' : undefined}>{content(o)}</DropdownMenu.RadioItem>)}
+      </DropdownMenu.RadioGroup>
+    </DropdownMenu.Popup></DropdownMenu.Positioner></DropdownMenu.Portal>
+  </DropdownMenu.Root>;
 }

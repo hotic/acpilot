@@ -9,7 +9,7 @@ import { Link } from './Link';
 import { useVsCodeTheme } from '../useVsCodeTheme';
 
 // Full Markdown via streamdown: GFM + KaTeX + Mermaid, streaming-aware (remend repairs incomplete syntax mid-stream).
-// All typography lives in tokens.css under .acp-prose — Tailwind never scans node_modules, so streamdown's own classes don't resolve here.
+// All typography lives in styles/prose.css under .acp-prose — Tailwind never scans node_modules, so streamdown's own classes don't resolve here.
 
 // singleDollarTextMath stays off: "$5 and $10" in prose must not become math
 const PLUGINS = { math: createMathPlugin(), mermaid: mermaidDiagram };
@@ -93,6 +93,6 @@ function MermaidBlock({ chart }: { chart: string }) {
     }, 200);
     return () => { dead = true; clearTimeout(timer); };
   }, [chart, theme]);
-  if (failed || !svg) return failed ? <CodeBlock code={chart} /> : <div className="acp-mermaid-pending" />;
-  return <div className="acp-mermaid" dangerouslySetInnerHTML={{ __html: svg }} />;
+  if (failed || !svg) return failed ? <CodeBlock code={chart} /> : <div className="min-h-10 animate-[acp-pulse_1.5s_ease_infinite] rounded-md bg-code" />;
+  return <div className="flex justify-center [&_svg]:h-auto [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: svg }} />;
 }

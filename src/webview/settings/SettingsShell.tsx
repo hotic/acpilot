@@ -7,12 +7,12 @@ import type { Locale } from '@shared/i18n';
 import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
 import { IconButton } from '../ui/Button';
 import { ShellLayerContext } from '../ui/Popover';
+import { useScrollReveal } from '../ui/useScrollReveal';
 import { LocaleContext, t } from '../i18n';
 import { PageRail, type SettingsPage } from './Nav';
 import { General } from './General';
 import { AgentPage } from './AgentPage';
 import { Page, PageHeader } from './controls';
-import './settings.css';
 
 // Every action the settings page sends to the host; the LAB implements these with a fake host, the real page with postMessage
 export interface SettingsHandlers {
@@ -55,6 +55,7 @@ export interface SettingsShellProps {
 // The root doubles as the overlay layer for menus, like the chat shell.
 export function SettingsShell(p: SettingsShellProps) {
   const root = useRef<HTMLDivElement>(null);
+  useScrollReveal(root);
   const page = p.page;
   const agent = page.kind === 'agent' ? p.agents.find(a => a.id === page.id) : undefined;
   const title = agent ? t('settings.agent.title', { agent: agent.name }) : t('settings.general.title');
@@ -69,7 +70,7 @@ export function SettingsShell(p: SettingsShellProps) {
         <ShellLayerContext.Provider value={root}>
           <div
             ref={root}
-            className="acp-shell acp-settings relative flex h-full min-h-0 w-full flex-col overflow-hidden"
+            className="acp-shell acp-settings @container/settings-shell relative flex h-full min-h-0 w-full flex-col overflow-hidden"
             data-theme={p.theme}
             data-surface-host={p.host}
             data-agent={agent?.id ?? p.settings.defaultAgent}

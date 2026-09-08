@@ -3,7 +3,9 @@ import { ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '../ui/cn';
 import { Card } from '../ui/Card';
 import { Chip, IconButton } from '../ui/Button';
-import { Menu, type MenuItem } from '../ui/Menu';
+import { DropdownMenu } from '../ui/DropdownMenu';
+import { OptionContent } from '../ui/Panel';
+import { Switch as SwitchPrimitive } from '../ui/Switch';
 import { t } from '../i18n';
 
 // Settings use a navigation column beside one content column. Page and section headings belong to the content.
@@ -58,6 +60,14 @@ export function SectionDescription({ children }: { children: ReactNode }) {
 // Titled subgroups own one surface. Their lists inherit it and use separators instead of nested cards.
 const InsetGroupContext = createContext(false);
 
+// Settings rows share typography and vertical padding. Detail rows reserve two text lines; wrapped content can grow.
+// Inside a Group (or as a section header) the surface owns the horizontal inset, so the row drops its own.
+const GroupContext = createContext(false);
+const settingRow = 'min-h-(--setting-row) py-(--setting-row-pad) text-2 data-[detail]:min-h-(--setting-row-detail)';
+function useSettingRow() {
+  return cn(settingRow, !useContext(GroupContext) && 'px-pad');
+}
+
 export function Section({ title, desc, count, action, cards, children }: SectionProps) {
   const inset = title !== undefined || !!action;
   const hasContent = children !== null && children !== undefined;
@@ -70,8 +80,8 @@ export function Section({ title, desc, count, action, cards, children }: Section
   );
   return (
     <Card className="acp-section-panel flex flex-col px-pad shadow-none">
-      <div className="acp-setting-row acp-section-header flex flex-wrap items-center gap-gap" data-detail={!!desc || undefined}>
-        <div className="acp-section-copy min-w-0">
+      <div className={cn(settingRow, 'flex flex-wrap items-center gap-gap')} data-detail={!!desc || undefined}>
+        <div className="min-w-0 flex-[1_1_var(--setting-header-copy)]">
           <h3 className="m-0 flex items-baseline gap-2 text-2 font-normal text-fg-1">
             <span className="[overflow-wrap:anywhere]">{title}</span>
             {count !== undefined && <Count n={count} />}
@@ -95,14 +105,16 @@ export function SectionAction({ icon, onClick, children, title }: { icon?: React
 export function Group({ className, children }: { className?: string; children: ReactNode }) {
   const inset = useContext(InsetGroupContext);
   const Container = inset ? 'div' : Card;
-  return <Container className={cn('acp-group flex flex-col divide-y divide-line overflow-hidden', !inset && 'px-pad shadow-none', className)}>{children}</Container>;
+  return <GroupContext.Provider value={true}>
+    <Container className={cn('flex flex-col divide-y divide-line overflow-hidden', !inset && 'px-pad shadow-none', className)}>{children}</Container>
+  </GroupContext.Provider>;
 }
 
 // One setting: label + description on the left, the control on the right. `stack` puts the control under the text (wide controls)
 export function Field({ label, desc, htmlFor, stack, children }: { label?: ReactNode; desc?: ReactNode; htmlFor?: string; stack?: boolean; children?: ReactNode }) {
   return (
-    <div className={cn('acp-setting-row flex flex-wrap gap-pad', stack ? 'flex-col' : 'items-center')} data-detail={!!desc || undefined}>
-      <div className={cn('min-w-0', stack ? 'w-full' : 'acp-field-copy')}>
+    <div className={cn(useSettingRow(), 'flex flex-wrap gap-pad', stack ? 'flex-col' : 'items-center')} data-detail={!!desc || undefined}>
+      <div className={cn('min-w-0', stack ? 'w-full' : 'flex-[1_1_var(--setting-header-copy)]')}>
         {label !== undefined && <label htmlFor={htmlFor} className="block text-2 text-fg-1">{label}</label>}
         {desc && <div className="text-2 text-fg-2 [overflow-wrap:anywhere]">{desc}</div>}
       </div>
@@ -114,7 +126,7 @@ export function Field({ label, desc, htmlFor, stack, children }: { label?: React
 // A fact about the agent: name on the left, value at the right edge.
 export function FactRow({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
-    <div className="acp-setting-row flex items-center gap-pad">
+    <div className={cn(useSettingRow(), 'flex items-center gap-pad')}>
       <span className="shrink-0 text-2 text-fg-2">{label}</span>
       <span className="flex min-w-0 flex-1 items-center justify-end gap-1.5 text-right text-2 text-fg-1">{children}</span>
     </div>
@@ -123,7 +135,7 @@ export function FactRow({ label, children }: { label: ReactNode; children: React
 
 // A faint single-line row inside a Group (empty states, notes)
 export function Note({ children, shimmer }: { children: ReactNode; shimmer?: boolean }) {
-  return <div className={cn('acp-setting-row flex items-center text-2 text-fg-2', shimmer && 'shimmer')}>{children}</div>;
+  return <div className={cn(useSettingRow(), 'flex items-center text-fg-2', shimmer && 'shimmer')}>{children}</div>;
 }
 
 export interface Option<V extends string> { value: V; label: string; icon?: ReactNode; hint?: string; disabled?: boolean }
@@ -157,27 +169,23 @@ export function Segmented<V extends string>({ options, value, onChange, label }:
 // Dropdown select: a bordered Chip that opens the shared Menu; radio semantics, the current value gets the check
 export function Select<V extends string>({ options, value, onChange, label, className }: { options: Option<V>[]; value: V; onChange: (v: V) => void; label: string; className?: string }) {
   const cur = options.find(o => o.value === value);
-  const items: MenuItem[] = options.map(o => ({ id: o.value, label: o.label, icon: o.icon, hint: o.hint, disabled: o.disabled, checked: o.value === value }));
-  return (
-    <Menu side="bottom" align="end" width="md" items={items} onSelect={id => onChange(id as V)}>
-      {({ open, toggle, ref }) => (
-        <Chip
-          ref={ref}
-          data-open={open || undefined}
-          onClick={toggle}
-          aria-label={label}
-          icon={cur?.icon}
-          className={cn('min-w-(--ctl-w) justify-between border border-line bg-hover px-3 text-2 text-fg-1 hover:bg-active data-[open]:bg-active', className)}
-        >
-          {cur?.label ?? value}
-        </Chip>
-      )}
-    </Menu>
-  );
+  return <DropdownMenu.Root>
+    <DropdownMenu.Trigger render={<Chip aria-label={label} icon={cur?.icon}
+      className={cn('min-w-(--ctl-w) justify-between border border-line bg-hover px-3 text-2 text-fg-1 hover:bg-active data-[open]:bg-active data-[popup-open]:bg-active', className)}>
+      {cur?.label ?? value}
+    </Chip>} />
+    <DropdownMenu.Portal><DropdownMenu.Positioner side="bottom" align="end" width="md"><DropdownMenu.Popup>
+      <DropdownMenu.RadioGroup value={value} className="scroll-thin flex max-h-pop flex-col overflow-y-auto">
+        {options.map(o => <DropdownMenu.RadioItem key={o.value} value={o.value} title={o.hint} disabled={o.disabled} onClick={() => onChange(o.value)}>
+          <OptionContent icon={o.icon} checked={o.value === value} checkSlot={!!cur}>{o.label}</OptionContent>
+        </DropdownMenu.RadioItem>)}
+      </DropdownMenu.RadioGroup>
+    </DropdownMenu.Popup></DropdownMenu.Positioner></DropdownMenu.Portal>
+  </DropdownMenu.Root>;
 }
 
 export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (on: boolean) => void; label: string; disabled?: boolean }) {
-  return <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)} className="acp-switch" />;
+  return <SwitchPrimitive checked={checked} aria-label={label} disabled={disabled} onCheckedChange={onChange} />;
 }
 
 // Numeric field committing on blur / Enter; shows `unit` after the box. Local text state so half-typed values don't round-trip through the host
@@ -239,7 +247,6 @@ export interface ItemRowProps {
   className?: string;
 }
 
-// Settings rows share typography and padding. Detail rows reserve two text lines; wrapped content can grow.
 export function ItemRow({ lead, title, desc, extra, trailing, onOpen, onClick, dim, className }: ItemRowProps) {
   const Tag = onClick ? 'button' : 'div';
   return (
@@ -247,7 +254,7 @@ export function ItemRow({ lead, title, desc, extra, trailing, onOpen, onClick, d
       {...(onClick ? { type: 'button' as const, onClick } : {})}
       data-detail={!!desc || undefined}
       className={cn(
-        'acp-setting-row group/row flex w-full items-center gap-gap text-left',
+        useSettingRow(), 'group/row flex w-full items-center gap-gap text-left',
         onClick && 'transition-colors hover:bg-hover focus-visible:bg-hover',
         className,
       )}
@@ -283,7 +290,7 @@ export function PathText({ path, env, onOpen, className }: { path: string; env: 
 // The source is supporting metadata after the items, not another heading level.
 export function SourceLink({ path, env, onOpen }: { path: string; env: { home: string; cwd: string }; onOpen: (path: string) => void }) {
   return (
-    <button type="button" title={path} onClick={() => onOpen(path)} className="acp-setting-row flex w-full items-center gap-gap rounded-md text-left text-2 text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:text-fg-1 focus-visible:bg-hover">
+    <button type="button" title={path} onClick={() => onOpen(path)} className={cn(useSettingRow(), 'flex w-full items-center gap-gap rounded-md text-left text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:text-fg-1 focus-visible:bg-hover')}>
       <span className="min-w-0 flex-1 truncate">{shortPath(path, env)}</span>
       <ExternalLink className="size-icon shrink-0" strokeWidth={1.5} />
     </button>

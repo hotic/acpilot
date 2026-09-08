@@ -42,7 +42,7 @@ function QueuedRow({ item, blobUrl, sending, disabled, onEdit, onRemove, onSendN
       lead={<ListEnd className="size-icon" strokeWidth={1.5} />}
       title={t(item.sending ? 'queue.sending' : 'queue.title')}
       aria-busy={item.sending || undefined}
-      className="queue-card rounded-lg px-pad py-1 text-1 text-fg-1"
+      className="bg-(--cmp-bg) shadow-[inset_0_0_0_1px_var(--conversation-line)] rounded-lg px-pad py-1 text-1 text-fg-1"
       trailing={(onEdit || onRemove) && <>
         {onSendNow && <IconButton title={t(item.sending ? 'queue.sending' : 'queue.sendNow')} aria-label={t('queue.sendNow')} disabled={disabled || sending} className="disabled:opacity-50" onClick={onSendNow}><ArrowUp /></IconButton>}
         {onEdit && <IconButton title={t('queue.edit')} aria-label={t('queue.edit')} disabled={item.sending} className="disabled:opacity-50" onClick={onEdit}><Pencil /></IconButton>}

@@ -24,7 +24,7 @@ export function TerminalOutput({ block }: { block: ToolCallBlock }) {
       <pre
         ref={setRef}
         onScroll={e => { const el = e.currentTarget; pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}
-        className="term-follow scroll-fade m-0 max-h-term overflow-y-auto rounded-lg px-pad py-2 font-mono text-mono text-fg-2 whitespace-pre-wrap [overflow-wrap:anywhere]"
+        className="scroll-fade m-0 max-h-term overflow-y-auto rounded-lg px-pad py-2 font-mono text-mono text-fg-2 whitespace-pre-wrap [overflow-anchor:none] [overflow-wrap:anywhere]"
       >
         {text}
       </pre>

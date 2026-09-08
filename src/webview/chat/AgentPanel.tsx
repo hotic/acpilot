@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
-import { ChevronLeft, Plus } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { ChevronLeft, Plus, X } from 'lucide-react';
 import type { AccountInfo, AgentInfo } from '@shared/transcript';
 import type { AddAccountVia } from '@shared/protocol';
-import { MenuFooter, MenuHeader, MenuList } from '../ui/Menu';
+import { PanelFooter, PanelHeader, OptionContent } from '../ui/Panel';
+import { RadioGroup } from '../ui/RadioGroup';
 import { QuotaBars } from '../ui/QuotaBars';
 import { t } from '../i18n';
 import { AgentMark } from './AgentMark';
@@ -28,33 +29,43 @@ export interface AgentPanelProps {
 // An account row carries its quota bars under the label / plan line when the provider reports any (Devin: one per window the plan has)
 export function AgentPanel(p: AgentPanelProps) {
   const [view, setView] = useState<'agents' | 'accounts'>('agents');
+  const showPage = (event: MouseEvent<HTMLButtonElement>, next: 'agents' | 'accounts') => {
+    // Transfer focus before the current page's navigation button unmounts.
+    event.currentTarget.closest<HTMLElement>('[role="dialog"]')?.focus({ preventScroll: true });
+    setView(next);
+  };
   const current = p.accounts.find(a => a.id === p.accountId);
   const add = { label: t('composer.addAccount'), icon: <Plus strokeWidth={1.75} />, onClick: () => { p.onAddAccount(p.agent.id, 'auto'); p.close(); } };
   const { onRefreshQuota, agent } = p;
   useEffect(() => { if (view === 'accounts') onRefreshQuota?.(agent.id); }, [view, agent.id, onRefreshQuota]);
 
-  if (view === 'accounts') {
-    return (
-      <MenuList
-        items={p.accounts.map(a => ({
-          id: a.id, label: a.label, description: a.detail, checked: a.id === p.accountId, onRemove: () => p.onRemoveAccount(a.id),
-          extra: a.quota && <QuotaBars quota={a.quota} />,
-        }))}
-        empty={t('composer.noAccounts')}
-        onSelect={id => { p.onSelectAccount(id); p.close(); }}
-        header={<MenuHeader lead={{ label: t('common.back'), icon: <ChevronLeft strokeWidth={1.75} />, onClick: () => setView('agents') }} action={add}>{p.agent.name}</MenuHeader>}
-      />
-    );
-  }
-  return (
-    <MenuList
-      items={p.agents.map(a => ({
-        id: a.id, label: a.name, icon: <AgentMark id={a.id} name={a.name} />, checked: a.id === p.agent.id, disabled: a.available === false,
-      }))}
-      onSelect={id => { p.onSelectAgent(id); p.close(); }}
-      footer={p.agent.accounts
-        ? <MenuFooter onClick={() => setView('accounts')} action={add}>{current ? current.label : t('composer.notLoggedIn')}</MenuFooter>
-        : undefined}
-    />
-  );
+  const list = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    (list.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? list.current?.querySelector<HTMLButtonElement>('button:not(:disabled)'))?.focus({ preventScroll: true });
+  }, [view]);
+  if (view === 'accounts') return <div className="flex flex-col">
+    <PanelHeader lead={{ label: t('common.back'), icon: <ChevronLeft strokeWidth={1.75} />, onClick: event => showPage(event, 'agents') }} action={add}>{p.agent.name}</PanelHeader>
+    <RadioGroup.Root ref={list} aria-label={p.agent.name} value={p.accountId ?? ''} className="scroll-thin flex max-h-pop flex-col overflow-y-auto">
+      {!p.accounts.length && <div className="flex min-h-row items-center px-2 text-3 text-fg-3">{t('composer.noAccounts')}</div>}
+      {p.accounts.map(a => <div key={a.id} className="group/item relative flex shrink-0 flex-col">
+        <RadioGroup.Item value={a.id} onClick={() => { p.onSelectAccount(a.id); p.close(); }}
+          className={p.accounts.some(a => a.detail || a.quota) ? 'min-h-0 py-1.5 pr-8' : 'pr-8'}>
+          <OptionContent description={a.detail} extra={a.quota && <QuotaBars quota={a.quota} />} checked={a.id === p.accountId} checkSlot={!!current}>{a.label}</OptionContent>
+        </RadioGroup.Item>
+        <button type="button" aria-label={t('common.removeNamed', { name: a.label })} title={t('common.remove')}
+          onClick={e => { e.stopPropagation(); p.onRemoveAccount(a.id); }}
+          className="absolute right-1 top-1/2 flex size-icon-ctl -translate-y-1/2 items-center justify-center rounded-sm text-fg-3 opacity-0 transition-opacity hover:bg-active hover:text-fg-1 focus-visible:bg-active focus-visible:text-fg-1 focus-visible:opacity-100 group-hover/item:opacity-100">
+          <X className="size-3" strokeWidth={2} />
+        </button>
+      </div>)}
+    </RadioGroup.Root>
+  </div>;
+  return <div className="flex flex-col">
+    <RadioGroup.Root ref={list} aria-label={t('common.agent')} value={p.agent.id} className="scroll-thin flex max-h-pop flex-col overflow-y-auto">
+      {p.agents.map(a => <RadioGroup.Item key={a.id} value={a.id} disabled={a.available === false} onClick={() => { p.onSelectAgent(a.id); p.close(); }}>
+        <OptionContent icon={<AgentMark id={a.id} name={a.name} />} checked={a.id === p.agent.id} checkSlot>{a.name}</OptionContent>
+      </RadioGroup.Item>)}
+    </RadioGroup.Root>
+    {p.agent.accounts && <PanelFooter onClick={event => showPage(event, 'accounts')} action={add}>{current ? current.label : t('composer.notLoggedIn')}</PanelFooter>}
+  </div>;
 }

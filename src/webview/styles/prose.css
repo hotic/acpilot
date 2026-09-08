@@ -1,0 +1,58 @@
+/* Agent prose (streamdown output): all markdown typography lives here — Tailwind never scans node_modules,
+   so the library's own utility classes don't resolve and every element needs an explicit rule.
+   Unlayered on purpose: the host webview stylesheet and katex.min.css style a / code / blockquote / .katex-display
+   without a layer, and only unlayered rules beat them. */
+.acp-prose > * { margin: 0; }
+.acp-prose p, .acp-prose li { overflow-wrap: anywhere; }
+.acp-prose :is(h1, h2, h3, h4, h5, h6) { margin: 0; color: var(--fg-strong); font-weight: 600; line-height: var(--text-1-lh); }
+.acp-prose :is(h1, h2, h3, h4, h5, h6):not(:first-child) { margin-top: var(--gap); }
+.acp-prose h1 { font-size: calc(var(--text-1) * 1.35); }
+.acp-prose h2 { font-size: calc(var(--text-1) * 1.25); }
+.acp-prose h3 { font-size: calc(var(--text-1) * 1.15); }
+.acp-prose :is(h4, h5, h6) { font-size: var(--text-1); }
+/* Plan documents use the card's text scale; weight and spacing mark sections. */
+.plan-document .acp-prose :is(h1, h2, h3, h4, h5, h6) { margin-top: 0; font-size: var(--text-1); }
+.plan-document .acp-prose li { padding-block: 0; }
+/* Reserve only the opening block's corner for the file action. */
+.plan-document .acp-prose > :first-child { min-height: var(--ctl-sm); padding-inline-end: calc(var(--ctl-sm) + var(--gap)); }
+/* Tailwind preflight strips list-style; restore the markers streamdown's own (ungenerated) classes would have set */
+.acp-prose :is(ul, ol) { margin: 0; padding-left: 1.2em; }
+.acp-prose ul { list-style-type: disc; }
+.acp-prose ol { list-style-type: decimal; }
+.acp-prose li::marker { color: var(--fg-3); }
+.acp-prose li + li, .acp-prose li > :is(ul, ol) { margin-top: 2px; }
+.acp-prose blockquote {
+  position: relative; margin: 0; padding: var(--gap) var(--pad); border: 0;
+  background: transparent; color: var(--fg-2); font-style: normal;
+}
+/* A rounded rail keeps quotes quiet without introducing another filled card. */
+.acp-prose blockquote::before {
+  content: ''; position: absolute; inset-block: 0; left: 0; width: 2px;
+  background: var(--line-strong); border-radius: var(--r-sm);
+}
+.acp-prose blockquote > * + * { margin-top: var(--gap); }
+.acp-prose hr { height: 1px; margin: var(--gap) 0; border: 0; background: var(--conversation-line); }
+.acp-prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.acp-prose a:hover { filter: brightness(1.1); }
+.acp-prose strong { color: var(--fg-strong); font-weight: 600; }
+.acp-prose table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-2); line-height: var(--text-2-lh); }
+.acp-prose th, .acp-prose td { padding: var(--gap) var(--pad); border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.acp-prose th { background: var(--hover); color: var(--fg-2); font-weight: 500; }
+.acp-prose tbody tr:last-child td { border-bottom: 0; }
+.acp-prose details { padding: var(--gap); border: 1px solid var(--conversation-line); border-radius: var(--r-lg); }
+.acp-prose summary {
+  display: flex; align-items: center; gap: var(--gap); min-height: var(--row);
+  padding-inline: var(--gap); border-radius: var(--r-md); list-style: none; cursor: pointer;
+}
+.acp-prose summary::-webkit-details-marker { display: none; }
+.acp-prose summary::before {
+  content: ''; width: 6px; height: 6px; flex-shrink: 0; margin-right: var(--gap);
+  border-right: 1px solid var(--fg-3); border-bottom: 1px solid var(--fg-3); transform: rotate(-45deg);
+}
+.acp-prose details[open] > summary::before { transform: rotate(45deg); }
+.acp-prose summary:hover, .acp-prose summary:focus-visible { background: var(--hover); }
+.acp-prose details > :not(summary) { margin: var(--gap); }
+
+/* KaTeX: a wide display formula scrolls inside its own box instead of breaking the column */
+.acp-prose .katex { color: var(--fg-1); }
+.acp-prose .katex-display { margin: 0; padding: 2px 0; overflow-x: auto; overflow-y: hidden; }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
 import type { ConfigControl, PermissionBlock, PlanDocumentBlock, SessionControls } from '@shared/transcript';
 import { groupModels, variantLabel } from '@shared/models';
@@ -7,7 +7,8 @@ import { Button, Chip, IconButton } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { t } from '../i18n';
 import { Popover } from '../ui/Popover';
-import { MenuFooter, MenuHeader, MenuList } from '../ui/Menu';
+import { PanelFooter, PanelHeader, OptionContent } from '../ui/Panel';
+import { RadioGroup } from '../ui/RadioGroup';
 import { SendButton } from '../effects/SendButton';
 import { ModelOptions } from './ModelPicker';
 import { ModelMark } from './ModelMark';
@@ -34,6 +35,7 @@ export function PlanDocument({ block, permission: suppliedPermission, onChoose }
 }) {
   const ctx = useContext(PlanDocumentContext);
   const permission = suppliedPermission ?? ctx.permissions?.find(p => p.planId === block.id);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [selected, setSelected] = useState<ExecutionModel>();
   const model = ctx.controls.options.find(c => c.category === 'model');
   const choice = model && selected?.configId === model.id && model.options.some(o => o.id === selected.value)
@@ -73,16 +75,17 @@ export function PlanDocument({ block, permission: suppliedPermission, onChoose }
         {revise ? <Button variant="secondary" disabled={!ctx.ready} title={revise.label} onClick={() => choose(revise.id)}
           className="shrink-0">{t('plan.revise')}</Button> : <span />}
         <div className="ml-auto flex min-w-0 items-center gap-gap">
-          {(model || extra.length > 0) && <Popover side="top" align="end" width="md" role="menu"
-            content={close => <BuildMenu model={model && { ...model, value: choice?.value ?? model.value }}
-              hidden={model && ctx.hidden?.[model.id]} extra={extra} ready={ctx.ready} canBuild={!busy && !!ctx.build && !!block.markdown}
-              onSelect={value => model && setSelected({ configId: model.id, value })} onChoose={choose} close={close} />}>
-            {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} aria-expanded={open}
-              aria-haspopup="menu" aria-label={t('plan.approvalsAria')} title={executor ?? t('plan.moreApprovals')} onClick={toggle}
+          {(model || extra.length > 0) && <Popover.Root open={menuOpen} onOpenChange={setMenuOpen}>
+            <Popover.Trigger render={<Chip aria-label={t('plan.approvalsAria')} title={executor ?? t('plan.moreApprovals')}
               narrow="text" meta={meta} icon={family && <ModelMark family={family.name} brand={family.brand} />} data-plan-executor>
               {family?.name ?? executor ?? t('plan.approvals')}
-            </Chip>}
-          </Popover>}
+            </Chip>} />
+            <Popover.Portal><Popover.Positioner side="top" align="end" width="md"><Popover.Popup>
+              <BuildMenu model={model && { ...model, value: choice?.value ?? model.value }}
+                hidden={model && ctx.hidden?.[model.id]} extra={extra} ready={ctx.ready} canBuild={!busy && !!ctx.build && !!block.markdown}
+                onSelect={value => model && setSelected({ configId: model.id, value })} onChoose={choose} close={() => setMenuOpen(false)} />
+            </Popover.Popup></Popover.Positioner></Popover.Portal>
+          </Popover.Root>}
           <SendButton running={false} filled={!busy && !!ctx.build && !!block.markdown} theme={ctx.theme}
             onClick={() => ctx.build?.(block.id, choice, primary?.id)} />
         </div>
@@ -104,13 +107,26 @@ function BuildMenu({ model, hidden, extra, ready, canBuild, onSelect, onChoose, 
   close: () => void;
 }) {
   const [approvals, setApprovals] = useState(!model);
-  if (approvals) return <MenuList header={<MenuHeader
-    lead={model ? { label: t('plan.backToExecutor'), icon: <ArrowLeft />, onClick: () => setApprovals(false) } : undefined}>{t('plan.moreApprovals')}</MenuHeader>}
-    items={extra.map(o => ({ id: o.id, label: o.label, disabled: o.kind.startsWith('allow') ? !canBuild : !ready }))}
-    onSelect={id => { onChoose(id); close(); }} />;
+  const approvalList = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (approvals) approvalList.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true });
+  }, [approvals]);
+  const showPage = (event: MouseEvent<HTMLButtonElement>, next: boolean) => {
+    // Keep focus inside the popup before removing the page's focused button.
+    // Base UI otherwise restores focus to the popup after the new row receives it.
+    event.currentTarget.closest<HTMLElement>('[role="dialog"]')?.focus({ preventScroll: true });
+    setApprovals(next);
+  };
+  if (approvals) return <>
+    <PanelHeader lead={model ? { label: t('plan.backToExecutor'), icon: <ArrowLeft />, onClick: event => showPage(event, false) } : undefined}>{t('plan.moreApprovals')}</PanelHeader>
+    <RadioGroup.Root ref={approvalList} value={null} aria-label={t('plan.moreApprovals')} className="scroll-thin flex max-h-pop flex-col overflow-y-auto">
+      {extra.map(o => <RadioGroup.Item key={o.id} value={o.id} disabled={o.kind.startsWith('allow') ? !canBuild : !ready}
+        onClick={() => { onChoose(o.id); close(); }}><OptionContent>{o.label}</OptionContent></RadioGroup.Item>)}
+    </RadioGroup.Root>
+  </>;
   return <>
-    <MenuHeader>{t('plan.executor')}</MenuHeader>
+    <PanelHeader>{t('plan.executor')}</PanelHeader>
     {model && <ModelOptions control={model} hidden={hidden} onSelect={onSelect} close={close} />}
-    {extra.length > 0 && <MenuFooter onClick={() => setApprovals(true)}>{t('plan.moreApprovals')}</MenuFooter>}
+    {extra.length > 0 && <PanelFooter onClick={event => showPage(event, true)}>{t('plan.moreApprovals')}</PanelFooter>}
   </>;
 }

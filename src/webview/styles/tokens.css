@@ -1,5 +1,3 @@
-@import "tailwindcss";
-
 /* Design tokens: components may only reference the variables here, no bare numbers.
    Color roles prefer the host's --vscode-* values; with no host (LAB) they fall back to Dark / Light Modern values. */
 
@@ -102,10 +100,6 @@
   --lead: 20px;
   --icon: 14px;
   --icon-ctl: 16px;
-  --message-action-size: 20px;
-  --message-action-icon: 12px;
-  /* Copy ink stops two viewBox units inside the SVG edge after its stroke. */
-  --message-action-ink-inset: calc(var(--message-action-icon) / 12);
   --pad: 14px;
   --pad-y: 18px;
   /* Page margin: content's distance from the shell edge (header / conversation flow / composer outline share one vertical line), larger than the card padding --pad */
@@ -117,8 +111,10 @@
   --hdr: 52px;
   /* Attachment thumbnail: the same square tile in drafts and sent messages */
   --thumb: 56px;
-  /* Sticky prompts leave room for the reply, even in a short sidebar. */
+  /* Sticky prompts leave room for the reply, even in a short sidebar; once stuck at the top they fold to a few lines. */
   --user-message-max: min(240px, 40cqh);
+  --user-message-stuck-lines: 3;
+  --user-message-stuck-max: calc(var(--user-message-stuck-lines) * var(--text-1-lh));
 
   /* Three radius levels: inline (inline code / progress bar) / control (button / Chip / menu item / row hover) / container (composer / card / overlay / code block / bubble).
      --r-xs is for tiny swatches only (legend squares) and does not follow the radius axis */
@@ -138,9 +134,11 @@
   --term-lines: 12;
   /* Thoughts stay within eight rows or half the viewport. */
   --thought-body-max: min(calc(var(--row) * 8), 45dvh);
-  /* Long options within the current question scroll while its header and actions stay visible. */
-  --question-body-max: min(calc(var(--row) * 12), 50dvh);
-  --question-option-pad: 6px;
+  /* Bound the whole question body so long prompts leave room for the transcript. */
+  --question-body-max: min(calc(var(--row) * 8), 35dvh);
+  --question-section-gap: 6px;
+  --question-top-pad: 12px;
+  --question-option-pad: 4px;
   --question-description-gap: 2px;
   --question-focus-width: 2px;
   /* Only the pinned to-do list has a bounded viewport; historical plans grow naturally. */
@@ -159,127 +157,7 @@
   --enter-y: 4px;
 }
 
-.row-interactive {
-  margin-inline: calc(-1 * var(--row-hit-outset));
-  padding-inline: var(--row-hit-outset);
-}
-
-/* Nested rows extend their hit area beyond the text column. Reserve that space
-   inside the animated clip, so its straight edges cannot cut off row corners. */
-.disclosure-body { margin-inline: calc(-1 * var(--row-hit-outset)); }
-.disclosure-body > div { padding-inline: var(--row-hit-outset); }
-
-/* User text and reply prose align with the action icon column. */
-.user-message {
-  padding-inline: var(--pad);
-}
-
-.agent-message {
-  padding-inline: var(--pad);
-  --row: var(--chat-row);
-}
-
-/* Summaries keep breathing room; consecutive process rows form a compact list. */
-.process-history, .process-lines {
-  --row: var(--process-row);
-  --row-dense: var(--process-row);
-  --ctl-sm: var(--process-row);
-}
-
-/* Expanded history grows with its content; the conversation owns scrolling. */
-.process-history {
-  margin-inline: calc(-1 * var(--row-hit-outset));
-  padding-inline: var(--row-hit-outset);
-  min-width: 0;
-}
-
-/* Narrative text separates consecutive action groups without loosening tool rows.
-   Use one leading margin per boundary, including adjacent prose blocks. */
-.process-content { gap: var(--process-row-gap); }
-.process-content > .acp-prose:not(:first-child),
-.process-content > .acp-prose + * {
-  margin-block-start: calc(var(--process-prose-gap) - var(--process-row-gap));
-}
-
-/* Thoughts retain a bounded viewport independently of the enclosing process. */
-.thought-body {
-  max-height: var(--thought-body-max);
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-}
-
-.plan-card { gap: var(--plan-section-gap); padding-block: var(--plan-pad-y); }
-.plan-entry-row { align-items: flex-start; }
-.plan-entry-row > .row-lead { margin-top: calc((var(--text-2-lh) - var(--lead)) / 2); }
-/* Dock entries use balanced text padding; the header retains its full hit area. */
-.plan-card .plan-entry-row {
-  min-height: calc(var(--text-2-lh) + var(--plan-entry-pad-y) * 2);
-  padding-block: var(--plan-entry-pad-y);
-}
-.plan-card .plan-entry-row > .row-lead {
-  margin-block: calc((var(--text-2-lh) - var(--lead)) / 2);
-}
-.plan-entry-viewport {
-  --scroll-fade-size: var(--gap);
-  scrollbar-gutter: stable;
-  overflow-anchor: none;
-  max-height: calc(var(--row-dense) * var(--plan-rows));
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-}
-
-.scroll-fade {
-  --fade-top: 0px;
-  --fade-bottom: 0px;
-  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
-}
-.scroll-fade[data-more-above] { --fade-top: var(--scroll-fade-size); }
-.scroll-fade[data-more-below] { --fade-bottom: var(--scroll-fade-size); }
-
-/* Hallmark · component: question card · theme: existing Acpira tokens.
-   One question per page, compact type, shared row alignment and persistent actions. */
-.question-header { padding: var(--gap) var(--pad) 0; }
-.question-body {
-  --scroll-fade-size: var(--gap);
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap);
-  max-height: min(calc(var(--row) * 12), 50dvh);
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  padding: var(--gap) var(--pad);
-}
-.question-option { align-items: flex-start; padding: var(--question-option-pad); }
-.question-option > .row-lead { margin-top: calc((var(--text-2-lh) - var(--lead)) / 2); }
-.question-option-copy { gap: var(--question-description-gap); }
-.question-option-key {
-  display: flex;
-  width: var(--lead);
-  height: var(--lead);
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  font-size: var(--text-3);
-  line-height: var(--text-3-lh);
-  color: var(--fg-2);
-}
-.question-option[aria-checked="true"] .question-option-key { color: var(--fg-1); }
-.question-other > .row-lead { margin-top: 0; }
-.question-other .question-option-key[aria-checked="true"] { color: var(--fg-1); }
-.question-other:focus-within {
-  background: var(--active);
-  box-shadow: inset 0 0 0 var(--question-focus-width) var(--fg-2);
-}
-.question-option:active { background: var(--active); }
-.question-footer { padding: 0 var(--pad) var(--gap); }
-.question-card button:disabled { opacity: .5; cursor: not-allowed; }
-.question-card button:focus-visible, .question-input:focus-visible {
-  box-shadow: inset 0 0 0 var(--question-focus-width) var(--fg-2);
-}
-
 [data-theme="light"] {
-  color-scheme: light;
   --fg-1: var(--vscode-foreground, #0d0d0d);
   --fg-2: #6c6c6c;
   --fg-3: #767676;
@@ -363,9 +241,26 @@
 [data-accent="agent"][data-agent="devin"] { --accent: var(--agent-devin); --accent-fg: var(--agent-devin-fg); }
 [data-accent="agent"][data-agent="grok"]  { --accent: var(--agent-grok); --accent-fg: var(--agent-grok-fg); }
 
-[data-motion="none"] * { transition: none !important; animation: none !important; }
-[data-motion="none"] *::before, [data-motion="none"] *::after { transition: none !important; animation: none !important; }
 [data-motion="full"] { --dur: 200ms; --dur-open: 300ms; --enter-dur: 480ms; --enter-stagger: 80ms; --enter-y: 10px; }
+
+/* Settings surface (SettingsShell): a second type scale (heading, 20px body leading) and its layout measures.
+   Everything else comes from the tokens above; the shell itself is the @container the navigation collapses against. */
+.acp-settings {
+  --settings-nav-w: 184px;
+  --settings-rail-w: 52px;
+  --section-gap: calc(var(--pad) + var(--gap));
+  --text-2-lh: 20px;
+  --setting-row: 48px;
+  --setting-row-detail: 64px;
+  --setting-row-pad: 12px;
+  --setting-header-copy: 200px;
+  --text-h: 15px;
+  --text-h-lh: 22px;
+  --content-w: 720px;
+  --ctl-w: 168px;
+  --num-w: 64px;
+  --dot: 6px;
+}
 
 /* Tailwind theme mapping: class names → the tokens above */
 @theme inline {
@@ -424,6 +319,18 @@
   --radius-lg: var(--r-lg);
   --radius-full: 9999px;
 
+  --spacing-switch-track-h: 16px;
+  --spacing-switch-track-w: 28px;
+  --spacing-switch-thumb: 12px;
+  --spacing-switch-on: 14px;
+  --spacing-switch-off: 2px;
+  /* Settings switch: a taller track on the 4px grid; the knob travels track width minus track height. */
+  --spacing-switch-lg-h: 18px;
+  --spacing-switch-lg-w: 32px;
+  --spacing-switch-lg-pad: 2px;
+  --spacing-switch-lg-knob: 14px;
+  --spacing-switch-lg-on: 14px;
+
   --spacing-row: var(--row);
   --spacing-row-dense: var(--row-dense);
   --spacing-ctl: var(--ctl);
@@ -439,6 +346,7 @@
   --spacing-hdr: var(--hdr);
   --spacing-thumb: var(--thumb);
   --spacing-indent: calc(var(--lead) + var(--gap));
+  --spacing-hit: var(--row-hit-outset);
 
   --shadow-*: initial;
   --shadow-card: var(--card-shadow);
@@ -447,285 +355,10 @@
   --default-transition-duration: var(--dur);
   --spacing-term: calc(var(--term-lines) * var(--text-mono-lh));
   --spacing-pop: calc(var(--pop-rows) * var(--row));
+  --spacing-plan: calc(var(--plan-rows) * var(--row-dense));
   --spacing-question-body: var(--question-body-max);
   --spacing-pop-sm: var(--pop-w-sm);
   --spacing-pop-md: var(--pop-w-md);
   --spacing-pop-lg: var(--pop-w-lg);
   --spacing-pop-xl: var(--pop-w-xl);
-}
-
-/* A few base styles and motion */
-@layer base {
-  .acp-shell { font-family: var(--font); font-size: var(--text-1); line-height: var(--text-1-lh); color: var(--fg-1); background: var(--bg-0); }
-  .acp-shell ::selection { background: color-mix(in srgb, var(--focus) 35%, transparent); }
-  .acp-shell summary::-webkit-details-marker { display: none; }
-  .acp-shell textarea { field-sizing: content; }
-  /* Scrollbars: gutter always reserved (scrollbar-gutter), thin thumb that only shows on hover, content width unaffected by the scrollbar appearing */
-  .acp-shell ::-webkit-scrollbar { width: 10px; height: 10px; }
-  .acp-shell ::-webkit-scrollbar-thumb { background: transparent; border: 3px solid transparent; background-clip: padding-box; border-radius: 6px; }
-  .acp-shell :hover::-webkit-scrollbar-thumb, .acp-shell :focus-within::-webkit-scrollbar-thumb { background: var(--line-strong); background-clip: padding-box; }
-  .acp-shell ::-webkit-scrollbar-track { background: transparent; }
-  .acp-shell ::-webkit-scrollbar-corner { background: transparent; }
-}
-
-/* Webview defaults are unlayered: keep these overrides outside Tailwind layers.
-   Fenced code inherits its surface; only inline code gets a small background. */
-.acp-shell code {
-  font-family: var(--font-mono); font-size: var(--text-mono); color: var(--fg-1);
-  background: var(--hover); padding: 0.1em 0.4em; border-radius: var(--r-sm);
-}
-.acp-shell pre code {
-  font: inherit; color: inherit; background: transparent; padding: 0; border-radius: 0;
-}
-.acp-shell kbd {
-  font-family: var(--font-mono); font-size: var(--text-mono); color: var(--fg-2);
-  background: var(--hover); border: 1px solid var(--line-strong); border-radius: var(--r-sm);
-  box-shadow: none; padding: 0.1em 0.4em;
-}
-
-/* Focus indication works via background lift (hover / focus-visible:bg-*), no outline drawn.
-   Must live outside @layer: the host webview paints --vscode-focusBorder on :focus (a yellow frame in Cursor),
-   and only unlayered rules beat it; Tailwind's outline-none is actually 2px transparent, which that color would tint yellow. */
-.acp-shell :focus,
-.acp-shell :focus-visible {
-  outline: none !important;
-}
-
-/* Composer input field and send button: modeled on Libraries.dev's Studio panel */
-@utility composer-field {
-  background: var(--cmp-bg);
-  box-shadow: inset 0 0 0 1px var(--conversation-line);
-  transition: background var(--dur) ease, box-shadow var(--dur) ease;
-  &[data-focused] { box-shadow: inset 0 0 0 1px var(--conversation-line-focus); }
-  &:hover, &:focus-within { background: var(--cmp-bg-lift); }
-  &[data-busy] { background: var(--cmp-bg); }
-  /* Something attachable is being dragged over it */
-  &[data-drag] { background: var(--cmp-bg-lift); outline: 1px dashed var(--fg-3); outline-offset: -1px; }
-}
-/* A queued prompt's row above the composer: the composer's resting surface and outline, without its hover lift */
-@utility queue-card {
-  background: var(--cmp-bg);
-  box-shadow: inset 0 0 0 1px var(--conversation-line);
-}
-@utility send-btn {
-  background: var(--send-bg);
-  box-shadow: var(--send-ring);
-  color: var(--send-ink);
-  transition: background var(--dur) ease, color var(--dur) ease;
-  &[data-on] { background: var(--send-bg-on); color: var(--send-ink-on); }
-  &[data-on]:hover, &[data-on]:focus-visible { filter: brightness(1.08); }
-  /* MetalFx owns the solid inverted surface and silver ring; the child inherits its icon color. */
-  &[data-on][data-metal] { background: transparent; box-shadow: none; color: inherit; }
-}
-@utility shimmer {
-  background: linear-gradient(90deg, #9a9a9a 0%, var(--fg-strong) 50%, #9a9a9a 100%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: acp-shimmer 2s linear infinite;
-}
-/* Timeline rail (Kimi-style), for result lists only: a dashed hairline down the centre of the lead-slot column, from the list's top to the last row's icon centre.
-   Painted beneath the rows (isolated stacking context + negative z-index) */
-@utility timeline {
-  position: relative;
-  isolation: isolate;
-  &::before {
-    content: '';
-    position: absolute;
-    z-index: -1;
-    left: calc(var(--lead) / 2);
-    top: 0;
-    bottom: calc(var(--row) / 2);
-    border-left: 1px dashed var(--line-strong);
-    pointer-events: none;
-  }
-}
-/* Disclosure body rail (as in Devin): a solid hairline down the lead-slot column beside an indented, non-full-width body */
-@utility rail {
-  position: relative;
-  &::before {
-    content: '';
-    position: absolute;
-    left: calc(var(--lead) / 2);
-    top: 0;
-    bottom: 0;
-    border-left: 1px solid var(--line-strong);
-    pointer-events: none;
-  }
-}
-/* Thinking lead swaps from Orb to a static icon when the thought ends: the Orb shrinks out, the icon grows in */
-@utility swap-out { animation: acp-swap-out var(--dur-open) ease both; }
-@utility swap-in { animation: acp-swap-in var(--dur-open) ease both; }
-/* Content that replaces something in place (a prompt card ↔ its inline editor): a plain fade, the container animates its own height */
-@utility fade-in { animation: acp-fade-in var(--dur-open) ease both; }
-@utility enter {
-  animation: acp-enter var(--enter-dur) cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  animation-delay: calc(var(--i, 0) * var(--enter-stagger));
-}
-/* Quiet dots fill the same lead slot as thinking rows, without glow or a text caret. */
-.waiting-dots {
-  --wait-dot: 3px;
-  --wait-gap: 3px;
-  --wait-lift: 0px;
-  display: inline-flex; align-items: center; justify-content: center;
-  width: var(--lead); height: var(--lead); gap: var(--wait-gap); flex-shrink: 0;
-  color: var(--fg-2);
-}
-.waiting-dots > span {
-  width: var(--wait-dot); height: var(--wait-dot); border-radius: 50%;
-  background: currentColor; opacity: 0.45;
-  animation: acp-wait-dot 1.4s ease-in-out infinite;
-}
-.waiting-dots > span:nth-child(2) { animation-delay: 160ms; }
-.waiting-dots > span:nth-child(3) { animation-delay: 320ms; }
-[data-motion="full"] .waiting-dots { --wait-lift: -2px; }
-@keyframes acp-wait-dot {
-  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
-  30% { opacity: 0.85; transform: translateY(var(--wait-lift)); }
-}
-@utility beam-wrap { display: block !important; width: 100%; }
-@utility scroll-stable { scrollbar-gutter: stable; }
-/* Lists inside overlays: a 2px thumb in a 6px gutter, still hover-only, so the bar never crowds the row text */
-@utility scroll-thin {
-  &::-webkit-scrollbar { width: 6px; height: 6px; }
-  &::-webkit-scrollbar-thumb { border-width: 2px; }
-}
-@utility term-follow { overflow-anchor: none; }
-
-/* User cards stick within an exchange; use an opaque surface so replies cannot
-   bleed through the translucent chip color. Long prompt text scrolls independently. */
-.thread-scroll { container-type: size; }
-.user-message { max-height: var(--user-message-max); }
-/* Hover tools sit in the existing message gap; revealing them never shifts the reply. */
-.user-message-frame { --message-text-inset: var(--pad); }
-.message-actions {
-  position: absolute;
-  top: 100%;
-  /* Align painted icon pixels with the text edge, excluding the button hit area. */
-  right: calc(var(--message-text-inset) - (var(--message-action-size) - var(--message-action-icon)) / 2 - var(--message-action-ink-inset));
-  height: var(--msg-gap);
-  min-height: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-/* Pencil ink reaches one viewBox unit closer to the edge than Copy. */
-.message-actions:has(.lucide-pencil) { --message-action-ink-inset: calc(var(--message-action-icon) / 24); }
-.user-message-frame:hover > .message-actions,
-.message-actions:has(:focus-visible) { opacity: 1; pointer-events: auto; }
-.message-actions button {
-  width: var(--message-action-size);
-  height: min(var(--message-action-size), var(--msg-gap));
-}
-.message-actions button svg { width: var(--message-action-icon); height: var(--message-action-icon); }
-.user-message-card {
-  background-color: var(--bg-0);
-  background-image: linear-gradient(var(--chip), var(--chip));
-  box-shadow: inset 0 0 0 1px var(--conversation-line);
-  transition: box-shadow var(--dur) ease;
-}
-/* An editable prompt opens on click; its outline firms up while the actions appear below. */
-.user-message-card.user-message-editable:hover { box-shadow: inset 0 0 0 1px var(--conversation-line-focus); }
-
-/* Agent prose (streamdown output): all markdown typography lives here — Tailwind never scans node_modules,
-   so the library's own utility classes don't resolve and every element needs an explicit rule. */
-.acp-prose > * { margin: 0; }
-.acp-prose p, .acp-prose li { overflow-wrap: anywhere; }
-.acp-prose :is(h1, h2, h3, h4, h5, h6) { margin: 0; color: var(--fg-strong); font-weight: 600; line-height: var(--text-1-lh); }
-.acp-prose :is(h1, h2, h3, h4, h5, h6):not(:first-child) { margin-top: var(--gap); }
-.acp-prose h1 { font-size: calc(var(--text-1) * 1.35); }
-.acp-prose h2 { font-size: calc(var(--text-1) * 1.25); }
-.acp-prose h3 { font-size: calc(var(--text-1) * 1.15); }
-.acp-prose :is(h4, h5, h6) { font-size: var(--text-1); }
-/* Plan documents use the card's text scale; weight and spacing mark sections. */
-.plan-document .acp-prose :is(h1, h2, h3, h4, h5, h6) { margin-top: 0; font-size: var(--text-1); }
-.plan-document .acp-prose li { padding-block: 0; }
-/* Reserve only the opening block's corner for the file action. */
-.plan-document .acp-prose > :first-child { min-height: var(--ctl-sm); padding-inline-end: calc(var(--ctl-sm) + var(--gap)); }
-/* Tailwind preflight strips list-style; restore the markers streamdown's own (ungenerated) classes would have set */
-.acp-prose :is(ul, ol) { margin: 0; padding-left: 1.2em; }
-.acp-prose ul { list-style-type: disc; }
-.acp-prose ol { list-style-type: decimal; }
-.acp-prose li::marker { color: var(--fg-3); }
-.acp-prose li + li, .acp-prose li > :is(ul, ol) { margin-top: 2px; }
-.acp-prose blockquote {
-  position: relative; margin: 0; padding: var(--gap) var(--pad); border: 0;
-  background: transparent; color: var(--fg-2); font-style: normal;
-}
-/* A rounded rail keeps quotes quiet without introducing another filled card. */
-.acp-prose blockquote::before {
-  content: ''; position: absolute; inset-block: 0; left: 0; width: 2px;
-  background: var(--line-strong); border-radius: var(--r-sm);
-}
-.acp-prose blockquote > * + * { margin-top: var(--gap); }
-.acp-prose hr { height: 1px; margin: var(--gap) 0; border: 0; background: var(--conversation-line); }
-.acp-prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-.acp-prose a:hover { filter: brightness(1.1); }
-.acp-prose strong { color: var(--fg-strong); font-weight: 600; }
-.acp-prose table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-2); line-height: var(--text-2-lh); }
-.acp-prose th, .acp-prose td { padding: var(--gap) var(--pad); border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-.acp-prose th { background: var(--hover); color: var(--fg-2); font-weight: 500; }
-.acp-prose tbody tr:last-child td { border-bottom: 0; }
-.acp-prose details { padding: var(--gap); border: 1px solid var(--conversation-line); border-radius: var(--r-lg); }
-.acp-prose summary {
-  display: flex; align-items: center; gap: var(--gap); min-height: var(--row);
-  padding-inline: var(--gap); border-radius: var(--r-md); list-style: none; cursor: pointer;
-}
-.acp-prose summary::-webkit-details-marker { display: none; }
-.acp-prose summary::before {
-  content: ''; width: 6px; height: 6px; flex-shrink: 0; margin-right: var(--gap);
-  border-right: 1px solid var(--fg-3); border-bottom: 1px solid var(--fg-3); transform: rotate(-45deg);
-}
-.acp-prose details[open] > summary::before { transform: rotate(45deg); }
-.acp-prose summary:hover, .acp-prose summary:focus-visible { background: var(--hover); }
-.acp-prose details > :not(summary) { margin: var(--gap); }
-/* KaTeX: a wide display formula scrolls inside its own box instead of breaking the column */
-.acp-prose .katex { color: var(--fg-1); }
-.acp-prose .katex-display { margin: 0; padding: 2px 0; overflow-x: auto; overflow-y: hidden; }
-/* Mermaid: centred, width-capped; the pending box holds the layout while the svg is rendering */
-.acp-mermaid { display: flex; justify-content: center; }
-.acp-mermaid svg { max-width: 100%; height: auto; }
-.acp-mermaid-pending { min-height: 40px; border-radius: var(--r-md); background: var(--bg-code); animation: acp-pulse 1.5s ease infinite; }
-/* streamdown's animate plugin (Prose `animated`) wraps each newly streamed word in a span stamped with --sd-animation / --sd-duration /
-   --sd-easing / --sd-delay; its stylesheet is not imported, so the rules are redone here (list markers can't be wrapped, so they fade via color).
-   The global motion=none / reduced-motion rules below switch these off with everything else */
-[data-sd-animate] { animation: var(--sd-animation, sd-fadeIn) var(--sd-duration, 150ms) var(--sd-easing, ease) var(--sd-delay, 0ms) both; }
-[data-sd-animate-marker]::marker { animation: sd-markerIn var(--sd-marker-duration, 150ms) var(--sd-marker-easing, ease) var(--sd-marker-delay, 0ms) both; }
-@keyframes sd-fadeIn { from { opacity: 0; } }
-@keyframes sd-blurIn { from { opacity: 0; filter: blur(4px); } }
-@keyframes sd-markerIn { from { color: transparent; } }
-
-/* New graphemes enter immediately; incoming chunks are never batched by the UI. */
-[data-sd-animate][style*="sd-acpCharIn"], .stream-glyph { display: inline-block; white-space: pre-wrap; }
-.stream-glyph { animation: sd-acpCharIn var(--stream-char-duration) ease var(--glyph-delay, 0ms) both; }
-@keyframes sd-acpCharIn { from { opacity: 0; transform: translateY(var(--stream-char-y)); } to { opacity: 1; transform: none; } }
-
-/* Row slots enter once, independently of the active verb's continuous shimmer. */
-.process-row-enter { --row-enter-delay: 0ms; }
-.tool-results .process-row-enter { --row-enter-delay: var(--row-enter-file); }
-.process-row-enter > .row-lead { animation: acp-row-part-in var(--row-enter-duration) var(--row-enter-delay) ease-out both; }
-.process-row-enter > .row-content > * { --row-part-delay: calc(var(--row-enter-delay) + var(--row-enter-part)); animation: acp-row-part-in var(--row-enter-duration) var(--row-part-delay) ease-out both; }
-.process-row-enter > .row-content > :nth-child(n + 2), .process-row-enter > .row-trailing { --row-part-delay: calc(var(--row-enter-delay) + var(--row-enter-part) * 2); }
-.process-row-enter > .row-trailing { animation: acp-row-part-in var(--row-enter-duration) var(--row-part-delay) ease-out both; }
-.process-row-enter > .row-content > .shimmer { animation: acp-row-part-in var(--row-enter-duration) var(--row-part-delay) ease-out both, acp-shimmer 2s linear infinite; }
-@keyframes acp-row-part-in { from { opacity: 0; } to { opacity: 1; } }
-
-/* One measured path from the icon to a short solid-dot endpoint. Scaling only
-   the line keeps the dot circular and synchronized during streamed growth. */
-.connected-rail { position: relative; isolation: isolate; }
-.rail-segment { position: absolute; z-index: -1; width: var(--rail-width); transform: translateX(-50%); pointer-events: none; }
-.rail-segment::before { content: ''; position: absolute; inset: 0 auto auto 0; width: 100%; height: 1px; background: var(--rail-color); transform-origin: top; transform: scaleY(var(--rail-length)); transition: transform var(--rail-grow-duration) var(--rail-grow-ease); }
-.rail-segment[data-terminal]::after { content: ''; position: absolute; left: 50%; top: 0; width: var(--rail-dot-size); height: var(--rail-dot-size); border-radius: 50%; background: var(--rail-color); transform: translate(-50%, -50%) translateY(calc(var(--rail-length) * 1px)); transition: transform var(--rail-grow-duration) var(--rail-grow-ease); }
-.connected-rail:has(> .process-row-enter) > .rail-segment { animation: acp-row-part-in var(--row-enter-duration) var(--row-enter-file) ease-out both; }
-
-@keyframes acp-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-@keyframes acp-enter { from { opacity: 0; transform: translateY(var(--enter-y)); } }
-@keyframes acp-pulse { 50% { opacity: 0.3; } }
-@keyframes acp-swap-out { to { opacity: 0; transform: scale(0.5); } }
-@keyframes acp-swap-in { from { opacity: 0; transform: scale(0.5); } }
-@keyframes acp-fade-in { from { opacity: 0; } }
-
-@media (prefers-reduced-motion: reduce) {
-  .acp-shell *, .acp-shell *::before, .acp-shell *::after { animation: none !important; transition: none !important; }
-  .acp-shell .shimmer { background: none; color: var(--fg-2); }
 }

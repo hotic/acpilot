@@ -1,0 +1,55 @@
+/* Conversation styling Tailwind cannot express at one call site. Shared shapes are @utility
+   (in the utilities layer, so a later class still wins); the descendant rules sit in
+   @layer components below every utility. Single-element styles live in the TSX className. */
+
+/* Summaries keep breathing room; consecutive process rows form a compact list. */
+@utility process-rows {
+  --row: var(--process-row);
+  --row-dense: var(--process-row);
+  --ctl-sm: var(--process-row);
+}
+
+/* Pair with items-start on a row whose text may wrap: the lead slot centres on the first line. */
+@utility lead-top {
+  & > .row-lead { margin-top: calc((var(--text-2-lh) - var(--lead)) / 2); }
+}
+
+/* Scroll containers fade the edge that still hides content; useScrollFade sets the data flags. */
+@utility scroll-fade {
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
+  &[data-more-above] { --fade-top: var(--scroll-fade-size); }
+  &[data-more-below] { --fade-bottom: var(--scroll-fade-size); }
+}
+
+/* Composer input field and send button: modeled on Libraries.dev's Studio panel */
+@utility composer-field {
+  background: var(--cmp-bg);
+  box-shadow: inset 0 0 0 1px var(--conversation-line);
+  transition: background var(--dur) ease, box-shadow var(--dur) ease;
+  &[data-focused] { box-shadow: inset 0 0 0 1px var(--conversation-line-focus); }
+  &:hover, &:focus-within { background: var(--cmp-bg-lift); }
+  &[data-busy] { background: var(--cmp-bg); }
+  /* Something attachable is being dragged over it */
+  &[data-drag] { background: var(--cmp-bg-lift); outline: 1px dashed var(--fg-3); outline-offset: -1px; }
+}
+@utility send-btn {
+  background: var(--send-bg);
+  box-shadow: var(--send-ring);
+  color: var(--send-ink);
+  transition: background var(--dur) ease, color var(--dur) ease;
+  &[data-on] { background: var(--send-bg-on); color: var(--send-ink-on); }
+  &[data-on]:hover, &[data-on]:focus-visible { filter: brightness(1.08); }
+  /* MetalFx owns the solid inverted surface and silver ring; the child inherits its icon color. */
+  &[data-on][data-metal] { background: transparent; box-shadow: none; color: inherit; }
+}
+
+@layer components {
+  /* Narrative text separates consecutive action groups without loosening tool rows.
+     Use one leading margin per boundary, including adjacent prose blocks. */
+  .process-content > .acp-prose:not(:first-child),
+  .process-content > .acp-prose + * {
+    margin-block-start: calc(var(--process-prose-gap) - var(--process-row-gap));
+  }
+}

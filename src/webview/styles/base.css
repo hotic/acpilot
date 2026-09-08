@@ -1,0 +1,52 @@
+/* Shell defaults: font in @layer base, plus the unlayered scrollbar / code / kbd / focus overrides that must beat the host webview stylesheet. */
+@layer base {
+  .acp-shell { isolation: isolate; font-family: var(--font); font-size: var(--text-1); line-height: var(--text-1-lh); color: var(--fg-1); background: var(--bg-0); }
+  .acp-shell ::selection { background: color-mix(in srgb, var(--focus) 35%, transparent); }
+  .acp-shell summary::-webkit-details-marker { display: none; }
+  .acp-shell textarea { field-sizing: content; }
+  /* Native scrollbars and form controls follow the shell theme, not the host's. */
+  [data-theme="light"] { color-scheme: light; }
+}
+
+/* Scrollbars are overlay-style: the gutter stays reserved (scrollbar-gutter) so content never shifts, but the track is invisible and the
+   hairline thumb appears only while its element scrolls (useScrollReveal stamps data-scrolling) or under the pointer; focus alone shows nothing.
+   Unlayered on purpose: the host webview stylesheet paints ::-webkit-scrollbar-thumb (plus :hover / :active) with --vscode-scrollbarSlider-*
+   unlayered, and a layered rule would lose to it everywhere — the permanent grey bar in every scroller. */
+.acp-shell ::-webkit-scrollbar { width: 10px; height: 10px; }
+.acp-shell ::-webkit-scrollbar-thumb, .acp-shell ::-webkit-scrollbar-thumb:hover, .acp-shell ::-webkit-scrollbar-thumb:active {
+  background-color: transparent; border: 3.5px solid transparent; background-clip: padding-box; border-radius: 6px;
+}
+.acp-shell [data-scrolling]::-webkit-scrollbar-thumb, .acp-shell ::-webkit-scrollbar-thumb:hover, .acp-shell ::-webkit-scrollbar-thumb:active {
+  background-color: var(--line-strong);
+}
+.acp-shell ::-webkit-scrollbar-track { background-color: transparent; }
+.acp-shell ::-webkit-scrollbar-corner { background-color: transparent; }
+
+/* Webview defaults are unlayered: keep these overrides outside Tailwind layers.
+   Fenced code inherits its surface; only inline code gets a small background. */
+.acp-shell code {
+  font-family: var(--font-mono); font-size: var(--text-mono); color: var(--fg-1);
+  background: var(--hover); padding: 0.1em 0.4em; border-radius: var(--r-sm);
+}
+.acp-shell pre code {
+  font: inherit; color: inherit; background: transparent; padding: 0; border-radius: 0;
+}
+.acp-shell kbd {
+  font-family: var(--font-mono); font-size: var(--text-mono); color: var(--fg-2);
+  background: var(--hover); border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  box-shadow: none; padding: 0.1em 0.4em;
+}
+
+/* Focus indication works via background lift (hover / focus-visible:bg-*), no outline drawn.
+   Must live outside @layer: the host webview paints --vscode-focusBorder on :focus (a yellow frame in Cursor),
+   and only unlayered rules beat it; Tailwind's outline-none is actually 2px transparent, which that color would tint yellow. */
+.acp-shell :focus,
+.acp-shell :focus-visible {
+  outline: none !important;
+}
+
+@utility scroll-stable { scrollbar-gutter: stable; }
+/* Lists inside overlays and text inside cards: a 2px thumb in a 6px gutter, revealed the same way, so the bar never crowds the text.
+   Plain unlayered class, not @utility: the host's unlayered ::-webkit-scrollbar { width: 10px } would beat a layered one. */
+.acp-shell .scroll-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.acp-shell .scroll-thin::-webkit-scrollbar-thumb { border-width: 2px; }

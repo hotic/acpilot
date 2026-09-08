@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, type HTMLAttributes, type ReactNode } from 'react';
+import { createContext, useContext, useState, type HTMLAttributes, type ReactNode, type Ref } from 'react';
 import { cn } from './cn';
+import { cva } from 'class-variance-authority';
 
 // Scope entrance effects to live transcript rows; menus and restored history stay still.
 export const RowEntranceContext = createContext(false);
@@ -7,27 +8,34 @@ export const RowEntranceContext = createContext(false);
 // The one shared "row": thought / plan / tool / status / session items all grow on this row.
 // Row height --row; lead slot --lead (icon 14 or Orb 20 centered); label area gap --gap; trailing meta right-aligned.
 export interface RowProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> {
+  ref?: Ref<HTMLElement>;
   lead?: ReactNode;
   trailing?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   interactive?: boolean;
   as?: 'div' | 'button';
   className?: string;
   dense?: boolean;
 }
 
-export function Row({ lead, trailing, children, interactive, as = 'div', className, dense, ...rest }: RowProps) {
+const rowVariants = cva('flex items-center gap-gap text-2 text-fg-2 select-none list-none text-left', {
+  variants: {
+    dense: { true: 'min-h-row-dense', false: 'min-h-row' },
+    interactive: { true: '-mx-hit px-hit cursor-pointer rounded-md hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 transition-colors' },
+    enter: { true: 'process-row-enter' },
+  },
+});
+
+export function Row({ lead, trailing, children, interactive, as = 'div', className, dense, ref, ...rest }: RowProps) {
   const Tag = as;
   const live = useContext(RowEntranceContext);
   const [enter] = useState(live);
   return (
     <Tag
+      ref={ref as Ref<HTMLButtonElement & HTMLDivElement>}
       {...(as === 'button' ? { type: 'button' } : {})}
       className={cn(
-        'flex items-center gap-gap text-2 text-fg-2 select-none list-none text-left',
-        enter && 'process-row-enter',
-        dense ? 'min-h-row-dense' : 'min-h-row',
-        interactive && 'row-interactive cursor-pointer rounded-md hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 transition-colors',
+        rowVariants({ dense: !!dense, interactive, enter }),
         className,
       )}
       {...rest}
