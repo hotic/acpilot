@@ -30,15 +30,15 @@ export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; gro
 
   const lead = toolLine === 'text' ? undefined : <Icon className="size-icon" strokeWidth={1.5} />;
 
+  // The diff stat is not decoration — every harness shows it — so it escapes the toolLine axis; 'rich' adds the rest of the meta
+  const stat = block.diffStat && <span><span className="text-ok">+{block.diffStat.add}</span> <span className="text-danger">−{block.diffStat.del}</span></span>;
   const trailing = toolLine === 'rich'
     ? <>
-        {block.diffStat
-          ? <span><span className="text-ok">+{block.diffStat.add}</span> <span className="text-danger">−{block.diffStat.del}</span></span>
-          : block.meta && <span>{block.meta}</span>}
+        {stat || (block.meta && <span>{block.meta}</span>)}
         {block.status === 'completed' && <Check className="size-3 text-ok" strokeWidth={2} />}
         {block.status === 'failed' && <X className="size-3 text-danger" strokeWidth={2} />}
       </>
-    : undefined;
+    : stat || undefined;
 
   const label = <>
     <RowLabel className={cn('tabular-nums', running && 'shimmer')}>
