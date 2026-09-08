@@ -1,0 +1,167 @@
+name: Publish extension
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build; publishing requires an existing Release tag such as v1.0.0
+        required: true
+        default: main
+        type: string
+      publish:
+        description: Publish to both marketplaces and attach the VSIX to the existing Release
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-release-${{ github.event.release.tag_name || inputs.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Only stable releases are supported; manual runs default to validation only.
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      file: ${{ steps.manifest.outputs.file }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.ref }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Validate release version
+        id: manifest
+        env:
+          RELEASE_REF: ${{ github.event.release.tag_name || inputs.ref }}
+          PUBLISH: ${{ github.event_name == 'release' || inputs.publish }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const { name, publisher, version } = JSON.parse(readFileSync('package.json', 'utf8'));
+          if (name !== 'acpilot' || publisher !== 'hotic') throw new Error('Unexpected extension identity');
+          if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('A stable version is required');
+          if (process.env.PUBLISH === 'true') {
+            if (process.env.RELEASE_REF !== `v${version}`) throw new Error('Release tag must match package.json');
+            const release = JSON.parse(execFileSync('gh', [
+              'release', 'view', process.env.RELEASE_REF, '--repo', process.env.GITHUB_REPOSITORY,
+              '--json', 'isDraft,isPrerelease',
+            ], { encoding: 'utf8' }));
+            if (release.isDraft || release.isPrerelease) throw new Error('Publish a stable GitHub Release first');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `file=${name}-${version}.vsix\n`);
+          NODE
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Build VSIX once for both marketplaces
+        run: pnpm package
+      - name: Record package checksum
+        env:
+          VSIX_FILE: ${{ steps.manifest.outputs.file }}
+        run: |
+          sha256sum "$VSIX_FILE" > "$VSIX_FILE.sha256"
+          cat "$VSIX_FILE.sha256" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-vsix
+          path: |
+            *.vsix
+            *.vsix.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  release-asset:
+    needs: build
+    if: github.event_name == 'release' || inputs.publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: extension-vsix
+      - name: Attach package to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.ref }}
+          VSIX_FILE: ${{ needs.build.outputs.file }}
+        run: |
+          sha256sum --check "$VSIX_FILE.sha256"
+          # Keep original release assets on retries instead of replacing a published package.
+          gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > assets.txt
+          for file in "$VSIX_FILE" "$VSIX_FILE.sha256"; do
+            if ! grep -Fxq "$file" assets.txt; then
+              gh release upload "$RELEASE_TAG" "$file"
+            fi
+          done
+
+  vscode-marketplace:
+    needs: build
+    if: github.event_name == 'release' || inputs.publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check publishing credential
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo '::error::Add the VSCE_PAT repository secret with Marketplace Manage permission.'
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: extension-vsix
+      - name: Publish to Visual Studio Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VSIX_FILE: ${{ needs.build.outputs.file }}
+        run: |
+          sha256sum --check "$VSIX_FILE.sha256"
+          npx --yes @vscode/vsce@3.9.2 publish --packagePath "$VSIX_FILE" --skip-duplicate
+
+  open-vsx:
+    needs: build
+    if: github.event_name == 'release' || inputs.publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check publishing credential
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo '::error::Add the OVSX_PAT repository secret from the Open VSX account.'
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: extension-vsix
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          VSIX_FILE: ${{ needs.build.outputs.file }}
+        run: |
+          sha256sum --check "$VSIX_FILE.sha256"
+          npx --yes ovsx@1.1.1 publish "$VSIX_FILE" --skip-duplicate

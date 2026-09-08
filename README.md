@@ -64,6 +64,8 @@ pnpm package        # build a .vsix
 
 Press F5 to launch an Extension Development Host. Logs are in Output → ACPilot. See [AGENTS.md](AGENTS.md) for the architecture map and protocol notes.
 
+Stable GitHub Releases can publish the same VSIX to Visual Studio Marketplace and Open VSX automatically. See [Publishing ACPilot](RELEASING.md) for the one-time credentials and release steps.
+
 ## License
 
 [MIT](LICENSE)

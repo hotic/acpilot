@@ -5,6 +5,7 @@
 !dist/webview/assets/**
 !media/icon.png
 !media/icon.svg
+!media/icon-light.svg
 !LICENSE
 !README.md
 !CHANGELOG.md
