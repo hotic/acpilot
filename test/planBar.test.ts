@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanBlock, PlanEntry, Turn } from '../src/shared/transcript';
-import { dockPlan } from '../src/webview/chat/PlanBar';
+import { dockPlan } from '../src/webview/chat/dockPlan';
 
 const entry = (title: string, status: PlanEntry['status']): PlanEntry => ({ title, status });
 const plan = (...entries: PlanEntry[]): PlanBlock => ({ type: 'plan', entries });
