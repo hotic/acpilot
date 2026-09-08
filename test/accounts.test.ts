@@ -38,6 +38,9 @@ class FakeProvider implements AccountProvider {
 
 function tmp() { return mkdtempSync(join(tmpdir(), 'acpilot-acc-')); }
 
+// The fake agent gates authentication on this marker; spawn also requires an existing cwd.
+function authCwd() { return mkdtempSync(join(tmpdir(), 'acpilot-needs-auth-')); }
+
 describe('AccountStore', () => {
   it('metadata goes to JSON, secrets go to the vault; re-login with the same label only replaces the secret; the default account is the most recently used', async () => {
     const dir = tmp();
@@ -211,7 +214,7 @@ describe('account layer wired into sessions', () => {
   });
 
   it('Devin generic missing-credential stderr uses login guidance instead of a raw log line', async () => {
-    const s = AcpSession.fresh('fake', '/tmp/acpilot-needs-auth', {
+    const s = AcpSession.fresh('fake', authCwd(), {
       registry: new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE], env: { FAKE_AUTH_HINT: 'devin' } } }),
       log: () => {}, onChange: () => {}, blobs: { saveBlob: async () => ({ name: 'x', path: '/tmp/x' }), readBlob: async () => new Uint8Array() },
     });
@@ -303,7 +306,7 @@ describe('account layer wired into sessions', () => {
 
   it('AcpSession using the hooks directly: a missing credential raises AccountAuthError, enters auth_required and keeps the reason', async () => {
     const registry = new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE] } });
-    const s = AcpSession.fresh('fake', '/tmp/acpilot-needs-auth', {
+    const s = AcpSession.fresh('fake', authCwd(), {
       registry, log: () => {}, onChange: () => {}, blobs: { saveBlob: async () => ({ name: 'x', path: '/tmp/x' }), readBlob: async () => new Uint8Array() },
       accounts: { spawnEnv: async () => undefined, authenticate: async () => { throw new Error('账号 x 的凭据不在了'); } },
     }, 'missing');
@@ -317,7 +320,7 @@ describe('account layer wired into sessions', () => {
   it('transient hand-off failure → auth_required with the reason; retry re-authenticates on the same process and becomes ready', async () => {
     const registry = new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE] } });
     let calls = 0;
-    const s = AcpSession.fresh('fake', '/tmp/acpilot-needs-auth', {
+    const s = AcpSession.fresh('fake', authCwd(), {
       registry, log: () => {}, onChange: () => {}, blobs: { saveBlob: async () => ({ name: 'x', path: '/tmp/x' }), readBlob: async () => new Uint8Array() },
       accounts: {
         spawnEnv: async () => undefined,
