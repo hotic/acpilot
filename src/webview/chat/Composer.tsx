@@ -34,7 +34,7 @@ export interface ComposerProps {
   cwd: string;
   onSend: (text: string, attachments: Draft[]) => void | Promise<void>;
   // Inline history editors keep their draft until the host accepts the resend.
-  // Outside-dismiss editors omit cancel and attachment-removal buttons.
+  // Outside-dismiss editors omit the cancel button; attachments retain their own removal controls.
   edit?: { text: string; attachments?: ReactNode; hasAttachments: boolean; onCancel: () => void; dismissOnOutside?: boolean };
   // Where the unsent draft (text + attachments) is parked while another session is shown; the session id. Absent: nothing is kept across remounts
   draftKey?: string;
@@ -169,7 +169,7 @@ export function Composer(p: ComposerProps) {
       onDrop={onDrop}
     >
       {p.edit?.attachments}
-      <DraftChips drafts={drafts} onRemove={p.edit?.dismissOnOutside ? undefined : i => setDrafts(d => d.filter((_, j) => j !== i))} />
+      <DraftChips drafts={drafts} onRemove={i => setDrafts(d => d.filter((_, j) => j !== i))} />
       <textarea
         ref={textarea}
         rows={1}
@@ -185,7 +185,8 @@ export function Composer(p: ComposerProps) {
         onPaste={onPaste}
         placeholder={p.disabled ? t('composer.notReady') : p.running ? t('composer.placeholder.queue') : t('composer.placeholder')}
         className={cn(
-          'min-w-0 resize-none bg-transparent px-3 pt-2.5 pb-1 text-1 outline-none transition-colors',
+          // Match message text and attachment insets in every composer, including inline editors.
+          'min-w-0 resize-none bg-transparent px-pad pt-2.5 pb-1 text-1 outline-none transition-colors',
           'max-h-[calc(8*var(--text-1-lh))] placeholder:text-fg-3',
           // Queued / follow-up text while a turn runs stays at full strength; only an unready session dims the field
           p.disabled ? 'text-fg-3/60 placeholder:text-fg-3/60' : 'text-fg-strong',

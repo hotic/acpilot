@@ -4,7 +4,6 @@ import type { Attachment, Draft } from '@shared/transcript';
 import { imageMimeOf } from '@shared/attachments';
 import { t } from '../i18n';
 import { cn } from '../ui/cn';
-import { IconButton } from '../ui/Button';
 import { Lightbox } from './Lightbox';
 
 // An image open in the Lightbox: the source to show and the name for labels
@@ -13,16 +12,16 @@ interface Preview {
   name?: string;
 }
 
-// Composer attachments use compact, equal-height labels. Image previews stay
-// inline with file icons; names truncate only when the composer runs out of room.
+// Composer images use individual thumbnails; other attachments keep compact file labels.
 export function DraftChips({ drafts, onRemove }: { drafts: Draft[]; onRemove?: (index: number) => void }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   if (!drafts.length) return null;
   return (
-    <div className="flex flex-wrap gap-1 px-2 pt-2">
+    <div className="flex flex-wrap items-start gap-gap px-pad pt-gap">
       {drafts.map((d, i) => (
         <Removable key={d.kind === 'file' ? d.uri : `${d.name ?? d.kind}-${i}`} label={t('common.removeNamed', { name: d.name ?? t('common.image') })} onRemove={onRemove ? () => onRemove(i) : undefined}>
           <AttachmentTag
+            thumbnail
             name={d.name}
             image={d.kind === 'image' || (d.kind === 'file' && !!imageMimeOf(d.name))}
             src={d.kind === 'image' ? `data:${d.mimeType};base64,${d.data}` : undefined}
@@ -76,28 +75,35 @@ export function AttachmentTiles({ attachments, blobUrl }: { attachments: Attachm
   );
 }
 
-// The attachments an inline editor (history / queue) keeps from the original message, each with its own remove button; sits above the editor's textarea
+// Retained attachments share the draft thumbnails, including the corner removal button.
 export function EditAttachments({ attachments, retained, blobUrl, disabled, onRemove }: {
   attachments: Attachment[]; retained: number[]; blobUrl?: (blob: string) => string; disabled?: boolean; onRemove: (index: number) => void;
 }) {
+  const [preview, setPreview] = useState<Preview | null>(null);
   if (!retained.length) return null;
   return (
     <div className="flex flex-wrap gap-gap px-pad pt-gap">
-      {retained.map(i => (
-        <div key={i} className="flex min-w-0 items-center gap-gap">
-          <TurnAttachments attachments={[attachments[i]!]} blobUrl={blobUrl} />
-          <IconButton disabled={disabled} title={t('common.remove')} aria-label={t('common.removeNamed', { name: attachments[i]!.name ?? t('common.image') })} onClick={() => onRemove(i)}><X /></IconButton>
-        </div>
-      ))}
+      {retained.map(i => {
+        const attachment = attachments[i]!;
+        const src = attachment.kind === 'image' && blobUrl && attachment.blob ? blobUrl(attachment.blob) : undefined;
+        return <Removable key={i} disabled={disabled} label={t('common.removeNamed', { name: attachment.name ?? t('common.image') })} onRemove={() => onRemove(i)}>
+          <AttachmentTag thumbnail name={attachment.name} src={src}
+            image={attachment.kind === 'image' || (attachment.kind === 'file' && !!imageMimeOf(attachment.name))}
+            title={attachment.kind === 'file' ? attachment.uri : undefined}
+            onPreview={src => setPreview({ src, name: attachment.name })} />
+        </Removable>;
+      })}
+      {preview && <Lightbox src={preview.src} name={preview.name} onClose={() => setPreview(null)} />}
     </div>
   );
 }
 
-function AttachmentTag({ name = 'image.png', src, image, title, onPreview }: {
+function AttachmentTag({ name = 'image.png', src, image, title, thumbnail, onPreview }: {
   name?: string;
   src?: string;
   image: boolean;
   title?: string;
+  thumbnail?: boolean;
   onPreview: (src: string) => void;
 }) {
   const Tag = src ? 'button' : 'span';
@@ -108,30 +114,32 @@ function AttachmentTag({ name = 'image.png', src, image, title, onPreview }: {
       aria-label={src ? t('common.previewImage', { name }) : undefined}
       onClick={src ? () => onPreview(src) : undefined}
       className={cn(
-        'inline-flex h-ctl-sm max-w-full min-w-0 shrink-0 items-center gap-1 rounded-sm bg-chip px-2 text-3 font-medium text-fg-2 [&_svg]:size-icon [&_svg]:shrink-0 [&_svg]:text-fg-3',
+        'inline-flex max-w-full min-w-0 shrink-0 items-center rounded-sm bg-chip text-fg-2 [&_svg]:size-icon [&_svg]:shrink-0 [&_svg]:text-fg-3',
+        thumbnail && image ? 'size-thumb justify-center overflow-hidden' : 'h-ctl-sm gap-1 px-2 text-3 font-medium',
         src && 'cursor-zoom-in outline-none hover:bg-chip-hover focus-visible:ring-1 focus-visible:ring-focus active:bg-active',
       )}
     >
       {src
-        ? <img src={src} alt="" className="size-icon-ctl shrink-0 rounded-xs object-cover" />
+        ? <img src={src} alt="" className={thumbnail && image ? 'size-full object-cover' : 'size-icon-ctl shrink-0 rounded-xs object-cover'} />
         : image ? <ImageIcon strokeWidth={1.5} /> : <FileText strokeWidth={1.5} />}
-      <span className="truncate">{name}</span>
+      {!(thumbnail && image) && <span className="truncate">{name}</span>}
     </Tag>
   );
 }
 
 // Wraps a chip with a remove button in its top-right corner, shown on hover / focus
-function Removable({ label, onRemove, children }: { label: string; onRemove?: () => void; children: ReactNode }) {
+function Removable({ label, onRemove, disabled, children }: { label: string; onRemove?: () => void; disabled?: boolean; children: ReactNode }) {
   return (
     <span className="group/chip relative inline-flex max-w-full min-w-0">
       {children}
       {onRemove && <button
         type="button"
+        disabled={disabled}
         aria-label={label}
         title={t('common.remove')}
         onClick={onRemove}
         className={cn(
-          'absolute -top-1 -right-1 flex size-icon-ctl items-center justify-center rounded-full border border-line bg-bg-2 text-fg-2 opacity-0 shadow-pop transition-opacity',
+          'absolute top-0 right-0 flex size-icon-ctl items-center justify-center rounded-xs bg-bg-2 text-fg-2 opacity-0 transition-opacity',
           'hover:text-fg-1 focus-visible:opacity-100 group-hover/chip:opacity-100 group-focus-within/chip:opacity-100',
         )}
       >

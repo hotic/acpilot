@@ -4,7 +4,7 @@ import type { UserTurn } from '@shared/transcript';
 import { captureTurnSettings, controlsForTurn } from '@shared/turnSettings';
 import { useAppearance } from '../appearance';
 import { Composer, type ComposerProps } from './Composer';
-import { TurnAttachments } from './Attachments';
+import { EditAttachments } from './Attachments';
 import { UserMessage } from './Turns';
 import { cn } from '../ui/cn';
 
@@ -68,7 +68,7 @@ function HistoryEditor({ turn, turnIndex, blobUrl, context: c, onClose }: {
   turn: UserTurn; turnIndex: number; blobUrl?: (blob: string) => string; context: HistoryContextValue; onClose: () => void;
 }) {
   const [controls, setControls] = useState(() => controlsForTurn(c.composer.controls, turn.settings));
-  const [retained] = useState(() => (turn.attachments ?? []).map((_, i) => i));
+  const [retained, setRetained] = useState(() => (turn.attachments ?? []).map((_, i) => i));
   const [turnCount] = useState(c.composer.turns.length);
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
@@ -90,7 +90,7 @@ function HistoryEditor({ turn, turnIndex, blobUrl, context: c, onClose }: {
       onSetMode={modeId => setControls(c => ({ ...c, modeId }))}
       onSetConfig={(id, value) => setControls(c => ({ ...c, options: c.options.map(o => o.id === id ? { ...o, value } : o) }))}
       edit={{ text: turn.text, hasAttachments: retained.length > 0, onCancel: onClose, dismissOnOutside: true,
-        attachments: retained.length > 0 && <div className="px-pad pt-gap"><TurnAttachments attachments={turn.attachments ?? []} blobUrl={blobUrl} /></div>,
+        attachments: <EditAttachments attachments={turn.attachments ?? []} retained={retained} blobUrl={blobUrl} disabled={pending} onRemove={i => setRetained(r => r.filter(n => n !== i))} />,
       }}
       onSend={async (text, attachments) => {
         setError(undefined);

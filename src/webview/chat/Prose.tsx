@@ -83,7 +83,7 @@ const COMPONENTS: Components = {
   inlineCode: ({ children }) => <code>{children}</code>,
   a: Link,
   table: ({ children }) => (
-    <div className="scroll-thin overflow-x-auto">
+    <div className="acp-table scroll-thin overflow-x-auto rounded-lg border border-conversation-line">
       <table>{children}</table>
     </div>
   ),

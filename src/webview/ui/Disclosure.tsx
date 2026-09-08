@@ -21,7 +21,7 @@ export function Disclosure({ body, open: controlled, defaultOpen = false, indent
   return (
     <div className={cn('group flex min-w-0 flex-col', className)} data-open={open || undefined}>
       <Row as="button" interactive aria-expanded={open} onClick={toggle} {...row} />
-      <Collapse open={open}>
+      <Collapse open={open} className="disclosure-body">
         <div className={cn('pt-1 pb-1.5', indent && row.lead !== undefined && 'pl-indent rail')}>{body}</div>
       </Collapse>
     </div>
