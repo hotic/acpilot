@@ -4,6 +4,15 @@ import type { MsgKey } from './keys';
 // Placeholders are {name}; punctuation inside Chinese copy is full-width
 
 export const zhCN = {
+  'permission.run': '运行命令',
+  'permission.more': '更多授权',
+  'permission.once': '允许一次',
+  'permission.reject': '拒绝',
+  'permission.session': '本会话内允许',
+  'permission.project': '始终允许 {project} 项目',
+  'permission.allProjects': '始终允许所有项目',
+  'permission.bypass': '切换到绕过审批模式',
+  'permission.commands': '允许 {command} 命令',
   // Shared verbs / labels
   'history.edit': '编辑并重新发送',
   'history.copy': '复制消息',

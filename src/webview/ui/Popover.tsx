@@ -28,6 +28,8 @@ export interface PopoverApi {
 
 export interface PopoverProps {
   side?: Side;
+  // In-flow cards can sit at either viewport edge; prefer the side with room.
+  flip?: boolean;
   align?: Align;
   width: PopoverWidth;
   // click (default): toggle on click, close on outside / Esc. hover: open while the trigger or the panel is hovered / focused
@@ -42,7 +44,7 @@ export interface PopoverProps {
 }
 
 // Trigger + panel. The panel position is computed from the anchor, with coordinates relative to the shell root; in the LAB the shell is CSS-zoomed, so measured width / layout width corrects for it
-export function Popover({ side = 'bottom', align = 'start', width, trigger = 'click', content, children, panelClassName, role = 'dialog', onOpenChange }: PopoverProps) {
+export function Popover({ side = 'bottom', flip = false, align = 'start', width, trigger = 'click', content, children, panelClassName, role = 'dialog', onOpenChange }: PopoverProps) {
   const layer = useContext(ShellLayerContext);
   const anchor = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -78,7 +80,11 @@ export function Popover({ side = 'bottom', align = 'start', width, trigger = 'cl
       const pad = parseFloat(getComputedStyle(l).getPropertyValue('--pad')) || 0;
       const w = p.offsetWidth, lw = l.offsetWidth;
       const s: CSSProperties = {};
-      if (side === 'bottom') s.top = `calc(${(ar.bottom - lr.top) / k}px + var(--pop-gap))`;
+      const above = ar.top - Math.max(0, lr.top), below = Math.min(window.innerHeight, lr.bottom) - ar.bottom;
+      const needed = p.getBoundingClientRect().height + pad * k;
+      const placedSide = flip && (side === 'top' ? above < needed && below > above : below < needed && above > below)
+        ? (side === 'top' ? 'bottom' : 'top') : side;
+      if (placedSide === 'bottom') s.top = `calc(${(ar.bottom - lr.top) / k}px + var(--pop-gap))`;
       else s.bottom = `calc(${(lr.bottom - ar.top) / k}px + var(--pop-gap))`;
       if (align === 'start') s.left = Math.max(pad, Math.min((ar.left - lr.left) / k, lw - pad - w));
       else s.right = Math.max(pad, Math.min((lr.right - ar.right) / k, lw - pad - w));
@@ -90,8 +96,9 @@ export function Popover({ side = 'bottom', align = 'start', width, trigger = 'cl
     observer.observe(l);
     observer.observe(a);
     observer.observe(p);
-    return () => observer.disconnect();
-  }, [open, side, align, layer]);
+    if (flip) l.addEventListener('scroll', position, true);
+    return () => { observer.disconnect(); l.removeEventListener('scroll', position, true); };
+  }, [open, side, flip, align, layer]);
 
   useEffect(() => {
     if (!open) return;

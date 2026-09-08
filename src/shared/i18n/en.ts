@@ -1,6 +1,15 @@
 // English — the source dictionary: its keys define MsgKey, every other locale must cover exactly these keys.
 // Placeholders are {name}
 export const en = {
+  'permission.run': 'Run command',
+  'permission.more': 'More options',
+  'permission.once': 'Allow once',
+  'permission.reject': 'Reject',
+  'permission.session': 'Allow for this session',
+  'permission.project': 'Always allow in {project}',
+  'permission.allProjects': 'Always allow in all projects',
+  'permission.bypass': 'Switch to bypass mode',
+  'permission.commands': 'Allow {command} commands',
   'history.edit': 'Edit and resend',
   'history.copy': 'Copy message',
   'history.copied': 'Copied',

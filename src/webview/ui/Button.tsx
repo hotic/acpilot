@@ -5,6 +5,7 @@ import { cn } from './cn';
 type Variant = 'primary' | 'secondary';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  ref?: Ref<HTMLButtonElement>;
   variant?: Variant;
   kbd?: string;
 }
