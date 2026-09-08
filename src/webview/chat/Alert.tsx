@@ -68,7 +68,7 @@ function CopyDetail({ text, label }: { text: string; label: string }) {
   return (
     <button
       type="button"
-      className="min-w-0 truncate text-3 text-fg-3 transition-colors hover:text-fg-1 focus-visible:text-fg-1"
+      className="min-w-0 truncate rounded-md px-1.5 py-0.5 text-3 text-fg-3 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1"
       onClick={() => { void navigator.clipboard.writeText(text).then(() => setCopied(true)); }}
     >
       {copied ? t('alert.copied') : label ? t('alert.copyWith', { detail: label }) : t('alert.copy')}

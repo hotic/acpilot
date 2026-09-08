@@ -19,7 +19,7 @@ export function Disclosure({ body, open: controlled, defaultOpen = false, indent
   const open = controlled ?? inner;
   const toggle = () => { setInner(!open); onToggle?.(!open); };
   return (
-    <div className={cn('group flex flex-col', className)} data-open={open || undefined}>
+    <div className={cn('group flex min-w-0 flex-col', className)} data-open={open || undefined}>
       <Row as="button" interactive aria-expanded={open} onClick={toggle} {...row} />
       <Collapse open={open}>
         <div className={cn('pt-1 pb-1.5', indent && row.lead !== undefined && 'pl-indent rail')}>{body}</div>

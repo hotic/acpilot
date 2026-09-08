@@ -23,7 +23,7 @@ export function ProcessHistory({ open, running = false, children }: { open: bool
   }, [open, running]);
 
   return (
-    <div ref={viewport} className="process-history scroll-thin" role="region" aria-label={t('turns.processHistory')} tabIndex={0}
+    <div ref={viewport} className="process-history" role="region" aria-label={t('turns.processHistory')} tabIndex={0}
       onScroll={event => {
         const el = event.currentTarget;
         // Opening a disclosure can reset its scroll offset before layout settles.

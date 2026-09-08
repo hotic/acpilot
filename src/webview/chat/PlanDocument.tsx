@@ -78,7 +78,7 @@ export function PlanDocument({ block, permission: suppliedPermission, onChoose }
       <div className="flex min-w-0 flex-col gap-gap">
         <button type="button" aria-expanded={expanded} aria-controls={previewId}
           title={expanded ? t('plan.collapse') : t('plan.expand')} onClick={() => setExpanded(v => !v)}
-          className="group flex w-full items-center gap-gap rounded-sm text-left text-1 font-semibold text-fg-strong outline-none focus-visible:ring-1 focus-visible:ring-line-strong">
+          className="group flex w-full items-center gap-gap rounded-md text-left text-1 font-semibold text-fg-strong outline-none transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:ring-1 focus-visible:ring-line-strong">
           <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{block.title}</span>
           <ChevronDown className={cn('size-icon shrink-0 text-fg-3 group-hover:text-fg-1', expanded && 'rotate-180')} strokeWidth={1.5} />
         </button>

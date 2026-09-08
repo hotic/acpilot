@@ -32,7 +32,7 @@ export function PageRail({ agents, page, onPage, onBack }: PageRailProps) {
       onClick={() => onPage(toPage(id))}
       className={cn(
         'acp-settings-nav-item flex h-ctl shrink-0 items-center gap-gap rounded-md px-2 text-2 transition-colors',
-        cur === id ? 'bg-active text-fg-1' : dim ? 'text-fg-3 hover:bg-hover' : 'text-fg-2 hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1',
+        cur === id ? 'bg-active text-fg-1' : dim ? 'text-fg-3 hover:bg-hover focus-visible:bg-hover' : 'text-fg-2 hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1',
       )}
     >
       <span className="flex size-icon-ctl shrink-0 items-center justify-center [&_svg]:size-icon-ctl">{icon}</span>
@@ -42,7 +42,7 @@ export function PageRail({ agents, page, onPage, onBack }: PageRailProps) {
   return (
     <aside className="acp-settings-nav flex shrink-0 flex-col">
       <button type="button" onClick={onBack} title={t('settings.back')} aria-label={t('settings.back')}
-        className="acp-settings-nav-item acp-back-link flex h-ctl shrink-0 items-center gap-gap rounded-sm px-2 text-2 text-fg-2 transition-colors hover:text-fg-1 active:text-fg-1">
+        className="acp-settings-nav-item acp-back-link flex h-ctl shrink-0 items-center gap-gap rounded-md px-2 text-2 text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 active:text-fg-1">
         <ArrowLeft className="size-icon-ctl shrink-0" strokeWidth={1.5} aria-hidden />
         <span className="acp-settings-nav-label truncate">{t('settings.back')}</span>
       </button>

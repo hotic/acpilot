@@ -283,7 +283,7 @@ export function PathText({ path, env, onOpen, className }: { path: string; env: 
 // The source is supporting metadata after the items, not another heading level.
 export function SourceLink({ path, env, onOpen }: { path: string; env: { home: string; cwd: string }; onOpen: (path: string) => void }) {
   return (
-    <button type="button" title={path} onClick={() => onOpen(path)} className="acp-setting-row flex w-full items-center gap-gap text-left text-2 text-fg-2 transition-colors hover:text-fg-1 focus-visible:text-fg-1 focus-visible:bg-hover">
+    <button type="button" title={path} onClick={() => onOpen(path)} className="acp-setting-row flex w-full items-center gap-gap rounded-md text-left text-2 text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:text-fg-1 focus-visible:bg-hover">
       <span className="min-w-0 flex-1 truncate">{shortPath(path, env)}</span>
       <ExternalLink className="size-icon shrink-0" strokeWidth={1.5} />
     </button>

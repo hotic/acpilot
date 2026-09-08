@@ -26,7 +26,7 @@ export function Row({ lead, trailing, children, interactive, as = 'div', classNa
       )}
       {...rest}
     >
-      {lead !== undefined && <span className="flex size-lead shrink-0 items-center justify-center text-fg-3">{lead}</span>}
+      <span className={cn('row-lead size-lead shrink-0 items-center justify-center text-fg-3', lead === undefined ? 'row-lead-empty hidden' : 'flex')}>{lead}</span>
       <span className="flex min-w-0 flex-1 items-baseline gap-2">{children}</span>
       {trailing !== undefined && <span className="ml-auto flex shrink-0 items-center gap-2 text-3 text-fg-3 tabular-nums">{trailing}</span>}
     </Tag>

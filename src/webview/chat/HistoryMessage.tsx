@@ -1,13 +1,12 @@
-import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { EditTurnRequest } from '@shared/protocol';
 import type { UserTurn } from '@shared/transcript';
 import { captureTurnSettings, controlsForTurn } from '@shared/turnSettings';
 import { useAppearance } from '../appearance';
 import { Composer, type ComposerProps } from './Composer';
-import { EditAttachments } from './Attachments';
+import { TurnAttachments } from './Attachments';
 import { UserMessage } from './Turns';
 import { cn } from '../ui/cn';
-import { t } from '../i18n';
 
 interface HistoryContextValue {
   sessionId: string;
@@ -21,7 +20,8 @@ export const HistoryContext = createContext<HistoryContextValue | undefined>(und
 
 // One frame per prompt, kept mounted while the card and its inline editor swap inside it: it carries the sticky positioning
 // (so a card stuck at the top opens its editor right there instead of jumping back to its natural place) and animates its own
-// height across the swap while the incoming content fades in — the card → editor step Cursor makes. Automatic prompts are plain rows
+// height across the swap while the incoming content fades in — the card → editor step Cursor makes. Automatic prompts are plain rows.
+// Keep an opaque base outside the fade so replies cannot show through the editor or the swapping content.
 export function HistoryMessage(p: { turn: UserTurn; index: number; turnIndex: number; blobUrl?: (blob: string) => string }) {
   const context = useContext(HistoryContext);
   const { motion } = useAppearance();
@@ -54,7 +54,7 @@ export function HistoryMessage(p: { turn: UserTurn; index: number; turnIndex: nu
   if (p.turn.auto) return <UserMessage {...p} />;
   const editable = !!context && !context.composer.disabled && !context.composer.running;
   return (
-    <div ref={frame} className="sticky top-0 z-10 flex min-w-0 shrink-0 flex-col">
+    <div ref={frame} className="sticky top-0 z-10 flex min-w-0 shrink-0 flex-col rounded-lg bg-bg-0">
       <div key={swaps} className={cn('flex min-w-0 flex-col', swaps > 0 && 'fade-in')}>
         {editor
           ? <HistoryEditor {...p} context={editor} onClose={() => swap(undefined)} />
@@ -68,18 +68,29 @@ function HistoryEditor({ turn, turnIndex, blobUrl, context: c, onClose }: {
   turn: UserTurn; turnIndex: number; blobUrl?: (blob: string) => string; context: HistoryContextValue; onClose: () => void;
 }) {
   const [controls, setControls] = useState(() => controlsForTurn(c.composer.controls, turn.settings));
-  const [retained, setRetained] = useState(() => (turn.attachments ?? []).map((_, i) => i));
+  const [retained] = useState(() => (turn.attachments ?? []).map((_, i) => i));
   const [turnCount] = useState(c.composer.turns.length);
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
-  return <div className="flex min-w-0 flex-col gap-gap">
+  const insidePointer = useRef(false);
+  useEffect(() => {
+    const outside = () => {
+      // React capture includes portaled model menus and image previews; DOM containment does not.
+      const inside = insidePointer.current;
+      insidePointer.current = false;
+      if (!inside && !pending) onClose();
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [onClose, pending]);
+  return <div className="flex min-w-0 flex-col gap-gap" onPointerDownCapture={() => { insidePointer.current = true; }}>
     <Composer {...c.composer} running={false} disabled={pending || c.composer.disabled || c.composer.running}
       controls={controls} usage={undefined} canCompact={false}
       onNotice={setError}
       onSetMode={modeId => setControls(c => ({ ...c, modeId }))}
       onSetConfig={(id, value) => setControls(c => ({ ...c, options: c.options.map(o => o.id === id ? { ...o, value } : o) }))}
-      edit={{ text: turn.text, hasAttachments: retained.length > 0, onCancel: onClose,
-        attachments: <EditAttachments attachments={turn.attachments ?? []} retained={retained} blobUrl={blobUrl} disabled={pending} onRemove={i => setRetained(r => r.filter(n => n !== i))} />,
+      edit={{ text: turn.text, hasAttachments: retained.length > 0, onCancel: onClose, dismissOnOutside: true,
+        attachments: retained.length > 0 && <div className="px-pad pt-gap"><TurnAttachments attachments={turn.attachments ?? []} blobUrl={blobUrl} /></div>,
       }}
       onSend={async (text, attachments) => {
         setError(undefined);
@@ -91,7 +102,6 @@ function HistoryEditor({ turn, turnIndex, blobUrl, context: c, onClose }: {
         } finally { setPending(false); }
       }}
     />
-    <p className="px-pad text-3 text-fg-3">{t('history.replace')}</p>
     {error && <p role="alert" className="px-pad text-2 text-danger">{error}</p>}
   </div>;
 }

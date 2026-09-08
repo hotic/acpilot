@@ -2,8 +2,10 @@
 // Placeholders are {name}
 export const en = {
   'history.edit': 'Edit and resend',
+  'history.copy': 'Copy message',
+  'history.copied': 'Copied',
+  'history.copyFailed': 'Copy failed',
   'history.cancel': 'Cancel editing',
-  'history.replace': 'Resending replaces this message and everything after it. Earlier messages are carried into a new conversation as context. File changes remain.',
   'history.unavailable': 'Wait until the session is ready and idle.',
   'history.stale': 'The conversation changed. Reopen the message to edit it.',
   'history.empty': 'Enter a message or keep an attachment.',

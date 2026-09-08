@@ -8,12 +8,12 @@ export function Collapse({ open, children, className }: { open: boolean; childre
     <div
       inert={!open}
       className={cn(
-        'grid transition-[grid-template-rows,opacity] duration-(--dur-open) ease-out',
+        'grid min-w-0 grid-cols-[minmax(0,1fr)] transition-[grid-template-rows,opacity] duration-(--dur-open) ease-out',
         open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
         className,
       )}
     >
-      <div className="min-h-0 overflow-hidden">{children}</div>
+      <div className="min-h-0 min-w-0 overflow-hidden">{children}</div>
     </div>
   );
 }

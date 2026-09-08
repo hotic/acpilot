@@ -44,7 +44,7 @@ function QueuedRow({ item, blobUrl, onEdit, onRemove }: { item: QueuedPrompt; bl
       {first && (
         <RowTarget className={onEdit && 'cursor-text'}>
           {onEdit
-            ? <button type="button" onClick={onEdit} className="text-left">{first}</button>
+            ? <button type="button" onClick={onEdit} className="max-w-full truncate rounded-md px-1.5 py-0.5 text-left align-middle transition-colors hover:bg-hover focus-visible:bg-hover">{first}</button>
             : first}
         </RowTarget>
       )}

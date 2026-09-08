@@ -1,5 +1,5 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
-import { Check, ChevronRight, Compass, FoldVertical, Hand, Pencil, TriangleAlert, X } from 'lucide-react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { Check, ChevronRight, Compass, Copy, FoldVertical, Hand, Pencil, TriangleAlert, X } from 'lucide-react';
 import { IconButton } from '../ui/Button';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
@@ -12,7 +12,8 @@ import { cn } from '../ui/cn';
 import { TOOL_ICON } from './icons';
 import { Thought } from './Thought';
 import { Plan } from './Plan';
-import { ToolCall } from './ToolCall';
+import { ReadGroup, ToolCall } from './ToolCall';
+import { groupReadCalls } from './toolDetails';
 import { Prose } from './Prose';
 import { Permission } from './Permission';
 import { PlanDocument } from './PlanDocument';
@@ -22,7 +23,7 @@ import { ProcessHistory } from './ProcessHistory';
 
 // User message: color block / right-aligned bubble / plain text; ones ACPilot sends automatically (/compact) render as a note line, not a bubble.
 // Attachments (image thumbnails / file pills) sit above the text inside the same bubble.
-// The pencil is the only edit control: a hover-only hint in the corner, not a row of its own, so the card stays as tall as its text.
+// Hover actions occupy the existing reply gap, without adding height; clicking the card opens its inline editor.
 // Sticking within the exchange is the caller's job (`HistoryMessage` wraps it), so the editor can take the card's place without a layout jump
 export function UserMessage({ turn, index, blobUrl, onEdit }: { turn: UserTurn; index: number; blobUrl?: (blob: string) => string; onEdit?: () => void }) {
   const { userMessage } = useAppearance();
@@ -34,26 +35,44 @@ export function UserMessage({ turn, index, blobUrl, onEdit }: { turn: UserTurn; 
     );
   }
   return (
-    <div
-      className={cn(
-        'user-message group relative flex w-full shrink-0 flex-col gap-gap text-1 text-fg-1 [overflow-wrap:anywhere]',
-        userMessage !== 'plain' && 'user-message-card rounded-lg px-pad py-gap',
-        userMessage === 'bubble' && 'self-end max-w-[88%]',
-        userMessage === 'plain' && 'bg-bg-0 py-gap font-medium',
-      )}
-    >
-      {turn.attachments?.length ? <TurnAttachments attachments={turn.attachments} blobUrl={blobUrl} /> : null}
-      {turn.text && <div className="scroll-thin min-h-0 overflow-y-auto whitespace-pre-wrap">{turn.text}</div>}
-      {onEdit && (
-        <IconButton
-          title={t('history.edit')} aria-label={t('history.edit')} onClick={onEdit}
-          className="absolute right-1 bottom-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-        >
-          <Pencil />
-        </IconButton>
-      )}
+    <div className={cn('user-message-frame relative flex w-full min-w-0 flex-col', userMessage === 'bubble' && 'self-end max-w-[88%]')}>
+      <div
+        onClick={onEdit ? e => {
+          // Preserve text selection and attachment preview controls inside the card.
+          if ((e.target as HTMLElement).closest('button, a, [role="dialog"]') || window.getSelection()?.toString()) return;
+          onEdit();
+        } : undefined}
+        className={cn(
+          'user-message relative flex w-full shrink-0 flex-col gap-gap text-1 text-fg-1 [overflow-wrap:anywhere]',
+          userMessage !== 'plain' && 'user-message-card rounded-lg px-pad py-gap',
+          onEdit && 'user-message-editable cursor-pointer',
+          userMessage === 'plain' && 'bg-bg-0 py-gap font-medium',
+        )}
+      >
+        {turn.attachments?.length ? <TurnAttachments attachments={turn.attachments} blobUrl={blobUrl} /> : null}
+        {turn.text && <div className="scroll-thin min-h-0 overflow-y-auto whitespace-pre-wrap">{turn.text}</div>}
+      </div>
+      <UserMessageActions text={turn.text} onEdit={onEdit} />
     </div>
   );
+}
+
+function UserMessageActions({ text, onEdit }: { text: string; onEdit?: () => void }) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  useEffect(() => {
+    if (copyState === 'idle') return;
+    const timer = setTimeout(() => setCopyState('idle'), 1500);
+    return () => clearTimeout(timer);
+  }, [copyState, text]);
+  if (!text && !onEdit) return null;
+  const copyLabel = t(copyState === 'copied' ? 'history.copied' : copyState === 'failed' ? 'history.copyFailed' : 'history.copy');
+  return <Row dense className="message-actions" trailing={<>
+    {text && <IconButton size="sm" title={copyLabel} aria-label={copyLabel} onClick={() => {
+      void navigator.clipboard.writeText(text).then(() => setCopyState('copied'), () => setCopyState('failed'));
+    }}>{copyState === 'copied' ? <Check /> : copyState === 'failed' ? <TriangleAlert /> : <Copy />}</IconButton>}
+    {onEdit && <IconButton size="sm" title={t('history.edit')} aria-label={t('history.edit')} onClick={onEdit}><Pencil /></IconButton>}
+    <span role="status" className="sr-only">{copyState !== 'idle' ? copyLabel : ''}</span>
+  </>}>{null}</Row>;
 }
 
 type OnPermission = (blockId: string, optionId: string) => void;
@@ -224,7 +243,7 @@ function CursorFold({ blocks, running }: { blocks: ToolCallBlock[]; running: boo
   const label = only === 'read' ? t('turns.readFiles', { n: files }) : only === 'search' ? t('turns.searched', { n: blocks.length }) : t('turns.explored', { n: blocks.length });
   const Icon = only ? TOOL_ICON[only] : Compass;
   return (
-    <FoldRow running={running} icon={<Icon className="size-icon" strokeWidth={1.5} />} body={blocks.map(b => <ToolCall key={b.id} block={b} grouped />)}>
+    <FoldRow running={running} icon={<Icon className="size-icon" strokeWidth={1.5} />} body={<ProcessBlocks blocks={blocks} />}>
       <span>{label}</span>
     </FoldRow>
   );
@@ -259,7 +278,9 @@ function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBl
   const { toolLine, thought } = useAppearance();
   const activity = foldActivity(turn);
   const Icon = activity.kind === 'compaction' ? FoldVertical : TOOL_ICON[activity.kind];
-  const lead = !running || toolLine === 'text' ? undefined
+  const CompletionIcon = turn.stop === 'cancelled' ? X : outcomeOf(turn) ? TriangleAlert : Check;
+  const lead = !running ? <CompletionIcon className="size-icon" strokeWidth={1.5} />
+    : toolLine === 'text' ? undefined
     : activity.kind === 'think' && thought === 'orb' ? <Orb kind="think" />
     : <Icon className="size-icon" strokeWidth={1.5} />;
   const label = running ? activity.label : outcomeOf(turn) ?? t('turns.done');
@@ -267,7 +288,7 @@ function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBl
   const awaitingApproval = turn.blocks.some(b => b.type === 'permission');
   const heading = <>
     <RowLabel className={running && activity.active && !awaitingApproval ? 'shimmer' : undefined}>{label}</RowLabel>
-    {elapsed && <span className="text-fg-3">{elapsed}</span>}
+    {elapsed && <span className="min-w-0 truncate text-fg-3" title={elapsed}>{elapsed}</span>}
     {running && activity.target && <RowTarget mono={activity.mono}>{activity.target}</RowTarget>}
   </>;
   if (blocks.length === 0) return <Row lead={lead}>{heading}</Row>;
@@ -275,16 +296,20 @@ function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBl
     <Disclosure
       lead={lead} indent={false} open={open} onToggle={setOpen}
       title={running ? [label, activity.target].filter(Boolean).join(' ') : label}
-      body={<ProcessHistory open={open} running={running}>{blocks.map((block, i) => (
-        block.type === 'tool_call' ? <ToolCall key={block.id} block={block} grouped />
-          : block.type === 'text' ? <Prose key={i} block={block} />
-          : <LineBlock key={'id' in block ? block.id : i} block={block} />
-      ))}</ProcessHistory>}
+      body={<ProcessHistory open={open} running={running}><ProcessBlocks blocks={blocks} /></ProcessHistory>}
     >
       {heading}
       <ChevronRight className={cn('size-3 shrink-0 self-center transition-transform', open && 'rotate-90')} strokeWidth={1.75} />
     </Disclosure>
   );
+}
+
+function ProcessBlocks({ blocks }: { blocks: AgentBlock[] }) {
+  return groupReadCalls(blocks).map((item, i) => Array.isArray(item)
+    ? <ReadGroup key={item[0]!.id} blocks={item} />
+    : item.type === 'tool_call' ? <ToolCall key={item.id} block={item} grouped />
+    : item.type === 'text' ? <Prose key={i} block={item} />
+    : <LineBlock key={'id' in item ? item.id : i} block={item} />);
 }
 
 function LineBlock({ block }: { block: AgentBlock }) {

@@ -15,13 +15,13 @@ interface Preview {
 
 // Composer attachments use compact, equal-height labels. Image previews stay
 // inline with file icons; names truncate only when the composer runs out of room.
-export function DraftChips({ drafts, onRemove }: { drafts: Draft[]; onRemove: (index: number) => void }) {
+export function DraftChips({ drafts, onRemove }: { drafts: Draft[]; onRemove?: (index: number) => void }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   if (!drafts.length) return null;
   return (
     <div className="flex flex-wrap gap-1 px-2 pt-2">
       {drafts.map((d, i) => (
-        <Removable key={d.kind === 'file' ? d.uri : `${d.name ?? d.kind}-${i}`} label={t('common.removeNamed', { name: d.name ?? t('common.image') })} onRemove={() => onRemove(i)}>
+        <Removable key={d.kind === 'file' ? d.uri : `${d.name ?? d.kind}-${i}`} label={t('common.removeNamed', { name: d.name ?? t('common.image') })} onRemove={onRemove ? () => onRemove(i) : undefined}>
           <AttachmentTag
             name={d.name}
             image={d.kind === 'image' || (d.kind === 'file' && !!imageMimeOf(d.name))}
@@ -66,7 +66,7 @@ export function AttachmentTiles({ attachments, blobUrl }: { attachments: Attachm
         const src = a.kind === 'image' && blobUrl && a.blob ? blobUrl(a.blob) : undefined;
         return src
           ? <button key={key} type="button" title={a.name} aria-label={t('common.previewImage', { name: a.name ?? t('common.image') })} onClick={() => setPreview({ src, name: a.name })}
-              className="flex size-lead shrink-0 cursor-zoom-in overflow-hidden rounded-xs outline-none focus-visible:ring-1 focus-visible:ring-focus">
+              className="flex size-lead shrink-0 cursor-zoom-in overflow-hidden rounded-xs outline-none hover:ring-1 hover:ring-fg-3 focus-visible:ring-1 focus-visible:ring-focus">
               <img src={src} alt="" className="size-full object-cover" />
             </button>
           : <AttachmentTag key={key} name={a.name} image={a.kind === 'image' || (a.kind === 'file' && !!imageMimeOf(a.name))} title={a.kind === 'file' ? a.uri : undefined} onPreview={() => undefined} />;
@@ -121,11 +121,11 @@ function AttachmentTag({ name = 'image.png', src, image, title, onPreview }: {
 }
 
 // Wraps a chip with a remove button in its top-right corner, shown on hover / focus
-function Removable({ label, onRemove, children }: { label: string; onRemove: () => void; children: ReactNode }) {
+function Removable({ label, onRemove, children }: { label: string; onRemove?: () => void; children: ReactNode }) {
   return (
     <span className="group/chip relative inline-flex max-w-full min-w-0">
       {children}
-      <button
+      {onRemove && <button
         type="button"
         aria-label={label}
         title={t('common.remove')}
@@ -136,7 +136,7 @@ function Removable({ label, onRemove, children }: { label: string; onRemove: () 
         )}
       >
         <X className="size-3" strokeWidth={2} />
-      </button>
+      </button>}
     </span>
   );
 }

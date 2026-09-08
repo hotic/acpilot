@@ -26,8 +26,8 @@ function hasWebGL(): boolean {
 }
 
 // Send / stop in one, a --ctl-sm flat button, one tier below the toolbar chips' neighbors. Dim when empty, lit when there's text or a run in progress.
-// Three modes: accent lights up with the accent color; icon is inverted-neutral; metal wraps the button in metal-fx's silver ring when lit —
-// the wrapped button's surface is taken over by metal-fx (it zeroes out the child's background / border and uses its own dark / light base), leaving only the icon and radius
+// Three modes: accent lights up with the accent color; icon is inverted-neutral; metal adds a silver ring around the same solid surface.
+// MetalFx clears the child's background, so the wrapper owns the inverted fill and icon color.
 export function SendButton({ running, filled, theme = 'dark', onClick }: SendButtonProps) {
   const { send, motion } = useAppearance();
   const on = filled || running;
@@ -50,7 +50,7 @@ export function SendButton({ running, filled, theme = 'dark', onClick }: SendBut
   );
   if (!metal) return button;
   return (
-    <MetalFx variant={METAL_VARIANT} preset={METAL_PRESET} theme={theme} paused={motion === 'none'} className="shrink-0 rounded-md">
+    <MetalFx variant={METAL_VARIANT} preset={METAL_PRESET} theme={theme} paused={motion === 'none'} className="shrink-0 rounded-md bg-btn-1! text-btn-1-fg!">
       {button}
     </MetalFx>
   );

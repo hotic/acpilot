@@ -35,12 +35,13 @@ export function Button({ variant = 'secondary', kbd, className, children, ...res
 }
 
 // Square icon button: --ctl × --ctl, icon --icon-ctl; as a menu trigger pass data-open to keep the pressed look
-export function IconButton({ className, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { ref?: Ref<HTMLButtonElement>; children: ReactNode }) {
+export function IconButton({ className, children, size = 'default', ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { ref?: Ref<HTMLButtonElement>; children: ReactNode; size?: 'default' | 'sm' }) {
   return (
     <button
       type="button"
       className={cn(
-        'inline-flex size-ctl shrink-0 items-center justify-center rounded-md text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 [&_svg]:size-icon-ctl',
+        'inline-flex shrink-0 items-center justify-center rounded-md text-fg-2 transition-colors hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1',
+        size === 'sm' ? 'size-ctl-sm [&_svg]:size-icon' : 'size-ctl [&_svg]:size-icon-ctl',
         className,
       )}
       {...rest}

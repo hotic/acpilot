@@ -169,7 +169,7 @@ function TrailingButton({ label, title, onClick, children }: { label: string; ti
       aria-label={label}
       title={title}
       onClick={e => { e.stopPropagation(); onClick(); }}
-      className="absolute right-1 top-1/2 flex size-icon-ctl -translate-y-1/2 items-center justify-center rounded-sm text-fg-3 opacity-0 transition-opacity hover:bg-active hover:text-fg-1 focus-visible:opacity-100 group-hover/item:opacity-100 group-focus-within/item:opacity-100"
+      className="absolute right-1 top-1/2 flex size-icon-ctl -translate-y-1/2 items-center justify-center rounded-sm text-fg-3 opacity-0 transition-opacity hover:bg-active hover:text-fg-1 focus-visible:bg-active focus-visible:text-fg-1 focus-visible:opacity-100 group-hover/item:opacity-100 group-focus-within/item:opacity-100"
     >
       {children}
     </button>
