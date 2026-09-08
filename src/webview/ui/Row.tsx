@@ -21,7 +21,7 @@ export function Row({ lead, trailing, children, interactive, as = 'div', classNa
       className={cn(
         'flex items-center gap-gap text-2 text-fg-2 select-none list-none text-left',
         dense ? 'min-h-[calc(var(--row)-4px)]' : 'min-h-row',
-        interactive && 'cursor-pointer rounded-md -mx-1.5 px-1.5 hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 transition-colors',
+        interactive && 'row-interactive cursor-pointer rounded-md hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 transition-colors',
         className,
       )}
       {...rest}

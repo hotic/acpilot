@@ -80,6 +80,7 @@
   /* Sizes: 4px grid. Row height = control height = 28; lead slot 20, icon in slot 14; icon in controls 16.
      Chips (menu selectors) sit one tier below full controls, Cursor-style: snug around their text instead of filling the row */
   --row: 28px;
+  --row-hit-outset: 6px;
   --ctl: 28px;
   --ctl-sm: 22px;
   --lead: 20px;
@@ -115,6 +116,8 @@
 
   /* Max lines shown in a terminal block's output area; beyond that it scrolls inside the block */
   --term-lines: 12;
+  /* Expanded process history stays within eight rows or half the viewport. */
+  --process-history-max: min(calc(var(--row) * 8), 45dvh);
   /* Max rows shown in a menu; beyond that it scrolls inside the menu (Devin's 210 models) */
   --pop-rows: 8;
 
@@ -124,6 +127,23 @@
   --enter-dur: 300ms;
   --enter-stagger: 40ms;
   --enter-y: 4px;
+}
+
+.row-interactive {
+  margin-inline: calc(-1 * var(--row-hit-outset));
+  padding-inline: var(--row-hit-outset);
+}
+
+/* Conversation rows share the prompt card's outer edge; only user text is inset. */
+.agent-message {
+  --row-hit-outset: 0px;
+}
+
+.process-history {
+  max-height: var(--process-history-max);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  overflow-anchor: none;
 }
 
 [data-theme="light"] {

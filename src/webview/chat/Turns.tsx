@@ -18,6 +18,7 @@ import { Permission } from './Permission';
 import { PlanDocument } from './PlanDocument';
 import { TurnAttachments } from './Attachments';
 import { elapsedLabel, foldActivity, splitCodexBlocks } from './folding';
+import { ProcessHistory } from './ProcessHistory';
 
 // User message: color block / right-aligned bubble / plain text; ones ACPilot sends automatically (/compact) render as a note line, not a bubble.
 // Attachments (image thumbnails / file pills) sit above the text inside the same bubble.
@@ -64,7 +65,7 @@ export function AgentMessage({ turn, index, running, onPermission }: { turn: Age
   // Keep pending approvals in the activity input even when their controls live
   // on the plan card; removing them makes the process heading report thinking.
   const content = { ...turn, blocks: turn.blocks.filter(b => b.type !== 'plan_document') };
-  return <div className="flex flex-col gap-gap">
+  return <div className="agent-message flex min-w-0 flex-col gap-gap">
     <AgentContent turn={content} index={index} running={running} onPermission={onPermission} />
     {plans.map(plan => <PlanDocument key={plan.id} block={plan}
       permission={turn.blocks.find((b): b is PermissionBlock => b.type === 'permission' && b.planId === plan.id)} onChoose={onPermission} />)}
@@ -82,7 +83,7 @@ function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn;
       {groups.map((g, gi) => (
         <div key={g.kind === 'block' && 'id' in g.block && g.block.id ? g.block.id : `g${gi}`} className="enter" style={{ '--i': Math.min(i++, 12) } as CSSProperties}>
           {g.kind === 'lines'
-            ? <Lines blocks={g.blocks} fold={fold} />
+            ? <Lines blocks={g.blocks} fold={fold} running={running} />
             : <Block block={g.block} onPermission={onPermission} />}
         </div>
       ))}
@@ -160,13 +161,13 @@ function groupBlocks(blocks: AgentBlock[]): Group[] {
 }
 
 // A group of lines in cursor mode: runs of finished read-only actions (read / search / fetch, ≥ 2) fold into one expandable row, everything else stays flat
-function Lines({ blocks, fold }: { blocks: AgentBlock[]; fold: Appearance['fold'] }) {
+function Lines({ blocks, fold, running }: { blocks: AgentBlock[]; fold: Appearance['fold']; running: boolean }) {
   const items = fold === 'cursor' ? foldReadOnly(blocks) : blocks.map(b => ({ kind: 'one' as const, block: b }));
   return (
     <div className="flex flex-col gap-0.5">
       {items.map((it, i) => it.kind === 'one'
         ? <LineBlock key={i} block={it.block} />
-        : <CursorFold key={it.blocks[0]!.id} blocks={it.blocks} />)}
+        : <CursorFold key={it.blocks[0]!.id} blocks={it.blocks} running={running} />)}
     </div>
   );
 }
@@ -197,16 +198,18 @@ function foldReadOnly(blocks: AgentBlock[]): LineItem[] {
 
 // Disclosure shared by fold rows: lead-slot rules match other rows (toolLine=text has no slot), the trailing chevron rotates 90° when open;
 // the body isn't indented — expanded rows align vertically with the head row, and open/close alone marks the hierarchy
-function FoldRow({ icon, children, body, open, onToggle }: { icon: ReactNode; children: ReactNode; body: ReactNode; open?: boolean; onToggle?: (open: boolean) => void }) {
+function FoldRow({ icon, children, body, open, onToggle, running }: { icon: ReactNode; children: ReactNode; body: ReactNode; open?: boolean; onToggle?: (open: boolean) => void; running?: boolean }) {
   const { toolLine } = useAppearance();
+  const [innerOpen, setInnerOpen] = useState(false);
+  const expanded = open ?? innerOpen;
   return (
     <Disclosure
       lead={toolLine === 'text' ? undefined : icon}
       indent={false}
-      open={open}
-      onToggle={onToggle}
+      open={expanded}
+      onToggle={next => { setInnerOpen(next); onToggle?.(next); }}
       trailing={<ChevronRight className="size-3 transition-transform group-data-[open]:rotate-90" strokeWidth={1.75} />}
-      body={<div className="flex flex-col gap-0.5">{body}</div>}
+      body={<ProcessHistory open={expanded} running={running}>{body}</ProcessHistory>}
     >
       {children}
     </Disclosure>
@@ -214,14 +217,14 @@ function FoldRow({ icon, children, body, open, onToggle }: { icon: ReactNode; ch
 }
 
 // Cursor mode: all read → "read N files", all search → "searched N times", mixed → "explored N places"
-function CursorFold({ blocks }: { blocks: ToolCallBlock[] }) {
+function CursorFold({ blocks, running }: { blocks: ToolCallBlock[]; running: boolean }) {
   const kinds = new Set(blocks.map(b => b.kind));
   const only = kinds.size === 1 ? blocks[0]!.kind : undefined;
   const files = new Set(blocks.map(b => b.target).filter(Boolean)).size || blocks.length;
   const label = only === 'read' ? t('turns.readFiles', { n: files }) : only === 'search' ? t('turns.searched', { n: blocks.length }) : t('turns.explored', { n: blocks.length });
   const Icon = only ? TOOL_ICON[only] : Compass;
   return (
-    <FoldRow icon={<Icon className="size-icon" strokeWidth={1.5} />} body={blocks.map(b => <ToolCall key={b.id} block={b} />)}>
+    <FoldRow running={running} icon={<Icon className="size-icon" strokeWidth={1.5} />} body={blocks.map(b => <ToolCall key={b.id} block={b} grouped />)}>
       <span>{label}</span>
     </FoldRow>
   );
@@ -272,11 +275,11 @@ function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBl
     <Disclosure
       lead={lead} indent={false} open={open} onToggle={setOpen}
       title={running ? [label, activity.target].filter(Boolean).join(' ') : label}
-      body={<div className="flex flex-col gap-0.5">{blocks.map((block, i) => (
+      body={<ProcessHistory open={open} running={running}>{blocks.map((block, i) => (
         block.type === 'tool_call' ? <ToolCall key={block.id} block={block} grouped />
           : block.type === 'text' ? <Prose key={i} block={block} />
           : <LineBlock key={'id' in block ? block.id : i} block={block} />
-      ))}</div>}
+      ))}</ProcessHistory>}
     >
       {heading}
       <ChevronRight className={cn('size-3 shrink-0 self-center transition-transform', open && 'rotate-90')} strokeWidth={1.75} />
