@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { stat } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as vscode from 'vscode';
 import { isSafeExternalUrl, type FileHit, type HostMsg, type WebviewHost, type WebviewMsg } from '@shared/protocol';
 import type { Appearance } from '@shared/appearance';
@@ -61,6 +63,22 @@ export class WebviewBridge implements vscode.Disposable {
       return;
     }
     if (m.type === 'openInEditor') { void vscode.commands.executeCommand('acpilot.openInEditor'); return; }
+    if (m.type === 'openFile') {
+      const session = this.manager.active();
+      if (!session || session.id !== m.sessionId) return;
+      try {
+        const path = m.path.startsWith('file://') ? fileURLToPath(m.path) : resolve(session.cwd, m.path);
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path));
+        const line = Number.isSafeInteger(m.line) && m.line! > 0 ? Math.min(m.line! - 1, doc.lineCount - 1) : 0;
+        await vscode.window.showTextDocument(doc, {
+          preview: true, viewColumn: vscode.ViewColumn.Beside,
+          selection: new vscode.Range(line, 0, line, 0),
+        });
+      } catch (e) {
+        void vscode.window.showErrorMessage(msg(e));
+      }
+      return;
+    }
     if (m.type === 'openPlan') {
       const plan = this.manager.planDocument(m.sessionId, m.planId);
       if (plan?.type === 'plan_document') {

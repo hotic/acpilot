@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { Check, ChevronRight, Compass, Copy, FoldVertical, Hand, Pencil, TriangleAlert, X } from 'lucide-react';
+import { Check, ChevronRight, Compass, Copy, FoldVertical, Hand, MessageCircleQuestion, Pencil, TriangleAlert, X } from 'lucide-react';
 import { IconButton } from '../ui/Button';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
@@ -16,6 +16,7 @@ import { ReadGroup, ToolCall } from './ToolCall';
 import { groupReadCalls } from './toolDetails';
 import { Prose } from './Prose';
 import { Permission } from './Permission';
+import { QuestionRecord } from './Questions';
 import { PlanDocument } from './PlanDocument';
 import { TurnAttachments } from './Attachments';
 import { elapsedLabel, foldActivity, splitCodexBlocks } from './folding';
@@ -96,7 +97,8 @@ export function AgentMessage({ turn, index, running, onPermission, compacting }:
 function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission }) {
   const { fold } = useAppearance();
   if (fold === 'codex') return <CodexMessage turn={turn} running={running} onPermission={onPermission} />;
-  const groups = groupBlocks(turn.blocks.filter(b => b.type !== 'permission' || !b.planId));
+  // Plan approvals live on the plan card and the open question card above the composer; neither takes a slot in the message
+  const groups = groupBlocks(turn.blocks.filter(b => (b.type !== 'permission' || !b.planId) && (b.type !== 'question' || !!b.outcome)));
   let i = index;
   const showActivity = running && !!turn.activity && !turn.blocks.some(isBusy);
   return (
@@ -154,12 +156,13 @@ function isBusy(b: AgentBlock): boolean {
   return false;
 }
 
-// Approval waits use a static icon; motion remains reserved for thinking.
+// Approval and question waits use a static icon; motion remains reserved for thinking.
 function Activity({ turn }: { turn: AgentTurn }) {
   const activity = foldActivity(turn);
   const awaitingApproval = turn.blocks.some(b => b.type === 'permission');
+  const awaitingAnswers = !awaitingApproval && turn.blocks.some(b => b.type === 'question' && !b.outcome);
   return (
-    <Row lead={awaitingApproval ? <Hand className="size-icon" strokeWidth={1.5} /> : <WaitingDots />} className="font-medium">
+    <Row lead={awaitingApproval ? <Hand className="size-icon" strokeWidth={1.5} /> : awaitingAnswers ? <MessageCircleQuestion className="size-icon" strokeWidth={1.5} /> : <WaitingDots />} className="font-medium">
       <RowLabel>{activity.label}</RowLabel>
       {activity.target && <RowTarget mono={activity.mono} className="font-normal">{activity.target}</RowTarget>}
     </Row>
@@ -185,10 +188,10 @@ function groupBlocks(blocks: AgentBlock[]): Group[] {
 function Lines({ blocks, fold, running }: { blocks: AgentBlock[]; fold: Appearance['fold']; running: boolean }) {
   const items = fold === 'cursor' ? foldReadOnly(blocks) : blocks.map(b => ({ kind: 'one' as const, block: b }));
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="process-lines flex flex-col gap-0.5">
       {items.map((it, i) => it.kind === 'one'
         ? <LineBlock key={i} block={it.block} />
-        : <CursorFold key={it.blocks[0]!.id} blocks={it.blocks} running={running} />)}
+        : <CursorFold key={it.blocks[0]!.id} blocks={it.blocks} />)}
     </div>
   );
 }
@@ -219,7 +222,7 @@ function foldReadOnly(blocks: AgentBlock[]): LineItem[] {
 
 // Disclosure shared by fold rows: lead-slot rules match other rows (toolLine=text has no slot), the trailing chevron rotates 90° when open;
 // the body isn't indented — expanded rows align vertically with the head row, and open/close alone marks the hierarchy
-function FoldRow({ icon, children, body, open, onToggle, running }: { icon: ReactNode; children: ReactNode; body: ReactNode; open?: boolean; onToggle?: (open: boolean) => void; running?: boolean }) {
+function FoldRow({ icon, children, body, open, onToggle }: { icon: ReactNode; children: ReactNode; body: ReactNode; open?: boolean; onToggle?: (open: boolean) => void }) {
   const { toolLine } = useAppearance();
   const [innerOpen, setInnerOpen] = useState(false);
   const expanded = open ?? innerOpen;
@@ -230,7 +233,7 @@ function FoldRow({ icon, children, body, open, onToggle, running }: { icon: Reac
       open={expanded}
       onToggle={next => { setInnerOpen(next); onToggle?.(next); }}
       trailing={<ChevronRight className="size-3 transition-transform group-data-[open]:rotate-90" strokeWidth={1.75} />}
-      body={<ProcessHistory open={expanded} running={running}>{body}</ProcessHistory>}
+      body={<ProcessHistory>{body}</ProcessHistory>}
     >
       {children}
     </Disclosure>
@@ -238,14 +241,14 @@ function FoldRow({ icon, children, body, open, onToggle, running }: { icon: Reac
 }
 
 // Cursor mode: all read → "read N files", all search → "searched N times", mixed → "explored N places"
-function CursorFold({ blocks, running }: { blocks: ToolCallBlock[]; running: boolean }) {
+function CursorFold({ blocks }: { blocks: ToolCallBlock[] }) {
   const kinds = new Set(blocks.map(b => b.kind));
   const only = kinds.size === 1 ? blocks[0]!.kind : undefined;
   const files = new Set(blocks.map(b => b.target).filter(Boolean)).size || blocks.length;
   const label = only === 'read' ? t('turns.readFiles', { n: files }) : only === 'search' ? t('turns.searched', { n: blocks.length }) : t('turns.explored', { n: blocks.length });
   const Icon = only ? TOOL_ICON[only] : Compass;
   return (
-    <FoldRow running={running} icon={<Icon className="size-icon" strokeWidth={1.5} />} body={<ProcessBlocks blocks={blocks} />}>
+    <FoldRow icon={<Icon className="size-icon" strokeWidth={1.5} />} body={<ProcessBlocks blocks={blocks} />}>
       <span>{label}</span>
     </FoldRow>
   );
@@ -264,10 +267,11 @@ function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; runnin
       </div>
     );
   }
-  const { process, reply, permissions } = splitCodexBlocks(turn.blocks);
+  const { process, reply, permissions, questions } = splitCodexBlocks(turn.blocks);
   return (
     <div className="flex flex-col gap-gap">
       {(process.length > 0 || (running && reply.length === 0)) && <CodexFold turn={turn} blocks={process} running={running} />}
+      {questions.map(block => <QuestionRecord key={block.id} block={block} />)}
       {reply.map((block, i) => <Prose key={i} block={block} />)}
       {permissions.filter(block => !block.planId).map(block => <Permission key={block.id} block={block} onChoose={id => onPermission(block.id, id)} />)}
       {!running && outcomeOf(turn) && <Outcome turn={turn} />}
@@ -287,7 +291,7 @@ function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBl
     : <Icon className="size-icon" strokeWidth={1.5} />;
   const label = running ? activity.label : outcomeOf(turn) ?? t('turns.done');
   const elapsed = !running && turn.startedAt !== undefined && turn.endedAt !== undefined ? elapsedLabel(turn) : undefined;
-  const awaitingApproval = turn.blocks.some(b => b.type === 'permission');
+  const awaitingApproval = turn.blocks.some(b => b.type === 'permission' || (b.type === 'question' && !b.outcome));
   const heading = <>
     <RowLabel className={running && activity.active && !awaitingApproval ? 'shimmer' : undefined}>{label}</RowLabel>
     {elapsed && <span className="min-w-0 truncate text-fg-3" title={elapsed}>{elapsed}</span>}
@@ -298,7 +302,7 @@ function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBl
     <Disclosure
       lead={lead} indent={false} open={open} onToggle={setOpen}
       title={running ? [label, activity.target].filter(Boolean).join(' ') : label}
-      body={<ProcessHistory open={open} running={running}><ProcessBlocks blocks={blocks} /></ProcessHistory>}
+      body={<ProcessHistory><ProcessBlocks blocks={blocks} /></ProcessHistory>}
     >
       {heading}
       <ChevronRight className={cn('size-3 shrink-0 self-center transition-transform', open && 'rotate-90')} strokeWidth={1.75} />
@@ -336,5 +340,7 @@ function Compaction({ block }: { block: CompactionBlock }) {
 function Block({ block, onPermission }: { block: AgentBlock; onPermission: OnPermission }) {
   if (block.type === 'text') return <Prose block={block} />;
   if (block.type === 'permission') return block.planId ? null : <Permission block={block} onChoose={id => onPermission(block.id, id)} />;
+  // The open card is pinned above the composer by the shell; only a resolved one has a place in the message
+  if (block.type === 'question') return block.outcome ? <QuestionRecord block={block} /> : null;
   return <LineBlock block={block} />;
 }

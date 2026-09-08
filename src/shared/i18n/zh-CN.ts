@@ -53,6 +53,8 @@ export const zhCN = {
   'queue.title': '已排队，本轮结束后发送',
   'queue.edit': '编辑排队消息',
   'queue.remove': '移出队列',
+  'queue.sendNow': '直接发送',
+  'queue.sending': '正在停止当前回复…',
   'queue.gone': '这条消息已经发出去了。',
   'session.noneAgent': '{name} 还没有会话',
 
@@ -194,6 +196,28 @@ export const zhCN = {
   'alert.copyWith': '复制详情（{detail}）',
   'alert.copied': '已复制',
 
+  // Question card (agent ask-user-question tools)
+  'question.title': '提问',
+  'question.of': '{n} / {total}',
+  'question.prev': '上一题',
+  'question.next': '下一题',
+  'question.collapse': '收起提问',
+  'question.expand': '展开提问',
+  'question.other': '其他…',
+  'question.otherPlaceholder': '输入你自己的答案',
+  'question.textPlaceholder': '输入答案',
+  'question.numberPlaceholder': '输入数字',
+  'question.yes': '是',
+  'question.no': '否',
+  'question.skip': '跳过',
+  'question.continue': '继续',
+  'question.multiple': '可多选',
+  'question.answered': '回答了 {n} 个问题',
+  'question.answeredOne': '回答了一个问题',
+  'question.skipped': '跳过了提问',
+  'question.cancelled': '提问已取消',
+  'question.noAnswer': '未回答',
+
   // Attachments / @ mention
   'attach.tooBigImage': '{name}：图片超过 {mb} MB',
   'attach.tooBigText': '{name}：文件超过 {kb} KB，从资源管理器拖入或用 @ 引用',
@@ -237,8 +261,12 @@ export const zhCN = {
   'host.working': '正在处理',
   'tool.output': '输出',
   'turns.processHistory': '过程记录',
+  'tool.toggleOutput': '展开或收起工具输出',
+  'tool.runningSeconds': '命令已运行 {s} 秒',
+  'tool.completedSeconds': '已在 {s} 秒内运行',
   'host.doing': '正在{verb} {target}',
   'host.awaitingApproval': '等待批准',
+  'host.awaitingAnswers': '等待你的回答',
   'host.replying': '正在回复',
   'host.mcpSkipped': 'MCP 服务器 {name} 找不到可执行文件 {command}，已跳过',
 
@@ -255,6 +283,7 @@ export const zhCN = {
   'verb.other': '调用工具',
   // A todo-list tool is recognized by name regardless of the kind the agent filed it under
   'verb.todo': '更新待办',
+  'verb.ask': '提问',
 
   // Synthetic Grok modes
   'mode.grok.default': '直接干活，权限请求逐个请示',

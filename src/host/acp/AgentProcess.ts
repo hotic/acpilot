@@ -6,6 +6,7 @@ import type { AgentDef } from './AgentRegistry';
 import { t } from '../i18n';
 import { VERSION } from '../version';
 import { approveGrokPlan, GROK_EXIT_PLAN, parseGrokExitPlan } from './grokPlan';
+import { GROK_ASK_QUESTION, parseGrokQuestion, type GrokQuestionRequest, type GrokQuestionResponse } from './grokQuestions';
 
 // What the client side has to accept: updates / permission requests / file reads & writes / questions the agent sends on its own initiative.
 // The optional handlers double as capability switches: a handler present is advertised in initialize, an absent one answers method-not-found
@@ -14,8 +15,10 @@ export interface ClientHandlers {
   onPermission: (req: acp.RequestPermissionRequest, signal: AbortSignal) => Promise<acp.RequestPermissionResponse>;
   onReadFile?: (req: acp.ReadTextFileRequest) => Promise<acp.ReadTextFileResponse>;
   onWriteFile?: (req: acp.WriteTextFileRequest) => Promise<void>;
-  // Form elicitation (elicitation/create with mode=form): the agent asks the user for structured input, e.g. Devin's ask_user_question
+  // Form elicitation (elicitation/create with mode=form): the agent asks the user for structured input, e.g. Devin's / Kimi's ask_user_question
   onElicitation?: (req: acp.CreateElicitationRequest, signal: AbortSignal) => Promise<acp.CreateElicitationResponse>;
+  // Grok's private question request (`_x.ai/ask_user_question`); without a handler the CLI reports the tool as failed with method-not-found
+  onGrokQuestion?: (req: GrokQuestionRequest, signal: AbortSignal) => Promise<GrokQuestionResponse>;
   onStderr?: (line: string) => void;
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
 }
@@ -57,6 +60,10 @@ export class AgentProcess {
       .onNotification(acp.methods.client.session.update, ctx => { h.onUpdate(ctx.params); })
       .onRequest(acp.methods.client.session.requestPermission, ctx => h.onPermission(ctx.params, ctx.signal))
       .onRequest(GROK_EXIT_PLAN, parseGrokExitPlan, ctx => approveGrokPlan(ctx.params, ctx.signal, h.onPermission))
+      .onRequest(GROK_ASK_QUESTION, parseGrokQuestion, ctx => {
+        if (!h.onGrokQuestion) throw acp.RequestError.methodNotFound(GROK_ASK_QUESTION);
+        return h.onGrokQuestion(ctx.params, ctx.signal);
+      })
       .onRequest(acp.methods.client.fs.readTextFile, ctx => {
         if (!h.onReadFile) throw acp.RequestError.methodNotFound(acp.methods.client.fs.readTextFile);
         return h.onReadFile(ctx.params);

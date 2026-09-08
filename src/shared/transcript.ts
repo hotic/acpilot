@@ -113,6 +113,9 @@ export interface ToolCallBlock {
   // Explicit read parameters; kept separately because later ACP locations omit the range.
   readRange?: { path: string; start: number; end?: number };
   status: ToolStatus;
+  // Observed execution time; initial pending approvals and replay-only tools have no timer.
+  startedAt?: number;
+  endedAt?: number;
   meta?: string;
   diffStat?: { add: number; del: number };
   content?: ToolContent;
@@ -181,7 +184,51 @@ export interface CompactionBlock {
   status: CompactionStatus;
 }
 
-export type AgentBlock = ThoughtBlock | PlanBlock | ToolCallBlock | TextBlock | PermissionBlock | CompactionBlock | PlanDocumentBlock;
+// A structured question the agent put to the user: one property of an elicitation form (Devin / Kimi `elicitation/create`, mode form)
+// or one entry of Grok's `_x.ai/ask_user_question`. `id` is the key the answer goes back under (form property / Grok question text)
+export interface QuestionOption {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+export type QuestionKind = 'single' | 'multiple' | 'text';
+
+export interface Question {
+  id: string;
+  // Short header (Devin / Kimi `header`); the question itself is `text`
+  title?: string;
+  text: string;
+  kind: QuestionKind;
+  // Empty for a free-text question
+  options: QuestionOption[];
+  // A free-text answer is accepted alongside the options (Grok always; Devin when it says allowOther)
+  other?: boolean;
+  // A text answer must be a number (schema type number / integer)
+  numeric?: boolean;
+  required?: boolean;
+}
+
+// The answer of one question: the chosen option id, the free text, or the chosen ids of a multi-select
+export type QuestionAnswer = string | string[];
+export type QuestionAnswers = Record<string, QuestionAnswer>;
+
+// How the card was closed: `answered` sent the answers, `skipped` told the agent to go on with what it has, `cancelled` is the turn ending first
+export type QuestionOutcome = 'answered' | 'skipped' | 'cancelled';
+
+// The question card. Pending (no outcome) it is pinned above the composer; resolved it stays in the message as the record of what was asked and picked
+export interface QuestionBlock {
+  type: 'question';
+  id: string;
+  toolCallId?: string;
+  // The form's own message, when it says more than the questions do
+  message?: string;
+  questions: Question[];
+  outcome?: QuestionOutcome;
+  answers?: QuestionAnswers;
+}
+
+export type AgentBlock = ThoughtBlock | PlanBlock | ToolCallBlock | TextBlock | PermissionBlock | CompactionBlock | PlanDocumentBlock | QuestionBlock;
 
 // What the composer attaches to a prompt before the host has seen it: images and dropped text carry their payload (base64 / text),
 // files carry a URI (Explorer drag / @ mention) that the host resolves — image files become `image`, everything else stays a link
@@ -206,6 +253,8 @@ export interface UserTurn {
   settings?: TurnSettings;
   // Retrying a failed edited turn must rebuild its preceding context as well.
   edited?: true;
+  // Internal execution instruction; the plan card represents it in the UI.
+  planId?: string;
   // Sent automatically by ACPilot (/compact over threshold); rendered as a note line instead of a bubble
   auto?: boolean;
 }
@@ -266,6 +315,7 @@ export interface QueuedPrompt {
   id: string;
   text: string;
   attachments: Attachment[];
+  sending?: boolean;
 }
 
 // Everything a session looks like to the webview: the host pushes the whole thing on every change (the transcript is small, not worth diffing)

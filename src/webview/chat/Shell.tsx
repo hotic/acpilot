@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Paperclip } from 'lucide-react';
-import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PermissionBlock, QueuedPrompt, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
+import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PermissionBlock, QuestionBlock, QueuedPrompt, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
 import type { HiddenMap } from '@shared/settings';
 import type { AccountAction, AddAccountVia, EditTurnRequest, FileHit } from '@shared/protocol';
 import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
@@ -15,9 +15,12 @@ import { Composer, type ComposerProps } from './Composer';
 import { Notice } from './Notice';
 import { Toast } from './Toast';
 import { Alert, isShortStop } from './Alert';
+import { Questions, type OnAnswer } from './Questions';
 import { PlanBar } from './PlanBar';
 import { PlanDocumentContext } from './PlanDocument';
+import { planExecutionId } from '@shared/planExecution';
 import { Queue } from './Queue';
+import { OpenToolFileContext } from './ToolCall';
 
 // Every action the webview sends to the host; in the LAB a fake host implements these, the real build swaps in postMessage
 export interface ShellHandlers {
@@ -27,8 +30,11 @@ export interface ShellHandlers {
   searchFiles: (query: string) => Promise<FileHit[]>;
   stop: () => void;
   permission: (blockId: string, optionId: string) => void;
+  // The question card was closed: answers keyed by question id, or skip
+  answer?: OnAnswer;
   buildPlan?: (sessionId: string, planId: string, model?: { configId: string; value: string }, optionId?: string) => void;
   openPlan?: (sessionId: string, planId: string) => void;
+  openFile?: (sessionId: string, path: string, line?: number) => void;
   setMode: (id: string) => void;
   setConfig: (configId: string, value: string) => void;
   selectAgent: (id: AgentInfo['id']) => void;
@@ -52,6 +58,7 @@ export interface ShellHandlers {
   retryTurn: () => void;
   // Queued prompts: drop one / replace one in place (kept attachments by index plus new drafts)
   dequeue?: (sessionId: string, id: string) => void;
+  sendQueued?: (sessionId: string, id: string) => void;
   editQueued?: (sessionId: string, id: string, text: string, retainedAttachments: number[], attachments: Draft[]) => void;
 }
 
@@ -128,6 +135,8 @@ export function Shell(p: ShellProps) {
   const alertKey = `${p.activeSessionId}:${p.turns.length}`;
   const [dismissedAlert, setDismissedAlert] = useState<string>();
   const alertTurn = !p.running && p.status === 'ready' && lastTurn?.role === 'agent' && isShortStop(lastTurn) && dismissedAlert !== alertKey ? lastTurn : undefined;
+  // The agent's open question card sits above the composer while the turn waits on it; a resolved card stays in the message as the record
+  const question = p.running && lastTurn?.role === 'agent' ? lastTurn.blocks.find((b): b is QuestionBlock => b.type === 'question' && !b.outcome) : undefined;
   const sessionsPanel = (
     <SessionList
       sessions={p.sessions}
@@ -148,11 +157,11 @@ export function Shell(p: ShellProps) {
     onSetMode: on.setMode, onSetConfig: on.setConfig, onCompact: on.compact,
   }), [p.running, p.status, p.theme, p.turns, p.controls, p.hidden, p.agent.id, p.usage, p.canCompact, p.cwd, on.send, on.searchFiles, notice, on.stop, on.setMode, on.setConfig, on.compact]);
   const planDoc = useMemo(() => ({
-    controls: p.controls, hidden: p.hidden?.[p.agent.id], running: p.running, ready: p.status === 'ready',
+    controls: p.controls, hidden: p.hidden?.[p.agent.id], running: p.running, ready: p.status === 'ready', theme: p.theme,
     permissions: p.turns.flatMap(t => t.role === 'agent' ? t.blocks.filter((b): b is PermissionBlock => b.type === 'permission') : []),
     build: p.activeSessionId && on.buildPlan ? (id: string, model?: { configId: string; value: string }, optionId?: string) => on.buildPlan!(p.activeSessionId!, id, model, optionId) : undefined,
     open: p.activeSessionId && on.openPlan ? (id: string) => on.openPlan!(p.activeSessionId!, id) : undefined,
-  }), [p.controls, p.hidden, p.agent.id, p.running, p.status, p.turns, p.activeSessionId, on.buildPlan, on.openPlan]);
+  }), [p.controls, p.hidden, p.agent.id, p.running, p.status, p.theme, p.turns, p.activeSessionId, on.buildPlan, on.openPlan]);
   const history = useMemo(() => on.editTurn && p.activeSessionId ? {
     sessionId: p.activeSessionId, composer: composerProps, edit: on.editTurn,
     editing: editing?.sessionId === p.activeSessionId ? editing.index : undefined,
@@ -198,7 +207,9 @@ export function Shell(p: ShellProps) {
             <div className="relative flex min-h-0 flex-1 flex-col">
               <PlanDocumentContext.Provider value={planDoc}>
                 <HistoryContext.Provider value={history}>
-                  <Thread key={p.activeSessionId} turns={p.turns} running={p.running} wide={wide} replayKey={p.replayKey} blobUrl={blobUrl} onPermission={on.permission} />
+                  <OpenToolFileContext.Provider value={p.activeSessionId && on.openFile ? (path, line) => on.openFile!(p.activeSessionId!, path, line) : undefined}>
+                    <Thread key={p.activeSessionId} turns={p.turns} running={p.running} wide={wide} replayKey={p.replayKey} blobUrl={blobUrl} onPermission={on.permission} />
+                  </OpenToolFileContext.Provider>
                 </HistoryContext.Provider>
               </PlanDocumentContext.Provider>
               {toasts.length > 0 && (
@@ -208,7 +219,8 @@ export function Shell(p: ShellProps) {
               )}
             </div>
             <div className={cn('shrink-0', wide && a.composer === 'island' && 'mx-auto w-full max-w-[calc(var(--content-w)+2*var(--pad))]')}>
-              <PlanBar key={p.activeSessionId} turns={p.turns} running={p.running} />
+              <PlanBar key={`plan:${p.activeSessionId}`} turns={p.turns} running={p.running} />
+              {question && on.answer && <Questions key={question.id} block={question} onAnswer={on.answer} />}
               {alertTurn && (
                 <Alert
                   turn={alertTurn}
@@ -225,11 +237,15 @@ export function Shell(p: ShellProps) {
                 onSelectAccount={on.selectAccount} onAddAccount={via => on.addAccount(p.agent.id, via)}
               />
               {p.queued?.length && p.activeSessionId
-                ? <Queue key={p.activeSessionId} items={p.queued} composer={composerProps} blobUrl={blobUrl}
-                    on={on.dequeue && on.editQueued ? { remove: id => on.dequeue!(p.activeSessionId!, id), edit: (id, text, kept, drafts) => on.editQueued!(p.activeSessionId!, id, text, kept, drafts) } : undefined} />
+                ? <Queue key={`queue:${p.activeSessionId}`} items={p.queued} composer={composerProps} blobUrl={blobUrl}
+                    on={on.dequeue && on.editQueued ? {
+                      remove: id => on.dequeue!(p.activeSessionId!, id),
+                      sendNow: on.sendQueued && (id => on.sendQueued!(p.activeSessionId!, id)),
+                      edit: (id, text, kept, drafts) => on.editQueued!(p.activeSessionId!, id, text, kept, drafts),
+                    } : undefined} />
                 : null}
-              {/* Keyed by session so each one has its own field; the unsent draft is parked under the same key while another session is shown */}
-              <Composer key={p.activeSessionId} {...composerProps} draftKey={p.activeSessionId} />
+              {/* Sibling keys include the component role; duplicate session-only keys leave stale queue rows after reconciliation. */}
+              <Composer key={`composer:${p.activeSessionId}`} {...composerProps} draftKey={p.activeSessionId} />
             </div>
           </div>
         </div>
@@ -278,6 +294,7 @@ function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: Thre
   const exchanges: { key: number; messages: ReactNode[] }[] = [];
   turns.forEach((turn, ti) => {
     const previous = turns[ti - 1];
+    if (planExecutionId(turn, previous)) return;
     const compacting = previous?.role === 'user' && /^\/compact(?:\s|$)/.test(previous.text.trim());
     const index = Math.min(i, STAGGER_CAP);
     i += turn.role === 'agent' ? turn.blocks.length + 1 : 1;

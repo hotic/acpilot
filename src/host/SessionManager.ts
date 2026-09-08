@@ -142,7 +142,7 @@ export class SessionManager {
       const turns = live?.view().turns ?? [];
       const last = turns[turns.length - 1];
       const state = live?.isRunning ? 'working'
-        : turns.some(t => t.role === 'agent' && t.blocks.some(b => b.type === 'permission')) ? 'waiting'
+        : turns.some(t => t.role === 'agent' && t.blocks.some(b => b.type === 'permission' || (b.type === 'question' && !b.outcome))) ? 'waiting'
           : last?.role === 'agent' && last.stop === 'error' ? 'error' : undefined;
       return { ...s, state };
     });
@@ -259,6 +259,7 @@ export class SessionManager {
         case 'send': await s?.prompt(m.text, m.attachments); break;
         case 'stop': await s?.cancel(); break;
         case 'permission': s?.resolvePermission(m.blockId, m.optionId); break;
+        case 'answer': s?.answerQuestions(m.blockId, m.answers, m.skip); break;
         case 'buildPlan': await this.live.get(m.sessionId)?.buildPlan(m.planId, m.model, m.optionId); break;
         case 'setMode': if (s) { await s.setMode(m.id); this.remember(s); } break;
         case 'setConfig': if (s) { await s.setConfig(m.configId, m.value); this.remember(s); } break;
@@ -277,6 +278,7 @@ export class SessionManager {
         case 'retry': await s?.retry(); break;
         case 'retryTurn': await s?.retryTurn(); break;
         case 'dequeue': this.live.get(m.sessionId)?.dequeue(m.id); break;
+        case 'sendQueued': await this.live.get(m.sessionId)?.sendQueued(m.id); break;
         case 'editQueued': await this.live.get(m.sessionId)?.editQueued(m.id, m.text, m.retainedAttachments, m.attachments); break;
         case 'login': await this.login(s, m.methodId); break;
         default: break;

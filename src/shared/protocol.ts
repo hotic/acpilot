@@ -1,4 +1,4 @@
-import type { AccountInfo, AgentId, AgentInfo, ConfigControl, Draft, SessionSummary, SessionView, TurnSettings } from './transcript';
+import type { AccountInfo, AgentId, AgentInfo, ConfigControl, Draft, QuestionAnswers, SessionSummary, SessionView, TurnSettings } from './transcript';
 import type { Appearance } from './appearance';
 import type { HiddenMap, SettingKey, SettingsView } from './settings';
 import type { Locale } from './i18n';
@@ -92,6 +92,8 @@ export type WebviewMsg =
   // @ mention: fuzzy search over workspace files, answered with a `files` message
   | { type: 'searchFiles'; query: string; seq: number }
   | { type: 'permission'; blockId: string; optionId: string }
+  // The question card was closed: `answers` holds the answered questions only (option ids / free text); skip tells the agent to go on with what it has
+  | { type: 'answer'; blockId: string; answers: QuestionAnswers; skip?: boolean }
   | { type: 'buildPlan'; sessionId: string; planId: string; optionId?: string; model?: { configId: string; value: string } }
   | { type: 'openPlan'; sessionId: string; planId: string }
   | { type: 'setMode'; id: string }
@@ -116,6 +118,7 @@ export type WebviewMsg =
   | { type: 'retryTurn' }
   // Queued prompts (waiting for the running turn): drop one, or replace one in place — kept attachments by index, new drafts alongside
   | { type: 'dequeue'; sessionId: string; id: string }
+  | { type: 'sendQueued'; sessionId: string; id: string }
   | { type: 'editQueued'; sessionId: string; id: string; text: string; retainedAttachments: number[]; attachments: Draft[] }
   | { type: 'openInEditor' }
   // A link inside agent output was clicked; host opens it externally after an isSafeExternalUrl check
@@ -124,5 +127,7 @@ export type WebviewMsg =
   // rescan an agent's extension inventory, read the configOptions of its latest session
   | { type: 'setSetting'; key: SettingKey; value: unknown }
   | { type: 'openPath'; path: string }
+  // Tool references resolve relative to the originating session and retain their line.
+  | { type: 'openFile'; sessionId: string; path: string; line?: number }
   | { type: 'inventory'; agent: AgentId }
   | { type: 'controls'; agent: AgentId };

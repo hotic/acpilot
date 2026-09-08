@@ -48,6 +48,8 @@ export const en = {
   'queue.title': 'Queued, sends when this turn ends',
   'queue.edit': 'Edit queued message',
   'queue.remove': 'Remove from queue',
+  'queue.sendNow': 'Send now',
+  'queue.sending': 'Waiting for the current reply to stop…',
   'queue.gone': 'That message has already been sent.',
   'session.noneAgent': '{name} has no sessions yet',
 
@@ -182,6 +184,27 @@ export const en = {
   'alert.copyWith': 'Copy details ({detail})',
   'alert.copied': 'Copied',
 
+  'question.title': 'Questions',
+  'question.of': '{n} of {total}',
+  'question.prev': 'Previous question',
+  'question.next': 'Next question',
+  'question.collapse': 'Collapse questions',
+  'question.expand': 'Expand questions',
+  'question.other': 'Other…',
+  'question.otherPlaceholder': 'Type your own answer',
+  'question.textPlaceholder': 'Type an answer',
+  'question.numberPlaceholder': 'Enter a number',
+  'question.yes': 'Yes',
+  'question.no': 'No',
+  'question.skip': 'Skip',
+  'question.continue': 'Continue',
+  'question.multiple': 'Pick any that apply',
+  'question.answered': 'Answered {n} questions',
+  'question.answeredOne': 'Answered a question',
+  'question.skipped': 'Questions skipped',
+  'question.cancelled': 'Questions cancelled',
+  'question.noAnswer': 'No answer',
+
   'attach.tooBigImage': '{name}: image exceeds {mb} MB',
   'attach.tooBigText': '{name}: file exceeds {kb} KB — drag it from the Explorer or use @',
   'attach.binary': '{name}: binary files can’t go into the conversation',
@@ -223,8 +246,12 @@ export const en = {
   'host.working': 'Working',
   'tool.output': 'Output',
   'turns.processHistory': 'Process history',
+  'tool.toggleOutput': 'Toggle tool output',
+  'tool.runningSeconds': 'Command running for {s}s',
+  'tool.completedSeconds': 'Ran in {s}s',
   'host.doing': '{verb} {target}',
   'host.awaitingApproval': 'Awaiting approval',
+  'host.awaitingAnswers': 'Waiting for your answers',
   'host.replying': 'Replying',
   'host.mcpSkipped': 'MCP server {name}: executable {command} not found, skipped',
 
@@ -240,6 +267,8 @@ export const en = {
   'verb.other': 'Use tool',
   // A todo-list tool is recognized by name regardless of the kind the agent filed it under
   'verb.todo': 'Update todos',
+  // The agent's ask-user-question tool, recognized by name too
+  'verb.ask': 'Ask',
 
   'mode.grok.default': 'Work directly, asking for each permission',
   'mode.grok.plan': 'Plan first, act after approval',

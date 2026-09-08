@@ -1,5 +1,6 @@
 import * as acp from '@agentclientprotocol/sdk';
 import { captureTurnSettings } from '@shared/turnSettings';
+import { planExecutionId } from '@shared/planExecution';
 import type { EditTurnRequest } from '@shared/protocol';
 import type { Draft, SessionControls, SessionOption, SessionView } from '@shared/transcript';
 import { applyConfigOptions, initControls, type NormalizeState } from './normalize';
@@ -31,7 +32,7 @@ export interface SessionEditCtx {
   autoApprove: boolean;
   syntheticModes(): SessionOption[] | undefined;
   onUpdate(n: acp.SessionNotification): void;
-  prompt(text: string, attachments: Draft[], auto?: boolean, staged?: StagedSend): Promise<void>;
+  prompt(text: string, attachments: Draft[], auto?: boolean, staged?: StagedSend, planId?: string): Promise<void>;
   bump(): void;
   touch(): void;
   flushQueued(): boolean;
@@ -47,6 +48,7 @@ export async function editTurn(ctx: SessionEditCtx, edit: EditTurnRequest): Prom
   const user = ctx.state.turns[edit.turnIndex];
   if (edit.sessionId !== ctx.id || !Number.isInteger(edit.turnIndex) || edit.turnIndex < 0
     || edit.turnCount !== ctx.state.turns.length || user?.role !== 'user' || user.auto
+    || planExecutionId(user, ctx.state.turns[edit.turnIndex - 1])
     || user.text !== edit.originalText || user.id !== edit.turnId) throw new Error(t('history.stale'));
   const kept = edit.retainedAttachments;
   if (new Set(kept).size !== kept.length || kept.some(i => !Number.isInteger(i) || i < 0 || i >= (user.attachments?.length ?? 0))) throw new Error(t('history.stale'));
@@ -156,6 +158,7 @@ export async function retryTurn(ctx: SessionEditCtx): Promise<void> {
     return;
   }
   const drafts = await restoreDrafts(ctx.id, user.attachments ?? [], ctx.blobs);
+  const planId = planExecutionId(user, turns[turns.length - 3]);
   turns.splice(-2, 2);
-  await ctx.prompt(user.text, drafts);
+  await ctx.prompt(user.text, drafts, false, undefined, planId);
 }

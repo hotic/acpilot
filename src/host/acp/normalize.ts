@@ -92,14 +92,23 @@ export function applyUpdate(s: NormalizeState, u: acp.SessionUpdate): boolean {
       const t = currentAgentTurn(s);
       sealStreaming(s, t);
       const existing = findTool(s, u.toolCallId);
+      const block = existing ?? toolBlock(u);
       if (existing) mergeTool(existing, u);
-      else t.blocks.push(toolBlock(u));
+      else t.blocks.push(block);
+      timeTool(block, t.startedAt !== undefined && !t.stop && t.blocks.includes(block));
       return true;
     }
     case 'tool_call_update': {
+      const t = currentAgentTurn(s);
       const existing = findTool(s, u.toolCallId);
+      const block = existing ?? toolBlock({
+        toolCallId: u.toolCallId, title: u.title ?? '', kind: u.kind ?? undefined,
+        status: u.status ?? undefined, content: u.content ?? undefined,
+        locations: u.locations ?? undefined, rawInput: u.rawInput,
+      });
       if (existing) mergeTool(existing, u);
-      else { const t = currentAgentTurn(s); sealStreaming(s, t); t.blocks.push(toolBlock({ toolCallId: u.toolCallId, title: u.title ?? '', kind: u.kind ?? undefined, status: u.status ?? undefined, content: u.content ?? undefined, locations: u.locations ?? undefined, rawInput: u.rawInput })); }
+      else { sealStreaming(s, t); t.blocks.push(block); }
+      timeTool(block, t.startedAt !== undefined && !t.stop && t.blocks.includes(block));
       return true;
     }
     case 'plan': {
@@ -174,7 +183,10 @@ export function endTurn(s: NormalizeState, stopReason: acp.StopReason) {
   t.activity = undefined;
   t.stop = stopReason;
   for (const b of t.blocks) {
-    if (b.type === 'tool_call' && (b.status === 'in_progress' || b.status === 'pending')) b.status = stopReason === 'cancelled' ? 'cancelled' : 'failed';
+    if (b.type === 'tool_call' && (b.status === 'in_progress' || b.status === 'pending')) {
+      b.status = stopReason === 'cancelled' ? 'cancelled' : 'failed';
+      timeTool(b, false);
+    }
   }
 }
 
@@ -243,6 +255,8 @@ const verbOf = (kind: ToolKind): string => t(VERB_KEY[kind]);
 
 // Some agents file their todo-list tool under kind "think"/"other"; recognize it by name and give it its own verb
 const TODO_TITLE = /^todo([_\s-]?(write|update|read|list))?$/i;
+// The ask-user-question tool by its names on the wire: Grok `ask_user_question` / `Ask 2 questions`, Devin `Asked user 2 questions …`, Kimi `AskUserQuestion` / `Asking user questions`
+const ASK_TITLE = /^(ask_?user_?questions?|ask(ed|ing)?\s+(the\s+)?(user\s+)?(\d+\s+)?questions?\b)/i;
 
 // Well-known tool names pin down the kind when the agent omitted it or used a grab-bag kind.
 // Specific kinds (read/edit/…) always win — only "other" and "think" are treated as unreliable.
@@ -262,6 +276,12 @@ function inferKind(title: string | null | undefined): ToolKind | undefined {
   return undefined;
 }
 
+// Sparse updates retain the first observed start and the first terminal timestamp.
+function timeTool(b: ToolCallBlock, live: boolean) {
+  if (live && b.status === 'in_progress' && b.endedAt === undefined) b.startedAt ??= Date.now();
+  if (b.startedAt !== undefined && b.status !== 'in_progress' && b.status !== 'pending') b.endedAt ??= Date.now();
+}
+
 function toolBlock(tc: acp.ToolCall): ToolCallBlock {
   const b: ToolCallBlock = { type: 'tool_call', id: tc.toolCallId, kind: tc.kind ?? 'other', verb: verbOf(tc.kind ?? 'other'), status: tc.status ?? 'pending' };
   mergeTool(b, tc);
@@ -272,6 +292,7 @@ function toolBlock(tc: acp.ToolCall): ToolCallBlock {
 function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
   if (u.kind) { b.kind = u.kind; b.verb = verbOf(u.kind); }
   if (u.title && TODO_TITLE.test(u.title.trim())) { b.verbKey = 'verb.todo'; b.verb = t('verb.todo'); }
+  if (u.title && ASK_TITLE.test(u.title.trim())) { b.verbKey = 'verb.ask'; b.verb = t('verb.ask'); }
   if (!b.verbKey && (b.kind === 'other' || b.kind === 'think')) {
     const inferred = inferKind(u.title ?? undefined);
     if (inferred) { b.kind = inferred; b.verb = verbOf(inferred); }
@@ -289,9 +310,9 @@ function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
     if (path) b.locations = [{ path }];
   }
   // A target inferred from the title is only a fallback while there is no target yet; don't overwrite what rawInput / locations provided.
-  // A todo tool's title is just its own name — redundant next to the todo verb, so drop it.
+  // A todo / ask tool's title is just its own name — redundant next to the verb, so drop it (the question card carries the questions).
   const target = pickTarget(u, b.kind);
-  if (target && !(b.verbKey === 'verb.todo' && target.fromTitle) && (!target.fromTitle || !b.target)) { b.target = target.text; b.targetMono = target.mono; }
+  if (target && !((b.verbKey === 'verb.todo' || b.verbKey === 'verb.ask') && target.fromTitle) && (!target.fromTitle || !b.target)) { b.target = target.text; b.targetMono = target.mono; }
   if (u.content?.length) {
     const c = toolContent(u.content);
     if (c) b.content = c;
@@ -368,6 +389,7 @@ export function activityOf(turns: Turn[]): AgentTurn['activity'] {
     const b = turn.blocks[i]!;
     if (b.type === 'tool_call' && (b.status === 'in_progress' || b.status === 'pending')) return { kind: b.kind, label: t('host.doing', { verb: b.verb, target: b.target ?? '' }).trim() };
     if (b.type === 'permission') return { kind: 'other', label: t('host.awaitingApproval') };
+    if (b.type === 'question' && !b.outcome) return { kind: 'other', label: t('host.awaitingAnswers') };
   }
   const last = turn.blocks[turn.blocks.length - 1];
   if (last?.type === 'thought' && last.streaming) return { kind: 'think', label: t('host.thinking') };

@@ -1,14 +1,21 @@
 import { Check, ChevronRight, FileText, Globe, X } from 'lucide-react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import type { ToolCallBlock } from '@shared/transcript';
 import { useAppearance } from '../appearance';
 import { Disclosure } from '../ui/Disclosure';
 import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { cn } from '../ui/cn';
+import { IconButton } from '../ui/Button';
+import { Collapse } from '../ui/Collapse';
+import { t } from '../i18n';
 import { TOOL_ICON } from './icons';
 import { CodeSurface, DiffBlock } from './CodeBlock';
 import { TerminalOutput } from './Terminal';
 import { toolVerb } from './folding';
-import { isFileListing, isLineCount, toolFiles } from './toolDetails';
+import { fileReference, isFileListing, isLineCount, toolFiles } from './toolDetails';
+import { useToolSeconds } from './useToolSeconds';
+
+export const OpenToolFileContext = createContext<((path: string, line?: number) => void) | undefined>(undefined);
 
 // One tool call = one expandable row, command execution included (Codex-style: the command sits on the row, the output is a card below).
 // Three modes: text only / with icon / icon + meta. No Orb while running: icon mode uses the same static icon as the completed state, with the verb shimmering.
@@ -17,6 +24,7 @@ export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; gro
   const { toolLine } = useAppearance();
   const running = block.status === 'in_progress' || block.status === 'pending';
   const execute = block.kind === 'execute';
+  const seconds = useToolSeconds(block);
   const files = toolFiles(block);
   const Icon = TOOL_ICON[block.kind];
 
@@ -33,7 +41,11 @@ export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; gro
     : undefined;
 
   const label = <>
-    <RowLabel className={running ? 'shimmer' : undefined}>{toolVerb(block)}</RowLabel>
+    <RowLabel className={cn('tabular-nums', running && 'shimmer')}>
+      {seconds !== undefined && block.status === 'in_progress' ? t('tool.runningSeconds', { s: seconds })
+        : seconds !== undefined && seconds > 0 && block.status === 'completed' ? t('tool.completedSeconds', { s: seconds })
+          : toolVerb(block)}
+    </RowLabel>
     {block.target && !(block.kind === 'read' && files.length) && <RowTarget mono={block.targetMono}>{block.target}</RowTarget>}
   </>;
   // Search hits open on demand; read references remain visible inside the process.
@@ -95,13 +107,11 @@ function ResultList({ items, kind, rail = true, detail }: { items: string[]; kin
         const { main, aside } = splitHit(it);
         const lead = toolLine === 'text' ? undefined : <Icon className="size-icon" strokeWidth={1.5} />;
         const target = <RowTarget mono={kind !== 'fetch'} className="text-fg-2">{main}</RowTarget>;
-        // ACP output belongs to the call; expose it once on its first file row.
-        if (index === 0 && detail?.content && detail.content.type !== 'list' && !isLineCount(detail) && !isFileListing(detail)) {
-          return <Disclosure key={it} dense lead={lead} title={it} indent={false}
-            trailing={<>{aside}<ChevronRight className="file-toggle-chevron size-3 transition-transform" strokeWidth={1.5} /></>}
-            body={<ToolBody block={detail} />}>
-            {target}
-          </Disclosure>;
+        if (kind === 'read' || kind === 'search') {
+          // ACP output belongs to the call; expose it once on its first file row.
+          const body = index === 0 && detail?.content && detail.content.type !== 'list' && !isLineCount(detail) && !isFileListing(detail)
+            ? <ToolBody block={detail} /> : undefined;
+          return <FileResultRow key={it} hit={it} lead={lead} aside={aside} body={body}>{target}</FileResultRow>;
         }
         return (
           <Row key={it} dense lead={lead} trailing={aside} title={it}>
@@ -111,6 +121,25 @@ function ResultList({ items, kind, rail = true, detail }: { items: string[]; kin
       })}
     </div>
   );
+}
+
+// File navigation and output disclosure are separate buttons, including keyboard focus.
+function FileResultRow({ hit, lead, aside, body, children }: { hit: string; lead: ReactNode; aside?: string; body?: ReactNode; children: ReactNode }) {
+  const openFile = useContext(OpenToolFileContext);
+  const [open, setOpen] = useState(false);
+  const file = fileReference(hit);
+  return <div className="flex min-w-0 flex-col">
+    <Row dense lead={lead} title={hit} trailing={<>
+      {aside}
+      {body && <IconButton size="sm" title={t('tool.toggleOutput')} aria-label={t('tool.toggleOutput')} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <ChevronRight className={cn('transition-transform', open && 'rotate-90')} strokeWidth={1.5} />
+      </IconButton>}
+    </>}>
+      {openFile ? <button type="button" title={hit} className="flex min-w-0 max-w-full cursor-pointer text-left hover:underline focus-visible:underline"
+        onClick={() => openFile(file.path, file.line)}>{children}</button> : children}
+    </Row>
+    {body && <Collapse open={open} className="disclosure-body"><div className="pt-1 pb-1.5">{body}</div></Collapse>}
+  </div>;
 }
 
 function splitHit(hit: string): { main: string; aside?: string } {

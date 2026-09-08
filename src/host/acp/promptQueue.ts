@@ -32,20 +32,43 @@ export interface PromptQueueDeps {
 
 export class PromptQueue {
   private items: StagedPrompt[] = [];
+  private sendingId?: string;
 
   constructor(private deps: PromptQueueDeps) {}
 
   snapshot(): QueuedPrompt[] | undefined {
     if (!this.items.length) return undefined;
-    return this.items.map(q => ({ id: q.id, text: q.text, attachments: q.prepared.attachments }));
+    return this.items.map(q => ({ id: q.id, text: q.text, attachments: q.prepared.attachments,
+      ...(q.id === this.sendingId ? { sending: true } : {}),
+    }));
   }
 
-  clear() { this.items = []; }
+  clear() { this.items = []; this.sendingId = undefined; }
+
+  // Reserve the selected entry before cancelling the active turn. Repeated clicks cannot cancel its replacement turn.
+  prioritize(id: string): boolean {
+    if (this.sendingId || !this.deps.isReady()) return false;
+    const index = this.items.findIndex(q => q.id === id);
+    if (index < 0) return false;
+    const [entry] = this.items.splice(index, 1);
+    this.items.unshift(entry!);
+    this.sendingId = id;
+    this.deps.touch();
+    return true;
+  }
+
+  release(id: string) {
+    if (this.sendingId !== id) return;
+    this.sendingId = undefined;
+    this.deps.touch();
+  }
 
   // Send the first prompt queued during the last turn, if any; nobody awaits it, so its failures end up in the log. The rest stay queued behind it
   flush(): boolean {
+    if (!this.deps.isReady() || this.deps.isRunning()) return false;
     const next = this.items.shift();
     if (!next) return false;
+    this.sendingId = undefined;
     this.deps.send(next.text, next.prepared).catch(e => this.deps.log(`queued prompt failed: ${msg(e)}`));
     return true;
   }
@@ -63,6 +86,7 @@ export class PromptQueue {
 
   // Drop a queued prompt; a no-op when it already went out
   dequeue(id: string) {
+    if (id === this.sendingId) return;
     const before = this.items.length;
     this.items = this.items.filter(q => q.id !== id);
     if (this.items.length !== before) this.deps.touch();
@@ -70,12 +94,13 @@ export class PromptQueue {
 
   // Replace a queued prompt in place: kept attachments come back from their blobs, new drafts are staged alongside. Emptying it removes it
   async editQueued(id: string, text: string, retained: number[], drafts: Draft[]): Promise<void> {
+    if (id === this.sendingId) return;
     const entry = this.items.find(q => q.id === id);
     if (!entry) throw new Error(t('queue.gone'));
     const kept = retained.map(i => entry.prepared.attachments[i]).filter((a): a is Attachment => !!a);
     const prepared = await this.stage(text, [...await restoreDrafts(this.deps.sessionId, kept, this.deps.blobs), ...drafts]);
     // It may have gone out while the blobs were being read
-    if (!this.items.includes(entry)) throw new Error(t('queue.gone'));
+    if (!this.items.includes(entry) || id === this.sendingId) throw new Error(t('queue.gone'));
     if (!prepared.blocks.some(b => b.type !== 'text' || b.text.trim())) { this.dequeue(id); return; }
     entry.text = text;
     entry.prepared = prepared;

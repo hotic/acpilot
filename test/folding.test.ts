@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { AgentTurn, PermissionBlock, ToolCallBlock } from '../src/shared/transcript';
+import type { AgentTurn, PermissionBlock, QuestionBlock, ToolCallBlock } from '../src/shared/transcript';
 import { setLocale } from '../src/webview/i18n';
 import { elapsedLabel, foldActivity, splitCodexBlocks, toolVerb } from '../src/webview/chat/folding';
 
@@ -15,7 +15,7 @@ describe('Codex process folding', () => {
     const progress = { type: 'text' as const, markdown: '继续验证。' };
     const reply = { type: 'text' as const, markdown: '检查完成。' };
     expect(splitCodexBlocks([intro, read, progress, run, reply])).toEqual({
-      process: [intro, read, progress, run], reply: [reply], permissions: [],
+      process: [intro, read, progress, run], reply: [reply], permissions: [], questions: [],
     });
     // Appending an action reclassifies the previous prose as history without duplicating it.
     expect(splitCodexBlocks([intro, read, progress]).reply).toEqual([progress]);
@@ -25,8 +25,17 @@ describe('Codex process folding', () => {
   it('keeps approval actions accessible outside a collapsed process', () => {
     const permission: PermissionBlock = { type: 'permission', id: 'p', title: '运行测试', options: [] };
     const blocks = [read, run, permission];
-    expect(splitCodexBlocks(blocks)).toEqual({ process: [read, run], reply: [], permissions: [permission] });
+    expect(splitCodexBlocks(blocks)).toEqual({ process: [read, run], reply: [], permissions: [permission], questions: [] });
     expect(foldActivity({ role: 'agent', blocks })).toEqual({ kind: 'other', label: 'Awaiting approval' });
+  });
+
+  it('keeps the open question card out of the message and the answered one outside the fold', () => {
+    const asked: QuestionBlock = { type: 'question', id: 'q', questions: [{ id: 'a', text: 'Which?', kind: 'single', options: [{ id: 'x', label: 'X' }] }] };
+    const answered: QuestionBlock = { ...asked, outcome: 'answered', answers: { a: 'x' } };
+    expect(splitCodexBlocks([read, asked])).toEqual({ process: [read], reply: [], permissions: [], questions: [] });
+    expect(foldActivity({ role: 'agent', blocks: [read, asked] })).toEqual({ kind: 'other', label: 'Waiting for your answers' });
+    const reply = { type: 'text' as const, markdown: 'Done.' };
+    expect(splitCodexBlocks([read, answered, reply])).toEqual({ process: [read], reply: [reply], permissions: [], questions: [answered] });
   });
 
   it('selects the actual pending action despite stale activity or later completed calls', () => {

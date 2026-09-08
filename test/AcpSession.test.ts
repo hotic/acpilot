@@ -108,9 +108,29 @@ describe('AcpSession', () => {
       if (plan.type !== 'plan_document') throw new Error();
       await Promise.all([s.buildPlan(plan.id, { configId: 'model', value: 'm2' }), s.buildPlan(plan.id)]);
       expect(s.view().turns).toHaveLength(4);
-      expect(s.view().turns[2]).toMatchObject({ role: 'user', text: `Implement the following approved plan:\n\n${plan.markdown}` });
+      expect(s.view().turns[2]).toMatchObject({ role: 'user', planId: plan.id, text: `Implement the following approved plan:\n\n${plan.markdown}` });
+      expect(s.toRecord().turns[2]).toMatchObject({ planId: plan.id });
       expect(s.view().controls.modeId).toBe('agent');
       expect(s.view().controls.options.find(c => c.id === 'model')?.value).toBe('m2');
+    } finally { s.dispose(); }
+  });
+
+  it('retrying failed plan execution keeps its internal instruction out of user messages', async () => {
+    const { session } = deps();
+    const s = session();
+    try {
+      await s.start();
+      await s.prompt('plan-file');
+      const plan = s.view().turns.flatMap(t => t.role === 'agent' ? t.blocks : []).find(b => b.type === 'plan_document')!;
+      if (plan.type !== 'plan_document') throw new Error('Missing plan');
+      plan.markdown += '\n\nfail once';
+      await s.buildPlan(plan.id);
+      expect(s.view().turns.at(-1)).toMatchObject({ role: 'agent', stop: 'error' });
+      await s.retryTurn();
+      expect(s.view().turns).toHaveLength(4);
+      expect(s.view().turns[2]).toMatchObject({ role: 'user', planId: plan.id,
+        text: `Implement the following approved plan:\n\n${plan.markdown}` });
+      expect(s.view().turns.at(-1)).toMatchObject({ role: 'agent', stop: 'end_turn' });
     } finally { s.dispose(); }
   });
 
@@ -510,6 +530,55 @@ describe('AcpSession', () => {
       expect(s.view().turns[2]).toMatchObject({ role: 'user', text: 'first edited', attachments: [{ kind: 'image', mimeType: 'image/png' }, { kind: 'text', name: 'n.md' }] });
       expect(s.view().turns[2]).not.toHaveProperty('edited');
     } finally { s.dispose(); }
+  });
+
+  it('queue: send now cancels the active turn, sends the selected payload once, then preserves the remaining order', async () => {
+    const { session } = deps();
+    const s = session();
+    try {
+      await s.start();
+      const running = s.prompt('slow');
+      await until(() => s.view().turns.length === 2);
+      await s.prompt('first');
+      await s.prompt('priority', [{ kind: 'image', mimeType: 'image/png', data: 'AAAA', name: 'priority.png' }]);
+      await s.prompt('last');
+      const selected = s.view().queued![1]!;
+      await Promise.all([s.sendQueued(selected.id), s.sendQueued(selected.id)]);
+      await running;
+      await until(() => !s.isRunning && !s.view().queued);
+      expect(s.view().turns.filter(t => t.role === 'user').map(t => t.text)).toEqual(['slow', 'priority', 'first', 'last']);
+      expect(s.view().turns[1]).toMatchObject({ role: 'agent', stop: 'cancelled' });
+      expect(s.view().turns[2]).toMatchObject({ role: 'user', attachments: selected.attachments });
+      // A stale row must not interrupt the next unrelated turn.
+      const next = s.prompt('slow again');
+      await until(() => s.view().turns.length === 10);
+      await s.sendQueued(selected.id);
+      expect(s.isRunning).toBe(true);
+      await s.cancel();
+      await next;
+    } finally { s.dispose(); }
+  });
+
+  it('queue: send now during attachment staging waits for the cancelled staging operation', async () => {
+    const { d, session } = deps();
+    let release!: () => void;
+    const staging = new Promise<void>(resolve => { release = resolve; });
+    const save = d.blobs.saveBlob;
+    d.blobs.saveBlob = async (...args) => { await staging; return save(...args); };
+    const s = session();
+    try {
+      await s.start();
+      const running = s.prompt('original', [{ kind: 'image', mimeType: 'image/png', data: 'AAAA' }]);
+      await s.prompt('priority');
+      await s.sendQueued(s.view().queued![0]!.id);
+      expect(s.view().turns).toEqual([]);
+      expect(s.view().queued![0]).toMatchObject({ text: 'priority', sending: true });
+      release();
+      await running;
+      await until(() => !s.isRunning);
+      expect(s.view().turns.filter(t => t.role === 'user').map(t => t.text)).toEqual(['priority']);
+      expect(s.view().queued).toBeUndefined();
+    } finally { release(); s.dispose(); }
   });
 
   // The session list sorts by updatedAt: only the user's message may move a session, never the stream that follows it

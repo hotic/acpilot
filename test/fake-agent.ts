@@ -6,6 +6,8 @@ import * as acp from '@agentclientprotocol/sdk';
 // "big" → reports a very large usage; "/compact" → compaction_update in_progress → completed, usage drops;
 // "fail" → session/prompt rejects with a typed upstream error the way Devin does (once: the same prompt succeeds when sent again);
 // "refuse" → stopReason refusal with no output; "truncate" → some text, then stopReason max_tokens; "mode:<id>" → current_mode_update to that mode
+// "ask-devin" / "ask-kimi" → the ask_user_question tool call followed by an elicitation/create form shaped like that CLI's (Devin: no toolCallId, label in const,
+// description in title, allowOther; Kimi: toolCallId, question texts joined in message); "ask-grok" → the `_x.ai/ask_user_question` request; the reply echoes what came back
 // Resume: when resume doesn't know the sessionId, a cwd containing "gone" mimics Devin's session_not_found, otherwise reports unknown session
 // Login: when cwd contains "needs-auth", session/new requires authenticate first; authenticate validates _meta.api_key the way Devin does (only accepts good-key)
 // Process lifecycle knobs (env): FAKE_INIT_FAIL → initialize answers an error while the process stays up (an orphan unless the client kills it);
@@ -109,6 +111,7 @@ const app = acp.agent({ name: 'fake-agent' })
       await send({ sessionUpdate: 'current_mode_update', currentModeId: text.slice(5) });
       return { stopReason: 'end_turn' };
     }
+    if (text.startsWith('ask-')) return ask(text, sid, send, client);
     if (text.startsWith('plan-')) {
       const path = '/Users/test/.devin/plans/demo.md';
       const markdown = '# Demo plan\n\nCreate hello.txt.';
@@ -245,6 +248,41 @@ const app = acp.agent({ name: 'fake-agent' })
     await send({ sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'compact', description: 'compact it' }] });
     return { stopReason: 'end_turn' };
   });
+
+// The ask_user_question scripts, one per CLI dialect; the reply text reports the raw answer so the test can check the wire shape
+async function ask(text: string, sid: string, send: (u: acp.SessionUpdate) => Promise<void>, client: acp.AgentContext): Promise<acp.PromptResponse> {
+  const questions: { header: string; question: string; options: { label: string; description?: string }[]; multiSelect?: boolean }[] = [
+    { header: 'Name', question: 'What should the file be called?', options: [{ label: 'report', description: 'A generic report' }, { label: 'notes', description: 'Loose notes' }] },
+    { header: 'Folders', question: 'Where should it go?', options: [{ label: 'src' }, { label: 'docs' }], multiSelect: true },
+  ];
+  const id = 'ask1';
+  let reply: string;
+  if (text === 'ask-grok') {
+    await send({ sessionUpdate: 'tool_call', toolCallId: id, title: 'ask_user_question', rawInput: { questions } });
+    const r = await client.request<Record<string, unknown>>('_x.ai/ask_user_question', { sessionId: sid, toolCallId: id, questions, mode: 'default' });
+    reply = JSON.stringify(r);
+  } else {
+    const devin = text === 'ask-devin';
+    await send({ sessionUpdate: 'tool_call', toolCallId: id, title: devin ? 'Asked user 2 questions Name, Folders' : 'AskUserQuestion', kind: 'other', status: 'pending', rawInput: { questions } });
+    const req: acp.CreateElicitationRequest = {
+      sessionId: sid, mode: 'form', ...(devin ? {} : { toolCallId: id }),
+      message: devin ? questions[0]!.question : questions.map(q => q.question).join('\n'),
+      requestedSchema: {
+        type: 'object', required: ['q0', 'q1'],
+        properties: {
+          q0: { type: 'string', title: 'Name', ...(devin ? { description: questions[0]!.question } : {}), oneOf: questions[0]!.options.map(o => ({ const: o.label, title: devin ? o.description ?? o.label : o.label })) },
+          q1: { type: 'array', title: 'Folders', ...(devin ? { description: questions[1]!.question } : {}), items: { anyOf: questions[1]!.options.map(o => ({ const: o.label, title: o.label })) } },
+        },
+      },
+      ...(devin ? { _meta: { 'cognition.ai/allowOther': true } } : {}),
+    };
+    const r = await client.request(acp.methods.client.elicitation.create, req);
+    reply = JSON.stringify(r);
+  }
+  await send({ sessionUpdate: 'tool_call_update', toolCallId: id, status: 'completed', content: [{ type: 'content', content: { type: 'text', text: reply } }] });
+  await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: reply } });
+  return { stopReason: cancelled.has(sid) ? 'cancelled' : 'end_turn' };
+}
 
 let authed = false;
 const cancelled = new Set<string>();

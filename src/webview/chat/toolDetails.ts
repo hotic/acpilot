@@ -1,5 +1,11 @@
 import type { AgentBlock, ToolCallBlock } from '@shared/transcript';
 
+// Strip only a trailing location suffix; preserve drive letters and full paths.
+export function fileReference(hit: string): { path: string; line?: number } {
+  const match = /^(.+?):(\d+)(?:[–-]\d+)?(?::\d+)?$/.exec(hit);
+  return match ? { path: match[1]!, line: Number(match[2]) } : { path: hit };
+}
+
 // Group adjacent successful reads only; preserve ordering and visible failures.
 export function groupReadCalls(blocks: AgentBlock[]): (AgentBlock | ToolCallBlock[])[] {
   const result: (AgentBlock | ToolCallBlock[])[] = [];

@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { captureTurnSettings } from '@shared/turnSettings';
 import type { EditTurnRequest } from '@shared/protocol';
 import * as acp from '@agentclientprotocol/sdk';
-import type { AgentId, AuthMethodInfo, Draft, SessionControls, SessionView, SlashCommand, Turn, TurnError, TurnSettings, Usage } from '@shared/transcript';
+import type { AgentId, AuthMethodInfo, Draft, QuestionAnswers, SessionControls, SessionView, SlashCommand, Turn, TurnError, TurnSettings, Usage } from '@shared/transcript';
 import type { AgentRuntimeInfo } from '@shared/inventory';
 import type { AgentRegistry } from './AgentRegistry';
 import { AgentProcess } from './AgentProcess';
 import { capturePlan, planDocuments } from './plans';
+import { planExecutionPrompt } from '@shared/planExecution';
 import { CompactionCompletion, isCompactCommand } from './compaction';
 import { applyModelSources, type ModelSources } from '@shared/modelSources';
 import { readModelSources } from './modelSources';
@@ -14,6 +15,7 @@ import { fetchGrokUsage } from './grokUsage';
 import { preparePrompt, type BlobStore } from './attachments';
 import { activityOf, applyUpdate, endTurn, failTurn, initControls, applyConfigOptions, type NormalizeState } from './normalize';
 import { PermissionGate } from './permissions';
+import { QuestionGate } from './questions';
 import { PromptQueue, type StagedSend } from './promptQueue';
 import { editTurn, retryTurn, type SessionEditCtx, type TurnPhase } from './sessionEdit';
 import { AccountAuthError, authHintOf, isAuth, isSessionGone, summarizePrompt, turnErrorOf } from './sessionErrors';
@@ -81,6 +83,7 @@ export class AcpSession {
   private replaying = false;
   private proc?: AgentProcess;
   private perms: PermissionGate;
+  private questions: QuestionGate;
   private queue: PromptQueue;
   private buildingPlan = false;
   // Usage at the end of the last auto-compaction: don't compact again until it has grown back a fair bit, so a "won't shrink" case doesn't fire every turn
@@ -107,6 +110,7 @@ export class AcpSession {
     const c = record.controls as Partial<SessionControls> | undefined;
     this.state = { turns: record.turns, controls: { modes: c?.modes ?? [], modeId: c?.modeId, modeConfigId: c?.modeConfigId, options: c?.options ?? [] }, usage: record.usage, commands: record.commands, title: record.title };
     this.perms = new PermissionGate({ state: () => this.state, touch: () => this.touch() });
+    this.questions = new QuestionGate({ state: () => this.state, touch: () => this.touch() });
     this.queue = new PromptQueue({
       sessionId: this.id,
       blobs: this.deps.blobs,
@@ -190,7 +194,7 @@ export class AcpSession {
       set autoApprove(v) { s.perms.autoApprove = v; },
       syntheticModes: () => s.syntheticModes(),
       onUpdate: n => s.onUpdate(n),
-      prompt: (text, attachments, auto, staged) => s.prompt(text, attachments, auto, staged),
+      prompt: (text, attachments, auto, staged, planId) => s.prompt(text, attachments, auto, staged, planId),
       bump: () => s.bump(),
       touch: () => s.touch(),
       flushQueued: () => s.queue.flush(),
@@ -235,6 +239,8 @@ export class AcpSession {
     this.proc = await AgentProcess.spawn(def, bin, this.cwd, {
       onUpdate: n => this.onUpdate(n),
       onPermission: (req, signal) => this.perms.onPermission(req, signal),
+      onElicitation: (req, signal) => this.questions.onElicitation(req, signal),
+      onGrokQuestion: (req, signal) => this.questions.onGrokQuestion(req, signal),
       onStderr: line => {
         this.log(`stderr: ${line}`);
         const hint = authHintOf(line);
@@ -390,7 +396,7 @@ export class AcpSession {
   // auto: sent by ACPilot itself (over-threshold /compact); doesn't change the title and renders as a note line.
   // Attachments are staged (blobs written, image files read) before the turn opens. running is claimed before that await so a second send arriving
   // meanwhile queues instead of racing onto the wire; if the session was cancelled or closed while staging, the prompt is dropped without a turn
-  async prompt(text: string, attachments: Draft[] = [], auto = false, staged?: StagedSend): Promise<void> {
+  async prompt(text: string, attachments: Draft[] = [], auto = false, staged?: StagedSend, planId?: string): Promise<void> {
     if (this.status !== 'ready') return;
     if (!text.trim() && attachments.length === 0 && !staged?.prepared.blocks.length) return;
     if (this.phase.running) { await this.queue.enqueue(text, attachments, staged?.prepared); return; }
@@ -433,8 +439,9 @@ export class AcpSession {
     if (prepared.attachments.length) this.log(`attachments: ${prepared.blocks.slice(text ? 1 : 0).map(b => b.type).join(' ')}`);
     this.state.turns.push(auto ? { role: 'user', text, auto: true } : { role: 'user', id: randomUUID(), text,
       settings: captureTurnSettings(this.state.controls), ...(staged?.edited ? { edited: true as const } : {}),
+      ...(planId ? { planId } : {}),
       ...(prepared.attachments.length ? { attachments: prepared.attachments } : {}) });
-    if (!auto && (!this.state.title || this.state.title === t('session.untitled'))) this.state.title = summarizePrompt(text, prepared.attachments).slice(0, TITLE_MAX);
+    if (!auto && !planId && (!this.state.title || this.state.title === t('session.untitled'))) this.state.title = summarizePrompt(text, prepared.attachments).slice(0, TITLE_MAX);
     this.state.turns.push({ role: 'agent', blocks: [], startedAt: Date.now(), activity: activityOf(this.state.turns) });
     this.touch();
     let stop: acp.StopReason = 'cancelled';
@@ -471,6 +478,18 @@ export class AcpSession {
 
   dequeue(id: string) { this.queue.dequeue(id); }
 
+  async sendQueued(id: string): Promise<void> {
+    if (!this.queue.prioritize(id)) return;
+    try {
+      // cancel is only a notification; prompt completion owns the next flush, so ACP prompts never overlap.
+      if (this.phase.running) await this.cancel();
+      else this.queue.flush();
+    } catch (e) {
+      this.queue.release(id);
+      throw e;
+    }
+  }
+
   async editQueued(id: string, text: string, retained: number[], drafts: Draft[]): Promise<void> {
     await this.queue.editQueued(id, text, retained, drafts);
   }
@@ -496,6 +515,7 @@ export class AcpSession {
     this.compactionCompletion = undefined;
     if (error) failTurn(this.state, error); else endTurn(this.state, stop);
     this.perms.cancelAll();
+    this.questions.cancelAll();
     this.phase.running = false;
   }
 
@@ -514,6 +534,7 @@ export class AcpSession {
     // Nothing is on the wire yet: just make sure the prompt being staged never goes out
     if (this.phase.staging) { this.phase.stagingAborted = true; return; }
     this.perms.cancelAll();
+    this.questions.cancelAll();
     // A turn parked behind a background compaction has no request left on the wire; releasing the latch is what lets it settle.
     // Devin / Kimi usually confirm the cancellation in prose, but the UI must not depend on that text arriving
     this.compactionCompletion?.close();
@@ -593,6 +614,11 @@ export class AcpSession {
     this.perms.resolve(blockId, optionId);
   }
 
+  // The question card was closed in the webview: answers keyed by question id; skip lets the agent go on with what it has
+  answerQuestions(blockId: string, answers: QuestionAnswers, skip = false) {
+    this.questions.resolve(blockId, answers, skip);
+  }
+
   // Apply the selected execution model before releasing approval or dispatching
   // a new implementation turn. A failed model switch leaves approval pending.
   async buildPlan(planId: string, model?: { configId: string; value: string }, optionId?: string): Promise<void> {
@@ -627,7 +653,7 @@ export class AcpSession {
         if (this.status !== 'ready' || this.phase.running) return;
         plan.status = 'executing';
         // Model-facing instruction: fixed English regardless of UI language
-        await this.prompt(`Implement the following approved plan:\n\n${plan.markdown}`);
+        await this.prompt(planExecutionPrompt(plan.markdown), [], false, undefined, plan.id);
       }
     } finally {
       this.buildingPlan = false;
@@ -641,6 +667,7 @@ export class AcpSession {
     this.queue.clear();
     if (this.phase.running) this.settle('cancelled');
     this.perms.cancelAll();
+    this.questions.cancelAll();
     this.proc?.kill();
     this.proc = undefined;
   }
@@ -664,6 +691,7 @@ export class AcpSession {
       this.usageRevision++;
     }
     if (u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update') {
+      this.questions.rememberToolInput(u);
       const plan = capturePlan(this.state.turns, u);
       // Kimi 0.41.0 confirms the exit in tool output but omits current_mode_update.
       // Never infer an exit from the approval click alone: cancellation may win.

@@ -3,11 +3,20 @@ import { applyUpdate, emptyState } from '../src/host/acp/normalize';
 import { setLocale } from '../src/webview/i18n';
 import { foldActivity, toolVerb } from '../src/webview/chat/folding';
 import type { AgentTurn, ToolCallBlock } from '../src/shared/transcript';
-import { groupReadCalls, isFileListing, isLineCount, toolFiles } from '../src/webview/chat/toolDetails';
+import { fileReference, groupReadCalls, isFileListing, isLineCount, toolFiles } from '../src/webview/chat/toolDetails';
 
 afterEach(() => setLocale('en'));
 
 describe('ACP tool presentation', () => {
+  it.each([
+    ['/repo/my file.ts:408–420', { path: '/repo/my file.ts', line: 408 }],
+    ['src/a.ts:12:8', { path: 'src/a.ts', line: 12 }],
+    ['C:\\repo\\a.ts:27-30', { path: 'C:\\repo\\a.ts', line: 27 }],
+    ['file:///repo/my%20file.ts:9', { path: 'file:///repo/my%20file.ts', line: 9 }],
+    ['src/a.ts', { path: 'src/a.ts' }],
+  ])('preserves the editor destination for %s', (hit, expected) => {
+    expect(fileReference(hit)).toEqual(expected);
+  });
   it('groups consecutive reads while preserving output and action boundaries', () => {
     const a: ToolCallBlock = { type: 'tool_call', id: 'a', kind: 'read', verb: 'Read', status: 'completed', target: 'a.ts', content: { type: 'text', text: 'source A' } };
     const b = { ...a, id: 'b', target: 'b.ts', content: { type: 'text' as const, text: 'source B' } };

@@ -18,6 +18,44 @@ describe('diffLines', () => {
 });
 
 describe('applyUpdate', () => {
+  it('times observed execution across sparse updates, excluding pending approval and replay', () => {
+    const s = emptyState();
+    s.turns.push({ role: 'agent', blocks: [], startedAt: 1000 });
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(2000);
+    try {
+      applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'sh', title: 'bash', status: 'pending' });
+      expect(s.turns[0]).toMatchObject({ blocks: [expect.not.objectContaining({ startedAt: expect.any(Number) })] });
+      clock.mockReturnValue(5000);
+      applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'sh', status: 'in_progress' });
+      clock.mockReturnValue(8000);
+      applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'sh', kind: 'execute', rawInput: { command: 'pnpm test' } });
+      expect(s.turns[0]).toMatchObject({ blocks: [{ startedAt: 5000 }] });
+      clock.mockReturnValue(14000);
+      applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'sh', status: 'completed' });
+      clock.mockReturnValue(19000);
+      applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'sh', status: 'completed' });
+      endTurn(s, 'end_turn');
+      expect(s.turns[0]).toMatchObject({ blocks: [{ startedAt: 5000, endedAt: 14000 }] });
+
+      const replay = emptyState();
+      applyUpdate(replay, { sessionUpdate: 'tool_call', toolCallId: 'old', title: 'bash', status: 'in_progress' });
+      applyUpdate(replay, { sessionUpdate: 'tool_call_update', toolCallId: 'old', status: 'completed' });
+      expect(replay.turns[0]).toMatchObject({ blocks: [expect.not.objectContaining({ startedAt: expect.any(Number) })] });
+    } finally { clock.mockRestore(); }
+  });
+
+  it.each(['cancelled', 'end_turn'] as const)('freezes outstanding tool timers when the turn ends with %s', stop => {
+    const s = emptyState();
+    s.turns.push({ role: 'agent', blocks: [], startedAt: 1000 });
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(2000);
+    try {
+      applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'sh', kind: 'execute', status: 'in_progress' });
+      clock.mockReturnValue(6000);
+      endTurn(s, stop);
+      expect(s.turns[0]).toMatchObject({ blocks: [{ startedAt: 2000, endedAt: 6000, status: stop === 'cancelled' ? 'cancelled' : 'failed' }] });
+    } finally { clock.mockRestore(); }
+  });
+
   it('records the full live turn duration once, without inventing replay timestamps', () => {
     const s = emptyState();
     s.turns.push({ role: 'agent', blocks: [], startedAt: 1000 });

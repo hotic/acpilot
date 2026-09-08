@@ -102,8 +102,10 @@ export function App() {
     searchFiles,
     stop: () => post({ type: 'stop' }),
     permission: (blockId, optionId) => post({ type: 'permission', blockId, optionId }),
+    answer: (blockId, answers, skip) => post({ type: 'answer', blockId, answers, ...(skip ? { skip } : {}) }),
     buildPlan: (sessionId, planId, model, optionId) => post({ type: 'buildPlan', sessionId, planId, model, optionId }),
     openPlan: (sessionId, planId) => post({ type: 'openPlan', sessionId, planId }),
+    openFile: (sessionId, path, line) => post({ type: 'openFile', sessionId, path, line }),
     setMode: id => post({ type: 'setMode', id }),
     setConfig: (configId, value) => post({ type: 'setConfig', configId, value }),
     selectAgent: id => post({ type: 'selectAgent', id }),
@@ -122,6 +124,7 @@ export function App() {
     retry: () => post({ type: 'retry' }),
     retryTurn: () => post({ type: 'retryTurn' }),
     dequeue: (sessionId, id) => post({ type: 'dequeue', sessionId, id }),
+    sendQueued: (sessionId, id) => post({ type: 'sendQueued', sessionId, id }),
     editQueued: (sessionId, id, text, retainedAttachments, attachments) => post({ type: 'editQueued', sessionId, id, text, retainedAttachments, attachments }),
   }), []);
 

@@ -80,6 +80,12 @@
   /* Sizes: 4px grid. Row height = control height = 28; lead slot 20, icon in slot 14; icon in controls 16.
      Chips (menu selectors) sit one tier below full controls, Cursor-style: snug around their text instead of filling the row */
   --row: 28px;
+  --row-dense: 24px;
+  --chat-row: 26px;
+  --process-row: 22px;
+  --process-row-gap: 2px;
+  --process-prose-gap: 10px;
+  --scroll-fade-size: 28px;
   --row-hit-outset: 6px;
   --ctl: 28px;
   --ctl-sm: 22px;
@@ -120,8 +126,10 @@
 
   /* Max lines shown in a terminal block's output area; beyond that it scrolls inside the block */
   --term-lines: 12;
-  /* Expanded process history stays within eight rows or half the viewport. */
-  --process-history-max: min(calc(var(--row) * 8), 45dvh);
+  /* Thoughts stay within eight rows or half the viewport. */
+  --thought-body-max: min(calc(var(--row) * 8), 45dvh);
+  /* The question card's list of questions scrolls beyond twelve rows or half the viewport, so the composer stays in reach */
+  --question-body-max: min(calc(var(--row) * 12), 50dvh);
   /* Max rows shown in a menu; beyond that it scrolls inside the menu (Devin's 210 models) */
   --pop-rows: 8;
 
@@ -143,10 +151,6 @@
 .disclosure-body { margin-inline: calc(-1 * var(--row-hit-outset)); }
 .disclosure-body > div { padding-inline: var(--row-hit-outset); }
 
-.row-interactive[aria-expanded="true"] .file-toggle-chevron {
-  transform: rotate(90deg);
-}
-
 /* User text and reply prose align with the action icon column. */
 .user-message {
   padding-inline: var(--pad);
@@ -154,27 +158,45 @@
 
 .agent-message {
   padding-inline: var(--pad);
+  --row: var(--chat-row);
 }
 
+/* Summaries keep breathing room; consecutive process rows form a compact list. */
+.process-history, .process-lines {
+  --row: var(--process-row);
+  --row-dense: var(--process-row);
+  --ctl-sm: var(--process-row);
+}
+
+/* Expanded history grows with its content; the conversation owns scrolling. */
 .process-history {
-  max-height: var(--process-history-max);
-  /* Include row hover padding inside this viewport without shifting its text. */
   margin-inline: calc(-1 * var(--row-hit-outset));
   padding-inline: var(--row-hit-outset);
   min-width: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  overflow-anchor: none;
-  scrollbar-width: none;
 }
 
-/* Keep scrolling available without showing a track, including hover and focus. */
-.acp-shell .process-history::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
+/* Narrative text separates consecutive action groups without loosening tool rows.
+   Use one leading margin per boundary, including adjacent prose blocks. */
+.process-content { gap: var(--process-row-gap); }
+.process-content > .acp-prose:not(:first-child),
+.process-content > .acp-prose + * {
+  margin-block-start: calc(var(--process-prose-gap) - var(--process-row-gap));
 }
+
+/* Thoughts retain a bounded viewport independently of the enclosing process. */
+.thought-body {
+  max-height: var(--thought-body-max);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.scroll-fade {
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
+}
+.scroll-fade[data-more-above] { --fade-top: var(--scroll-fade-size); }
+.scroll-fade[data-more-below] { --fade-bottom: var(--scroll-fade-size); }
 
 [data-theme="light"] {
   color-scheme: light;
@@ -242,6 +264,10 @@
 /* Appearance axes (acpilot.appearance.*): change tokens only, never structure */
 [data-density="compact"] { --row: 24px; --ctl: 24px; --ctl-sm: 20px; --pad: 12px; --pad-y: 12px; --page: 16px; --gap: 6px; --msg-gap: 12px; --hdr: 44px; --text-1-lh: 18px; }
 [data-density="airy"]    { --row: 32px; --ctl: 32px; --ctl-sm: 26px; --pad: 16px; --pad-y: 22px; --page: 24px; --gap: 12px; --msg-gap: 24px; --hdr: 60px; --text-1-lh: 22px; }
+[data-density="compact"] { --row-dense: 20px; --chat-row: 24px; --process-row: 22px; }
+[data-density="airy"] { --row-dense: 28px; --chat-row: 30px; --process-row: 24px; }
+[data-density="compact"] { --process-prose-gap: 8px; }
+[data-density="airy"] { --process-prose-gap: 12px; }
 [data-radius="8"]  { --r-sm: 5px; --r-md: 6px; --r-lg: 8px; }
 [data-radius="16"] { --r-sm: 6px; --r-md: 10px; --r-lg: 16px; }
 [data-font="inter"] { --font: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
@@ -318,6 +344,7 @@
   --radius-full: 9999px;
 
   --spacing-row: var(--row);
+  --spacing-row-dense: var(--row-dense);
   --spacing-ctl: var(--ctl);
   --spacing-ctl-sm: var(--ctl-sm);
   --spacing-lead: var(--lead);
@@ -339,6 +366,7 @@
   --default-transition-duration: var(--dur);
   --spacing-term: calc(var(--term-lines) * var(--text-mono-lh));
   --spacing-pop: calc(var(--pop-rows) * var(--row));
+  --spacing-question-body: var(--question-body-max);
   --spacing-pop-sm: var(--pop-w-sm);
   --spacing-pop-md: var(--pop-w-md);
   --spacing-pop-lg: var(--pop-w-lg);
@@ -528,6 +556,11 @@
 .acp-prose h2 { font-size: calc(var(--text-1) * 1.25); }
 .acp-prose h3 { font-size: calc(var(--text-1) * 1.15); }
 .acp-prose :is(h4, h5, h6) { font-size: var(--text-1); }
+/* Plan documents use the card's text scale; weight and spacing mark sections. */
+.plan-document .acp-prose :is(h1, h2, h3, h4, h5, h6) { margin-top: 0; font-size: var(--text-1); }
+.plan-document .acp-prose li { padding-block: 0; }
+/* Reserve only the opening block's corner for the file action. */
+.plan-document .acp-prose > :first-child { min-height: var(--ctl-sm); padding-inline-end: calc(var(--ctl-sm) + var(--gap)); }
 /* Tailwind preflight strips list-style; restore the markers streamdown's own (ungenerated) classes would have set */
 .acp-prose :is(ul, ol) { margin: 0; padding-left: 1.2em; }
 .acp-prose ul { list-style-type: disc; }

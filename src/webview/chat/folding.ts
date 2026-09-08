@@ -1,15 +1,17 @@
-import type { AgentBlock, AgentTurn, TextBlock, ToolCallBlock, ToolKind } from '@shared/transcript';
+import type { AgentBlock, AgentTurn, QuestionBlock, TextBlock, ToolCallBlock, ToolKind } from '@shared/transcript';
 import type { MsgKey } from '@shared/i18n';
 import { t } from '../i18n';
 
 // ACP has no final/commentary distinction: only the trailing text stays outside the process fold.
 // If another action arrives, that text becomes process history on the next render.
+// Question cards are the user's own doing: the resolved ones stay outside the fold as records, the open one is pinned above the composer
 export function splitCodexBlocks(blocks: AgentBlock[]) {
   const permissions = blocks.filter(b => b.type === 'permission');
-  const content = blocks.filter(b => b.type !== 'permission');
+  const questions = blocks.filter((b): b is QuestionBlock => b.type === 'question' && !!b.outcome);
+  const content = blocks.filter(b => b.type !== 'permission' && b.type !== 'question');
   let end = content.length;
   while (end > 0 && content[end - 1]?.type === 'text') end--;
-  return { process: content.slice(0, end), reply: content.slice(end) as TextBlock[], permissions };
+  return { process: content.slice(0, end), reply: content.slice(end) as TextBlock[], permissions, questions };
 }
 
 const FOLD_KEY: Record<ToolCallBlock['status'], MsgKey> = {
@@ -35,6 +37,7 @@ export interface FoldActivity {
 
 export function foldActivity(turn: AgentTurn): FoldActivity {
   if (turn.blocks.some(b => b.type === 'permission')) return { kind: 'other', label: t('host.awaitingApproval') };
+  if (turn.blocks.some(b => b.type === 'question' && !b.outcome)) return { kind: 'other', label: t('host.awaitingAnswers') };
   // Concurrent calls can finish out of order; a newer completed call must not hide an active one.
   for (let i = turn.blocks.length - 1; i >= 0; i--) {
     const b = turn.blocks[i]!;
