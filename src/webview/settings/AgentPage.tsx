@@ -3,6 +3,7 @@ import { FileText, Globe, KeyRound, Plus, Server, SlidersHorizontal, Sparkles, X
 import type { AccountInfo, AgentInfo, ConfigControl } from '@shared/transcript';
 import type { AgentInventory, InventoryFile, InventoryMcp, InventorySkill, McpTransport } from '@shared/inventory';
 import type { SettingsView } from '@shared/settings';
+import { familyLabel } from '@shared/composerControls';
 import { familyHidden, groupModels, setFamilyVisible, variantLabel, type ModelFamily } from '@shared/models';
 import { IconButton } from '../ui/Button';
 import { QuotaBars } from '../ui/QuotaBars';
@@ -149,14 +150,15 @@ function ModelsSection({ agent, controls, settings, on }: { agent: AgentInfo; co
           <Section key={`${c.id}:${g.key}`} title={g.title} count={g.title ? g.families.filter(f => !familyHidden(f, off)).length : undefined}>
             {g.families.map(f => {
               const shown = !familyHidden(f, off);
+              const name = familyLabel(c, f);
               return (
                 <ItemRow
                   key={f.key}
-                  lead={<ModelMark family={f.name} />}
-                  title={f.name}
+                  lead={<ModelMark family={name} />}
+                  title={name}
                   desc={[f.source, summary(f)].filter(Boolean).join(' · ') || undefined}
                   dim={!shown}
-                  trailing={<Switch checked={shown} onChange={v => toggle(c, f, v)} label={`${f.name} · ${f.source ?? c.name}`} />}
+                  trailing={<Switch checked={shown} onChange={v => toggle(c, f, v)} label={`${name} · ${f.source ?? c.name}`} />}
                 />
               );
             })}

@@ -1,4 +1,5 @@
 import type { ConfigControl, SessionOption } from './transcript';
+import type { ModelFamily } from './models';
 import { groupModels } from './models';
 
 const LEVELS = ['None', 'Minimal', 'Low', 'Medium', 'High', 'XHigh', 'Max', 'Thinking'];
@@ -15,6 +16,15 @@ export function effortLabel(option: SessionOption): string {
 export function effortOptions(options: SessionOption[]): SessionOption[] {
   const rank = (name: string) => { const i = LEVELS.indexOf(name); return i < 0 ? LEVELS.length : i; };
   return options.map(o => ({ ...o, name: effortLabel(o) })).sort((a, b) => rank(a.name) - rank(b.name));
+}
+
+// Settings rows reuse composer labels; hide/show keys stay on the original ACP names.
+export function familyLabel(control: Pick<ConfigControl, 'id' | 'category'>, family: Pick<ModelFamily, 'name' | 'variants'>): string {
+  const option = family.variants[0];
+  if (option && (control.category === 'thought_level' || (!control.category && /^(reasoning_effort|thought_level|thinking|thinking_level)$/.test(control.id)))) {
+    return effortLabel(option);
+  }
+  return family.name;
 }
 
 // ACP capabilities choose the contents of one composer, never its layout.

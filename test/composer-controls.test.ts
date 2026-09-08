@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { composerControls, effortOptions } from '../src/shared/composerControls';
+import { composerControls, effortOptions, familyLabel } from '../src/shared/composerControls';
+import { groupModels } from '../src/shared/models';
 import type { ConfigControl } from '../src/shared/transcript';
 
 describe('shared composer controls', () => {
@@ -25,6 +26,21 @@ describe('shared composer controls', () => {
       { id: 'xhigh', name: 'XHigh' },
       { id: 'vendor-auto', name: 'Adaptive budget' },
     ]);
+  });
+
+  it('settings thinking rows drop Effort without changing hide keys', () => {
+    const control: ConfigControl = {
+      id: 'reasoning_effort', name: 'Reasoning', category: 'thought_level',
+      options: [
+        { id: 'xhigh', name: 'Extra High Effort' },
+        { id: 'high', name: 'High Effort' },
+        { id: 'medium', name: 'Medium Effort' },
+        { id: 'low', name: 'Low Effort' },
+      ],
+    };
+    const families = groupModels(control.options);
+    expect(families.map(f => f.name)).toEqual(['Extra High Effort', 'High Effort', 'Medium Effort', 'Low Effort']);
+    expect(families.map(f => familyLabel(control, f))).toEqual(['XHigh', 'High', 'Medium', 'Low']);
   });
 
   it('retains legacy Devin model variants and respects explicit custom categories', () => {
