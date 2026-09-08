@@ -27,6 +27,8 @@ export interface PromptQueueDeps {
   touch: () => void;
   isReady: () => boolean;
   isRunning: () => boolean;
+  // starting sessions accept a first prompt into the queue; flush waits for ready
+  canEnqueue: () => boolean;
   send: (text: string, prepared: PreparedPrompt) => Promise<void>;
 }
 
@@ -73,12 +75,12 @@ export class PromptQueue {
     return true;
   }
 
-  // Queue a prompt behind the running turn, staging its drafts first so the row above the composer can show them. A staging failure keeps the
-  // text alone (as a direct send does), a per-draft problem is reported now and not again at send time. The turn may end while staging: then the
-  // entry goes straight out, since the turn's own flush found the queue empty
+  // Queue a prompt behind the running turn (or while the session is still starting). Staging happens now so the row above the composer can
+  // show attachments; a staging failure keeps the text alone. The turn may end while staging: then the entry goes straight out, since the
+  // turn's own flush found the queue empty
   async enqueue(text: string, attachments: Draft[], staged?: PreparedPrompt): Promise<void> {
     const prepared = staged ?? await this.stage(text, attachments);
-    if (!prepared.blocks.length || !this.deps.isReady()) return;
+    if (!prepared.blocks.length || !this.deps.canEnqueue()) return;
     this.items.push({ id: randomUUID(), text, prepared });
     this.deps.bump();
     if (!this.deps.isRunning()) this.flush();

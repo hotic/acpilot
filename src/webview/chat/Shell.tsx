@@ -150,7 +150,8 @@ export function Shell(p: ShellProps) {
   );
 
   const composerProps: ComposerProps = useMemo(() => ({
-    running: p.running, disabled: p.status !== 'ready',
+    running: p.running, disabled: p.status !== 'ready' && p.status !== 'starting',
+    controlsLocked: p.status !== 'ready',
     theme: p.theme, turns: p.turns, controls: p.controls, hidden: p.hidden?.[p.agent.id],
     usage: p.usage, canCompact: p.canCompact, cwd: p.cwd ?? '',
     onSend: on.send, onSearchFiles: on.searchFiles, onNotice: notice, onStop: on.stop,

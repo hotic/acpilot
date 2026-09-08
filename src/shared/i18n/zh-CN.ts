@@ -105,7 +105,7 @@ export const zhCN = {
   'usage.seg.system.hint': '系统提示、工具定义等协议外的开销，由总量反推；压缩产生的摘要也算在这里',
 
   // Notice bar above the composer
-  'notice.connecting': '正在连接 {agent}…',
+  'notice.connecting': '正在启动 {agent}…',
   'notice.login.title': '需要登录 {agent}',
   'notice.login.accounts': '导入本机 CLI 已有的登录，或在终端登录一个新账号；凭据只存在本机钥匙串里',
   'notice.login.methods': '选一种方式登录，完成后重试',

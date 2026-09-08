@@ -96,7 +96,7 @@ export const en = {
   'usage.seg.system': 'System & other',
   'usage.seg.system.hint': 'System prompt, tool definitions and other overhead outside the protocol, inferred from the total; compaction summaries count here too',
 
-  'notice.connecting': 'Connecting to {agent}…',
+  'notice.connecting': 'Starting {agent}…',
   'notice.login.title': 'Sign in to {agent}',
   'notice.login.accounts': 'Import the CLI’s existing login, or sign in to a new account in the terminal; credentials stay in the local keychain',
   'notice.login.methods': 'Pick a sign-in method, then retry',

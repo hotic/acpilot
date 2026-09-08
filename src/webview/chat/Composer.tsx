@@ -21,8 +21,10 @@ import { useComposerDraft } from './useComposerDraft';
 
 export interface ComposerProps {
   running: boolean;
-  // Entire composer disabled while the session isn't ready (connecting / login required / read-only)
+  // Text + send locked for login / error / read-only. Starting still accepts a first prompt into the queue
   disabled?: boolean;
+  // Mode / model chips stay inert until session/new has real controls
+  controlsLocked?: boolean;
   theme: 'dark' | 'light';
   controls: SessionControls;
   turns: Turn[];
@@ -195,49 +197,51 @@ export function Composer(p: ComposerProps) {
       {mentionOpen && <MentionList anchor={fieldRef} hits={hits} active={active} empty={span!.query.length > 0} onHover={setActive} onPick={pick} />}
       {/* The row is a container: below the sm tier (a 380 sidebar leaves ~324 here) the mode chip collapses to icon + caret so the option chips keep their room —
           the same move Cursor makes in a narrow sidebar; the editor panel is wide enough for the names */}
-      <fieldset disabled={p.disabled || sending} className="@container flex min-w-0 items-center gap-1 px-2 pt-1 pb-2">
-        <div className="flex shrink-0 items-center gap-1">
-          {/* Mode is the one solid chip and never truncates; single-line rows with a glyph each, the description rides along as a tooltip */}
-          {p.controls.modes.length > 0 && (
-            <Menu
-              side="top"
-              width="sm"
-              items={p.controls.modes.map(m => {
-                const Icon = modeIcon(m);
-                return { id: m.id, label: m.name, hint: m.description, icon: <Icon strokeWidth={1.75} />, checked: m.id === p.controls.modeId };
-              })}
-              onSelect={p.onSetMode}
-              onOpenChange={onOpenChange}
-            >
-              {({ open, toggle, ref }) => {
-                const Icon = mode ? modeIcon(mode) : undefined;
-                return (
-                  <Chip
-                    ref={ref} variant="solid" className="ml-0.5 shrink-0" narrow="icon" data-open={open || undefined} onClick={toggle}
-                    title={mode ? [mode.name, mode.description].filter(Boolean).join(' · ') : t('composer.mode')} icon={Icon && <Icon strokeWidth={1.75} />}
-                  >
-                    {mode?.name ?? t('composer.mode')}
-                  </Chip>
-                );
-              }}
-            </Menu>
-          )}
-        </div>
-        <div className="min-w-0 flex-1" />
-        {other.map(c => (
-          <OptionControl key={c.id} end control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
-        ))}
-        {p.usage && <ContextRing usage={p.usage} turns={p.turns} canCompact={!!p.canCompact && !dim} onCompact={p.onCompact} onOpenChange={onOpenChange} />}
-        {models.map((c, i) => (
-          <ModelControl key={c.id} control={c} hidden={p.hidden?.[c.id]} reasoning={i === 0 ? reasoning : undefined}
-            onSetReasoning={p.onSetConfig} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
-        ))}
-        {!models.length && reasoning.map(c => (
-          <ReasoningControl key={c.id} control={c} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
-        ))}
+      <div className="@container flex min-w-0 items-center gap-1 px-2 pt-1 pb-2">
+        <fieldset disabled={p.disabled || p.controlsLocked || sending} className="m-0 flex min-w-0 flex-1 items-center gap-1 border-0 p-0">
+          <div className="flex shrink-0 items-center gap-1">
+            {/* Mode is the one solid chip and never truncates; single-line rows with a glyph each, the description rides along as a tooltip */}
+            {p.controls.modes.length > 0 && (
+              <Menu
+                side="top"
+                width="sm"
+                items={p.controls.modes.map(m => {
+                  const Icon = modeIcon(m);
+                  return { id: m.id, label: m.name, hint: m.description, icon: <Icon strokeWidth={1.75} />, checked: m.id === p.controls.modeId };
+                })}
+                onSelect={p.onSetMode}
+                onOpenChange={onOpenChange}
+              >
+                {({ open, toggle, ref }) => {
+                  const Icon = mode ? modeIcon(mode) : undefined;
+                  return (
+                    <Chip
+                      ref={ref} variant="solid" className="ml-0.5 shrink-0" narrow="icon" data-open={open || undefined} onClick={toggle}
+                      title={mode ? [mode.name, mode.description].filter(Boolean).join(' · ') : t('composer.mode')} icon={Icon && <Icon strokeWidth={1.75} />}
+                    >
+                      {mode?.name ?? t('composer.mode')}
+                    </Chip>
+                  );
+                }}
+              </Menu>
+            )}
+          </div>
+          <div className="min-w-0 flex-1" />
+          {other.map(c => (
+            <OptionControl key={c.id} end control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
+          ))}
+          {p.usage && <ContextRing usage={p.usage} turns={p.turns} canCompact={!!p.canCompact && !dim} onCompact={p.onCompact} onOpenChange={onOpenChange} />}
+          {models.map((c, i) => (
+            <ModelControl key={c.id} control={c} hidden={p.hidden?.[c.id]} reasoning={i === 0 ? reasoning : undefined}
+              onSetReasoning={p.onSetConfig} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
+          ))}
+          {!models.length && reasoning.map(c => (
+            <ReasoningControl key={c.id} control={c} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
+          ))}
+        </fieldset>
         {p.edit && !p.edit.dismissOnOutside && <IconButton title={t('history.cancel')} aria-label={t('history.cancel')} onClick={p.edit.onCancel}><X /></IconButton>}
         <SendButton running={p.running} filled={canSend} theme={p.theme} onClick={p.running ? p.onStop : send} />
-      </fieldset>
+      </div>
     </div>
   );
 

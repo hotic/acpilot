@@ -2,10 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { captureTurnSettings } from '@shared/turnSettings';
 import type { EditTurnRequest } from '@shared/protocol';
 import * as acp from '@agentclientprotocol/sdk';
-import type { AgentId, AuthMethodInfo, Draft, QuestionAnswers, SessionControls, SessionView, SlashCommand, Turn, TurnError, TurnSettings, Usage } from '@shared/transcript';
+import type { AgentId, AuthMethodInfo, ConfigControl, Draft, QuestionAnswers, SessionControls, SessionView, SlashCommand, Turn, TurnError, TurnSettings, Usage } from '@shared/transcript';
 import type { AgentRuntimeInfo } from '@shared/inventory';
 import type { AgentRegistry } from './AgentRegistry';
-import { AgentProcess } from './AgentProcess';
+import { AgentProcess, type ClientHandlers } from './AgentProcess';
+import type { AgentPool } from './AgentPool';
 import { capturePlan, planDocuments } from './plans';
 import { planExecutionPrompt } from '@shared/planExecution';
 import { CompactionCompletion, isCompactCommand } from './compaction';
@@ -20,6 +21,7 @@ import { PromptQueue, type StagedSend } from './promptQueue';
 import { editTurn, retryTurn, type SessionEditCtx, type TurnPhase } from './sessionEdit';
 import { AccountAuthError, authHintOf, isAuth, isSessionGone, summarizePrompt, turnErrorOf } from './sessionErrors';
 import { msg } from '../errors';
+import { cloneJson } from '../clone';
 import { t, tOr } from '../i18n';
 import { RENAME_MAX, TITLE_MAX } from '../limits';
 
@@ -62,6 +64,7 @@ export interface SessionDeps {
   notify?: (text: string) => void;
   accounts?: SessionAccountHooks;
   compaction?: () => CompactionPolicy;
+  pool?: AgentPool;
 }
 
 // One session = one agent subprocess + one transcript. State machine:
@@ -120,6 +123,7 @@ export class AcpSession {
       touch: () => this.touch(),
       isReady: () => this.status === 'ready',
       isRunning: () => this.phase.running,
+      canEnqueue: () => this.status === 'ready' || this.status === 'starting',
       send: (text, prepared) => this.prompt(text, [], false, { prepared }),
     });
   }
@@ -224,6 +228,7 @@ export class AcpSession {
       this.fail(e);
     }
     this.touch();
+    if ((this.status as SessionView['status']) === 'ready') this.queue.flush();
   }
 
   private async connect() {
@@ -231,12 +236,28 @@ export class AcpSession {
     this.grokUsageUnavailable = false;
     const def = this.deps.registry.get(this.agent);
     this.modelSources = await readModelSources(this.agent, this.cwd);
-    const bin = await this.deps.registry.resolveBinary(this.agent);
-    if (!bin) throw new Error(t('host.notFound', { command: def.command, agent: def.name }));
-    this.log(`spawn ${bin} ${def.args.join(' ')} (cwd ${this.cwd})${this.accountId ? ` account ${this.accountId.slice(0, 8)}` : ''}`);
-    const hooks = this.accountId ? this.deps.accounts : undefined;
-    const env = hooks && this.accountId ? await hooks.spawnEnv(this.agent, this.accountId) : undefined;
-    this.proc = await AgentProcess.spawn(def, bin, this.cwd, {
+    const handlers = this.clientHandlers();
+    const borrowed = await this.deps.pool?.take(this.agent, this.cwd, this.accountId, handlers);
+    if (borrowed) {
+      this.proc = borrowed;
+      this.log(`reuse warm ${def.command} (cwd ${this.cwd})${this.accountId ? ` account ${this.accountId.slice(0, 8)}` : ''}`);
+    } else {
+      const bin = await this.deps.registry.resolveBinary(this.agent);
+      if (!bin) throw new Error(t('host.notFound', { command: def.command, agent: def.name }));
+      this.log(`spawn ${bin} ${def.args.join(' ')} (cwd ${this.cwd})${this.accountId ? ` account ${this.accountId.slice(0, 8)}` : ''}`);
+      const hooks = this.accountId ? this.deps.accounts : undefined;
+      const env = hooks && this.accountId ? await hooks.spawnEnv(this.agent, this.accountId) : undefined;
+      this.proc = await AgentProcess.spawn(def, bin, this.cwd, handlers, env);
+    }
+    const info = this.proc.init.agentInfo;
+    this.log(`initialize ok: protocol ${this.proc.init.protocolVersion}${info ? ` · ${info.name} ${info.version}` : ''}`);
+    this.authMethods = this.proc.init.authMethods?.map(m => ({ id: m.id, name: m.name, description: m.description ?? undefined }));
+    await this.handoff();
+  }
+
+  private clientHandlers(): ClientHandlers {
+    const def = this.deps.registry.get(this.agent);
+    return {
       onUpdate: n => this.onUpdate(n),
       onPermission: (req, signal) => this.perms.onPermission(req, signal),
       onElicitation: (req, signal) => this.questions.onElicitation(req, signal),
@@ -255,11 +276,24 @@ export class AcpSession {
           this.touch();
         }
       },
-    }, env);
-    const info = this.proc.init.agentInfo;
-    this.log(`initialize ok: protocol ${this.proc.init.protocolVersion}${info ? ` · ${info.name} ${info.version}` : ''}`);
-    this.authMethods = this.proc.init.authMethods?.map(m => ({ id: m.id, name: m.name, description: m.description ?? undefined }));
-    await this.handoff();
+    };
+  }
+
+  // Paint last-known chips before session/new returns so the composer isn't empty during start
+  previewControls(options: ConfigControl[], settings?: TurnSettings) {
+    const syn = this.syntheticModes();
+    if (syn?.length) {
+      this.state.controls.modes = syn;
+      this.state.controls.modeId = settings?.modeId && syn.some(m => m.id === settings.modeId) ? settings.modeId : syn[0]!.id;
+      this.perms.autoApprove = this.state.controls.modeId === 'yolo';
+    }
+    if (!options.length) return;
+    const next = cloneJson(options);
+    for (const c of next) {
+      const value = settings?.config[c.id];
+      if (value && c.options.some(o => o.id === value)) c.value = value;
+    }
+    this.state.controls.options = next;
   }
 
   // With an account bound, hand the credential over before opening the session; if it can't be handed over (secret gone / rejected / timed out), treat as login required
@@ -386,6 +420,7 @@ export class AcpSession {
         await this.refreshGrokUsage();
       } catch (e) { this.fail(e); }
       this.touch();
+      if ((this.status as SessionView['status']) === 'ready') this.queue.flush();
       return;
     }
     this.proc?.kill();
@@ -397,6 +432,7 @@ export class AcpSession {
   // Attachments are staged (blobs written, image files read) before the turn opens. running is claimed before that await so a second send arriving
   // meanwhile queues instead of racing onto the wire; if the session was cancelled or closed while staging, the prompt is dropped without a turn
   async prompt(text: string, attachments: Draft[] = [], auto = false, staged?: StagedSend, planId?: string): Promise<void> {
+    if (this.status === 'starting') { await this.queue.enqueue(text, attachments, staged?.prepared); return; }
     if (this.status !== 'ready') return;
     if (!text.trim() && attachments.length === 0 && !staged?.prepared.blocks.length) return;
     if (this.phase.running) { await this.queue.enqueue(text, attachments, staged?.prepared); return; }

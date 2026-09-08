@@ -479,6 +479,20 @@ describe('AcpSession', () => {
     s.dispose();
   });
 
+  it('queue: a prompt sent while starting waits for ready then goes out', async () => {
+    const { session } = deps();
+    const s = session();
+    try {
+      await s.prompt('hi');
+      expect(s.view().queued?.map(q => q.text)).toEqual(['hi']);
+      await s.start();
+      await until(() => (s.view().turns.some(t => t.role === 'agent') && !s.view().queued) || s.view().status !== 'ready');
+      expect(s.view().status).toBe('ready');
+      expect(s.view().queued).toBeUndefined();
+      expect(s.view().turns[0]).toMatchObject({ role: 'user', text: 'hi' });
+    } finally { s.dispose(); }
+  });
+
   it('queue: sending another prompt while running auto-sends it after the turn ends', async () => {
     const { session } = deps();
     const s = session();
