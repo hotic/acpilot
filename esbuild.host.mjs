@@ -1,6 +1,6 @@
 import { context } from 'esbuild';
 
-// host 端：src/host/extension.ts → dist/extension.cjs；扩展宿主是 CJS，vscode 模块由宿主提供
+// Host bundle: src/host/extension.ts → dist/extension.cjs. The extension host is CJS; the vscode module is provided by the host.
 const watch = process.argv.includes('--watch');
 
 const ctx = await context({
@@ -11,8 +11,8 @@ const ctx = await context({
   target: 'node22',
   format: 'cjs',
   external: ['vscode'],
-  sourcemap: true,
-  minify: false,
+  sourcemap: watch,
+  minify: !watch,
   logLevel: 'info',
   alias: { '@shared': './src/shared' },
 });

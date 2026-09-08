@@ -4,8 +4,6 @@
   "acpilot.cmd.showLog": "Show Log",
   "acpilot.conf.defaultAgent": "The default agent for new sessions",
   "acpilot.conf.language": "Interface language; auto follows VS Code",
-  "acpilot.conf.followUp": "How a message sent while the agent is running is handled: queue it until the turn ends / steer it into the current turn / interrupt and send immediately. Steering requires agent support; agents without it fall back to queueing",
-  "acpilot.conf.mcpServers": "MCP servers ACPilot injects into agents over ACP: `{ \"<name>\": { \"command\": \"...\", \"args\": [...], \"env\": {...} } }` or `{ \"url\": \"...\", \"type\": \"http\" | \"sse\" }`; `agents` limits a server to some agents, `enabled: false` disables it entirely",
   "acpilot.conf.agents": "Add custom ACP agents: `{ \"<id>\": { \"name\": \"display name\", \"command\": \"executable\", \"args\": [\"...\"], \"login\": \"login command\" } }`",
   "acpilot.conf.compactAtTokens": "When context usage after a turn (the agent's reported usage.used) reaches this many tokens, /compact is sent automatically. Only applies to agents that report usage and offer a /compact command; models with a smaller context window are the agent's own lookout",
   "acpilot.conf.autoCompact": "Send /compact automatically once over the threshold (turn off to compact by hand from the context panel only)",

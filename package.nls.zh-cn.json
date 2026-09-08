@@ -4,8 +4,6 @@
   "acpilot.cmd.showLog": "查看日志",
   "acpilot.conf.defaultAgent": "新会话默认用哪个 agent",
   "acpilot.conf.language": "界面语言；auto 跟随 VS Code",
-  "acpilot.conf.followUp": "agent 运行时再发一条消息的处理方式：排到这轮结束再发 / 插进当前轮次调整方向 / 打断后立刻发送。调整方向要 agent 支持，不支持的退回排队",
-  "acpilot.conf.mcpServers": "ACPilot 通过 ACP 注入给 agent 的 MCP 服务：`{ \"<名称>\": { \"command\": \"...\", \"args\": [...], \"env\": {...} } }` 或 `{ \"url\": \"...\", \"type\": \"http\" | \"sse\" }`；`agents` 限定只对某些 agent 生效，`enabled: false` 整体停用",
   "acpilot.conf.agents": "追加自定义 ACP agent：`{ \"<id>\": { \"name\": \"显示名\", \"command\": \"可执行文件\", \"args\": [\"...\"], \"login\": \"登录命令\" } }`",
   "acpilot.conf.compactAtTokens": "一轮结束后上下文用量（agent 报的 usage.used）达到这么多 token 就自动发 /compact。只对报 usage 且有 /compact 命令的 agent 生效；上下文窗口比这个数小的模型由 agent 自己兜底",
   "acpilot.conf.autoCompact": "超阈值后自动发送 /compact（关掉就只能在上下文面板里手动压）",

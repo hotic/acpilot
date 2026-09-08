@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 
-// webview 构建：root 指向 src/webview。
-// 只打 index.html（单 JS + 单 CSS，文件名固定给 bridge 引用）
+// Webview build: root is src/webview.
+// Only index.html is built (one JS + one CSS, fixed filenames for the bridge).
 const root = fileURLToPath(new URL('./src/webview', import.meta.url));
 
 export default defineConfig({

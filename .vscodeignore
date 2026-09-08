@@ -3,7 +3,11 @@
 !dist/webview/main.js
 !dist/webview/main.css
 !dist/webview/assets/**
-!media/**
+!media/icon.png
+!media/icon.svg
 !LICENSE
 !README.md
+!CHANGELOG.md
 !package.json
+!package.nls.json
+!package.nls.zh-cn.json
