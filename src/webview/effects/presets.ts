@@ -3,11 +3,11 @@ import type { Appearance } from '../appearance';
 
 // All parameters for the Libraries.dev trio live here; props exported from Studio get pasted straight in
 
-// The Orb appears in only two places: Thinking streaming (think) and session connecting (fetch); in-progress tool lines get no Orb, just shimmer
+// Turn-level activity and session initialization share the breathing Orb. Process details keep static icons and shimmer.
 export type OrbKind = 'think' | 'fetch';
 export const ORB_STATE: Record<OrbKind, OrbState> = {
   think: 'breathing',
-  fetch: 'connecting',
+  fetch: 'breathing',
 };
 
 export const ORB_SIZE = 20 as const;

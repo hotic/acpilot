@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { Check, ChevronRight, Compass, Copy, FoldVertical, Hand, MessageCircleQuestion, Pencil, TriangleAlert, X } from 'lucide-react';
+import { Check, ChevronRight, Compass, Copy, Hand, MessageCircleQuestion, Pencil, TriangleAlert, X } from 'lucide-react';
 import { IconButton } from '../ui/Button';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
@@ -7,7 +7,6 @@ import { t } from '../i18n';
 import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { Disclosure } from '../ui/Disclosure';
 import { Orb } from '../effects/Orb';
-import { WaitingDots } from '../effects/WaitingDots';
 import { cn } from '../ui/cn';
 import { TOOL_ICON } from './icons';
 import { Thought } from './Thought';
@@ -19,7 +18,7 @@ import { Permission } from './Permission';
 import { QuestionRecord } from './Questions';
 import { PlanDocument } from './PlanDocument';
 import { TurnAttachments } from './Attachments';
-import { elapsedLabel, foldActivity, splitCodexBlocks } from './folding';
+import { elapsedLabel, splitCodexBlocks } from './folding';
 import { ProcessHistory } from './ProcessHistory';
 import { compactionForDisplay } from './compactionDisplay';
 
@@ -80,7 +79,7 @@ function UserMessageActions({ text, onEdit }: { text: string; onEdit?: () => voi
 type OnPermission = (blockId: string, optionId: string) => void;
 
 // Agent message: consecutive "lines" (thought / plan / tool, commands included) are grouped together; prose / permission cards each stand alone as blocks.
-// The activity line only fills a "gap": the turn is running and this message has no in-progress tool line, streaming thought, or streaming text yet
+// The top-level activity owns the only Orb; detailed rows show their own verbs with static icons.
 export function AgentMessage({ turn, index, running, onPermission, compacting }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission; compacting?: boolean }) {
   if (compacting) turn = compactionForDisplay(turn, running);
   const plans = turn.blocks.filter(b => b.type === 'plan_document');
@@ -100,9 +99,9 @@ function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn;
   // Plan approvals live on the plan card and the open question card above the composer; neither takes a slot in the message
   const groups = groupBlocks(turn.blocks.filter(b => (b.type !== 'permission' || !b.planId) && (b.type !== 'question' || !!b.outcome)));
   let i = index;
-  const showActivity = running && !!turn.activity && !turn.blocks.some(isBusy);
   return (
     <div className="flex flex-col gap-gap">
+      {running && <Activity turn={turn} />}
       {groups.map((g, gi) => (
         <div key={g.kind === 'block' && 'id' in g.block && g.block.id ? g.block.id : `g${gi}`} className="enter" style={{ '--i': Math.min(i++, 12) } as CSSProperties}>
           {g.kind === 'lines'
@@ -110,11 +109,6 @@ function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn;
             : <Block block={g.block} onPermission={onPermission} />}
         </div>
       ))}
-      {showActivity && (
-        <div className="enter" style={{ '--i': i++ } as CSSProperties}>
-          <Activity turn={turn} />
-        </div>
-      )}
       {!running && outcomeOf(turn) && (
         <div className="enter" style={{ '--i': Math.min(i++, 12) } as CSSProperties}>
           <Outcome turn={turn} />
@@ -150,21 +144,23 @@ function Outcome({ turn }: { turn: AgentTurn }) {
   );
 }
 
-function isBusy(b: AgentBlock): boolean {
-  if (b.type === 'tool_call') return b.status === 'in_progress' || b.status === 'pending';
-  if (b.type === 'thought' || b.type === 'text') return !!b.streaming;
-  return false;
+// Turn-level activity is independent of the latest tool and the fold's expansion state.
+// A pending user decision suspends the animation until the turn can continue.
+function liveActivity(turn: AgentTurn) {
+  if (turn.blocks.some(b => b.type === 'permission')) {
+    return { label: t('host.awaitingApproval'), active: false, lead: <Hand className="size-icon" strokeWidth={1.5} /> };
+  }
+  if (turn.blocks.some(b => b.type === 'question' && !b.outcome)) {
+    return { label: t('host.awaitingAnswers'), active: false, lead: <MessageCircleQuestion className="size-icon" strokeWidth={1.5} /> };
+  }
+  return { label: t('host.working'), active: true, lead: <Orb kind="think" /> };
 }
 
-// Approval and question waits use a static icon; motion remains reserved for thinking.
 function Activity({ turn }: { turn: AgentTurn }) {
-  const activity = foldActivity(turn);
-  const awaitingApproval = turn.blocks.some(b => b.type === 'permission');
-  const awaitingAnswers = !awaitingApproval && turn.blocks.some(b => b.type === 'question' && !b.outcome);
+  const activity = liveActivity(turn);
   return (
-    <Row lead={awaitingApproval ? <Hand className="size-icon" strokeWidth={1.5} /> : awaitingAnswers ? <MessageCircleQuestion className="size-icon" strokeWidth={1.5} /> : <WaitingDots />} className="font-medium">
-      <RowLabel>{activity.label}</RowLabel>
-      {activity.target && <RowTarget mono={activity.mono} className="font-normal">{activity.target}</RowTarget>}
+    <Row lead={activity.lead} className="font-medium">
+      <RowLabel className={activity.active ? 'shimmer' : undefined}>{activity.label}</RowLabel>
     </Row>
   );
 }
@@ -261,8 +257,8 @@ function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; runnin
   if (!turn.blocks.some(block => block.type === 'tool_call')) {
     return (
       <div className="flex flex-col gap-gap">
+        {running && <Activity turn={turn} />}
         {turn.blocks.map((block, i) => <Block key={'id' in block ? block.id : i} block={block} onPermission={onPermission} />)}
-        {running && turn.blocks.length === 0 && <Activity turn={turn} />}
         {!running && outcomeOf(turn) && <Outcome turn={turn} />}
       </div>
     );
@@ -281,27 +277,20 @@ function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; runnin
 
 function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBlock[]; running: boolean }) {
   const [open, setOpen] = useState(false);
-  const { toolLine, thought } = useAppearance();
-  const activity = foldActivity(turn);
-  const Icon = activity.kind === 'compaction' ? FoldVertical : TOOL_ICON[activity.kind];
+  const activity = liveActivity(turn);
   const CompletionIcon = turn.stop === 'cancelled' ? X : outcomeOf(turn) ? TriangleAlert : Check;
-  const lead = !running ? <CompletionIcon className="size-icon" strokeWidth={1.5} />
-    : toolLine === 'text' ? undefined
-    : activity.kind === 'think' && thought === 'orb' ? <Orb kind="think" />
-    : <Icon className="size-icon" strokeWidth={1.5} />;
+  const lead = running ? activity.lead : <CompletionIcon className="size-icon" strokeWidth={1.5} />;
   const label = running ? activity.label : outcomeOf(turn) ?? t('turns.done');
   const elapsed = !running && turn.startedAt !== undefined && turn.endedAt !== undefined ? elapsedLabel(turn) : undefined;
-  const awaitingApproval = turn.blocks.some(b => b.type === 'permission' || (b.type === 'question' && !b.outcome));
   const heading = <>
-    <RowLabel className={running && activity.active && !awaitingApproval ? 'shimmer' : undefined}>{label}</RowLabel>
+    <RowLabel className={running && activity.active ? 'shimmer' : undefined}>{label}</RowLabel>
     {elapsed && <span className="min-w-0 truncate text-fg-3" title={elapsed}>{elapsed}</span>}
-    {running && activity.target && <RowTarget mono={activity.mono}>{activity.target}</RowTarget>}
   </>;
   if (blocks.length === 0) return <Row lead={lead}>{heading}</Row>;
   return (
     <Disclosure
       lead={lead} indent={false} open={open} onToggle={setOpen}
-      title={running ? [label, activity.target].filter(Boolean).join(' ') : label}
+      title={label}
       body={<ProcessHistory><ProcessBlocks blocks={blocks} /></ProcessHistory>}
     >
       {heading}
@@ -310,6 +299,7 @@ function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBl
   );
 }
 
+// Process details retain static icons; only the currently running verb shimmers.
 function ProcessBlocks({ blocks }: { blocks: AgentBlock[] }) {
   return groupReadCalls(blocks).map((item, i) => Array.isArray(item)
     ? <ReadGroup key={item[0]!.id} blocks={item} />

@@ -5,9 +5,6 @@ import { mermaid as mermaidDiagram } from '@streamdown/mermaid';
 import type { TextBlock } from '@shared/transcript';
 import type { Appearance } from '@shared/appearance';
 import { useAppearance } from '../appearance';
-import { WaitingDots } from '../effects/WaitingDots';
-import { t } from '../i18n';
-import { Row } from '../ui/Row';
 import { CodeBlock } from './CodeBlock';
 import { Link } from './Link';
 import { useVsCodeTheme } from '../useVsCodeTheme';
@@ -35,11 +32,8 @@ export function Prose({ block }: { block: TextBlock }) {
   const { motion } = useAppearance();
   const streaming = !!block.streaming;
   const animating = useSettled(streaming, ANIMATED[motion] ? SETTLE_MS : 0);
-  // An empty streamed block precedes the first visible words; keep it in the
-  // same row rhythm as thinking instead of rendering a standalone text caret.
-  if (!block.markdown.trim()) {
-    return streaming ? <Row role="status" aria-label={t('host.thinking')}><WaitingDots /></Row> : null;
-  }
+  // The turn heading already indicates waiting before the first visible words.
+  if (!block.markdown.trim()) return null;
   return (
     <Streamdown
       mode={streaming || animating ? 'streaming' : 'static'}
