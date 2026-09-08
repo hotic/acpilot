@@ -6,17 +6,19 @@ import { t } from '../i18n';
 import { Disclosure } from '../ui/Disclosure';
 import { Orb } from '../effects/Orb';
 import { cn } from '../ui/cn';
+import { useScrollFade } from '../ui/useScrollFade';
 
 // Thought row: localized verb plus faint seconds. Live seconds tick from startedAt; durationSec freezes them when the block seals.
 // The Orb appears only here (while streaming); the lead slot takes space only when tool rows also have one, keeping every row in the same message left-aligned
 export function Thought({ block }: { block: ThoughtBlock }) {
   const { thought, toolLine } = useAppearance();
   const sec = useThoughtSeconds(block);
+  const fade = useScrollFade<HTMLParagraphElement>();
   const lead = thought === 'orb' && (block.streaming || toolLine !== 'text')
     ? <ThoughtLead streaming={!!block.streaming} />
     : toolLine === 'text' ? undefined : <Brain className="size-icon" strokeWidth={1.5} />;
   return (
-    <Disclosure lead={lead} body={<p className="m-0 text-2 text-fg-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{block.text}</p>}>
+    <Disclosure lead={lead} body={<p ref={fade} className="thought-body scroll-fade scroll-thin m-0 text-2 text-fg-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{block.text}</p>}>
       <span className={cn(block.streaming && thought === 'shimmer' && 'shimmer')}>
         {block.streaming ? t('host.thinking') : t('thought.label')}
       </span>

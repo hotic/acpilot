@@ -20,7 +20,7 @@ export function Row({ lead, trailing, children, interactive, as = 'div', classNa
       {...(as === 'button' ? { type: 'button' } : {})}
       className={cn(
         'flex items-center gap-gap text-2 text-fg-2 select-none list-none text-left',
-        dense ? 'min-h-[calc(var(--row)-4px)]' : 'min-h-row',
+        dense ? 'min-h-row-dense' : 'min-h-row',
         interactive && 'row-interactive cursor-pointer rounded-md hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 transition-colors',
         className,
       )}

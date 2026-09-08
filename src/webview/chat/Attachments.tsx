@@ -34,15 +34,16 @@ export function DraftChips({ drafts, onRemove }: { drafts: Draft[]; onRemove?: (
   );
 }
 
-// Sent attachments reuse the composer labels. Images load from the session's blob
-// directory; unavailable blobs retain an image icon and name without a preview action.
+// Sent images reuse the editor thumbnails and wrap to the available width.
+// Names remain in tooltips; non-image attachments keep their file labels.
 export function TurnAttachments({ attachments, blobUrl }: { attachments: Attachment[]; blobUrl?: (blob: string) => string }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   return (
-    <div className="scroll-thin flex shrink-0 gap-1 overflow-x-auto">
+    <div className="flex shrink-0 flex-wrap items-start gap-gap">
       {attachments.map((a, i) => (
         <AttachmentTag
           key={a.kind === 'file' ? a.uri : a.blob ?? `${a.kind}-${i}`}
+          thumbnail
           name={a.name}
           image={a.kind === 'image' || (a.kind === 'file' && !!imageMimeOf(a.name))}
           src={a.kind === 'image' && blobUrl && a.blob ? blobUrl(a.blob) : undefined}
