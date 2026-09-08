@@ -18,6 +18,15 @@ ACPilot 位于副侧栏，通过 [ACP](https://agentclientprotocol.com)（JSON-R
 - **多账号：** 为每个 Agent 保存多份登录，切换账号即创建新会话。
 - **图片、文件与队列：** 粘贴或拖入图片，用 `@` 附加工作区文件。当前回合进行中发送的消息会进入队列。
 
+## 安装
+
+1. 用 `.vsix` 安装扩展（**从 VSIX 安装…**），或在上架后从 Marketplace 安装。
+2. 至少安装一家 Agent CLI，并保证它在 `PATH` 上：
+   - [Grok](https://x.ai) — `grok`（`grok agent stdio`）
+   - [Devin](https://devin.ai) — `devin`（`devin acp`）
+   - [Kimi Code](https://www.kimi.com) — `kimi`（`kimi acp`）
+3. 打开**副侧栏**中的 ACPilot 视图。
+
 ## 开始使用
 
 1. 安装 Agent CLI 并登录。在 Agent 菜单中添加或切换账号，详见 [账号](#账号)。

@@ -18,6 +18,15 @@ The extension manages the UI, sessions, permission approvals, accounts, and cont
 - **Multiple accounts:** Store several logins per agent and start a new session with a different account.
 - **Images, files, and queue:** Paste or drop images, attach workspace files with `@`, and queue follow-ups while a turn is running.
 
+## Install
+
+1. Install the extension from a `.vsix` (**Extensions: Install from VSIX…**) or from the Marketplace once it is published.
+2. Install at least one agent CLI and keep it on `PATH`:
+   - [Grok](https://x.ai) — `grok` (`grok agent stdio`)
+   - [Devin](https://devin.ai) — `devin` (`devin acp`)
+   - [Kimi Code](https://www.kimi.com) — `kimi` (`kimi acp`)
+3. Open the **secondary sidebar** and the ACPilot view.
+
 ## Get started
 
 1. Install the agent CLI and sign in. Add or switch accounts from the agent menu; see [Accounts](#accounts).
