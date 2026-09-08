@@ -1,52 +1,73 @@
 import { useState, type ReactNode } from 'react';
-import { Check, ChevronRight, ChevronsDown, ChevronsUp, ListTodo } from 'lucide-react';
+import { Check, ChevronDown, ChevronsDown, ChevronsUp, ListTodo } from 'lucide-react';
 import type { PlanBlock, PlanEntry, PlanStatus } from '@shared/transcript';
 import { useAppearance } from '../appearance';
 import { t } from '../i18n';
 import { Card } from '../ui/Card';
 import { Collapse } from '../ui/Collapse';
-import { Row, RowLabel, RowTarget } from '../ui/Row';
+import { Disclosure } from '../ui/Disclosure';
+import { Row, RowLabel } from '../ui/Row';
 import { cn } from '../ui/cn';
+import { useScrollFade } from '../ui/useScrollFade';
 
-// Plan card, Cursor-style: a tonal card whose header row carries the entry being worked on plus done / total,
-// with the full entry list collapsing underneath. Collapsed by default so a long plan doesn't flood the transcript.
-// Shared by the transcript copy (Plan) and the live one pinned above the composer (PlanBar).
+// The pinned to-do card keeps its title stable. The complete list replaces the
+// current-entry summary when opened, so an active task appears only once.
 export function PlanCard({ entries, live }: { entries: PlanEntry[]; live?: boolean }) {
   const { toolLine } = useAppearance();
   const [open, setOpen] = useState(false);
+  const fade = useScrollFade<HTMLDivElement>();
   const done = entries.filter(e => e.status === 'completed').length;
   const current = entries.find(e => e.status === 'in_progress') ?? entries.find(e => e.status === 'pending');
   const lead = toolLine === 'text' ? undefined : <ListTodo className="size-icon" strokeWidth={1.5} />;
   return (
-    <Card className={cn('group flex flex-col px-pad py-1', open && 'pb-2')} data-open={open || undefined}>
+    <Card className="plan-card flex min-w-0 flex-col gap-gap px-pad py-gap" data-open={open || undefined}>
       <Row
         as="button" interactive aria-expanded={open} onClick={() => setOpen(o => !o)}
         lead={lead}
         trailing={<>
-          <span>{done} / {entries.length}</span>
-          <ChevronRight className="size-3 transition-transform group-data-[open]:rotate-90" strokeWidth={1.75} />
+          <span>{done}/{entries.length}</span>
+          <PlanCaret open={open} />
         </>}
       >
-        <RowLabel className={cn(live && current && 'shimmer')}>{t('plan.title')}</RowLabel>
-        {current && <RowTarget>{current.title}</RowTarget>}
+        <RowLabel className={cn(live && current && 'shimmer')}>{t('plan.todoTitle')}</RowLabel>
       </Row>
+      {!open && (
+        <Row className="plan-current" dense lead={toolLine === 'text' ? undefined : <PlanDot status={current?.status ?? 'completed'} />}>
+          <span className={cn('min-w-0 break-words', current ? 'text-fg-1' : 'text-fg-2')}>
+            {current?.title ?? t('plan.completed', { n: entries.length })}
+          </span>
+        </Row>
+      )}
       <Collapse open={open}>
-        <div className="pt-1">
+        {open && <div ref={fade} className="plan-entry-viewport scroll-thin scroll-fade">
           <PlanEntries entries={entries} />
-        </div>
+        </div>}
       </Collapse>
     </Card>
   );
 }
 
-// The transcript copy of a plan: same card as the live PlanBar, kept in history after the turn ends.
-// A little vertical air so the card doesn't cling to the tool rows around it.
+// Historical plans are a single disclosure row. Expanded entries keep their
+// natural height and participate in the conversation's normal scroll flow.
 export function Plan({ block }: { block: PlanBlock }) {
+  const { toolLine } = useAppearance();
+  const [open, setOpen] = useState(false);
+  const done = block.entries.filter(entry => entry.status === 'completed').length;
   return (
-    <div className="py-1">
-      <PlanCard entries={block.entries} />
-    </div>
+    <Disclosure
+      open={open} onToggle={setOpen}
+      lead={toolLine === 'text' ? undefined : <ListTodo className="size-icon" strokeWidth={1.5} />}
+      body={<PlanEntries entries={block.entries} />}
+    >
+      <RowLabel>{t('plan.title')}</RowLabel>
+      <span className="text-3 text-fg-3 tabular-nums">{done}/{block.entries.length}</span>
+      <PlanCaret open={open} />
+    </Disclosure>
   );
+}
+
+function PlanCaret({ open }: { open: boolean }) {
+  return <ChevronDown className={cn('size-icon shrink-0 self-center transition-transform', open && 'rotate-180')} strokeWidth={1.5} />;
 }
 
 // The entry list shared by the transcript block and the PlanBar: status dot in the lead slot, the title dimming once done, a faint priority glyph on the right for high / low

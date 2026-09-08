@@ -130,6 +130,8 @@
   --thought-body-max: min(calc(var(--row) * 8), 45dvh);
   /* The question card's list of questions scrolls beyond twelve rows or half the viewport, so the composer stays in reach */
   --question-body-max: min(calc(var(--row) * 12), 50dvh);
+  /* Only the pinned to-do list has a bounded viewport; historical plans grow naturally. */
+  --plan-rows: 7;
   /* Max rows shown in a menu; beyond that it scrolls inside the menu (Devin's 210 models) */
   --pop-rows: 8;
 
@@ -186,6 +188,14 @@
 /* Thoughts retain a bounded viewport independently of the enclosing process. */
 .thought-body {
   max-height: var(--thought-body-max);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.plan-current { align-items: flex-start; }
+.plan-current > .row-lead { margin-top: calc((var(--text-2-lh) - var(--lead)) / 2); }
+.plan-entry-viewport {
+  max-height: calc(var(--row-dense) * var(--plan-rows));
   overflow-y: auto;
   overscroll-behavior-y: contain;
 }

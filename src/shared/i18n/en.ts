@@ -146,6 +146,8 @@ export const en = {
   'turns.elapsed.s': '{s}s',
   'thought.label': 'Thinking',
   'plan.title': 'Plan',
+  'plan.todoTitle': 'To-do plan',
+  'plan.completed': '{n} tasks completed',
   'plan.priority.high': 'High priority',
   'plan.priority.low': 'Low priority',
   'plan.status.draft': 'Generating',

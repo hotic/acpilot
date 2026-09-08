@@ -158,6 +158,8 @@ export const zhCN = {
   'turns.elapsed.s': '{s} 秒',
   'thought.label': '思考',
   'plan.title': '计划',
+  'plan.todoTitle': '待办计划',
+  'plan.completed': '{n} 项任务已完成',
   'plan.priority.high': '高优先级',
   'plan.priority.low': '低优先级',
   'plan.status.draft': '生成中',
