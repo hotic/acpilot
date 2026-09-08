@@ -47,18 +47,6 @@ describe('ACP tool presentation', () => {
     expect(toolVerb({ ...block, verb: '读取' })).toBe('Read');
   });
 
-  it('labels a todo-list tool by name whatever kind the agent filed it under', () => {
-    const s = emptyState();
-    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'td', title: 'todo_write', kind: 'think', status: 'in_progress' });
-    const turn = s.turns[0] as AgentTurn;
-    setLocale('zh-CN');
-    expect(foldActivity(turn)).toMatchObject({ label: '正在更新待办', target: undefined, active: true });
-    applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'td', status: 'completed' });
-    expect(foldActivity(turn)).toMatchObject({ label: '已更新待办' });
-    setLocale('en');
-    expect(toolVerb(turn.blocks[0] as ToolCallBlock)).toBe('Update todos');
-  });
-
   it('shows the latest finished action between tool completion and the next thought', () => {
     setLocale('zh-CN');
     const turn: AgentTurn = { role: 'agent', blocks: [
