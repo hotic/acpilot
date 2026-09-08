@@ -85,7 +85,7 @@ export interface ConnectedRailProps extends HTMLAttributes<HTMLDivElement> {
   endAtLastRow?: boolean;
 }
 
-// Line scaling and terminal-dot translation use the same --rail-length in CSS.
+// --rail-length drives the segment height in CSS; the line and terminal dot follow it.
 // Only endpoints are measured here; new text is never buffered for rail animation.
 export function ConnectedRail({ ref: forwardedRef, children, enabled = true, className, selector = '.row-lead:not(.row-lead-empty)', endAtLastRow = false, ...rest }: ConnectedRailProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -180,7 +180,6 @@ export function ConnectedRail({ ref: forwardedRef, children, enabled = true, cla
     {children}
     {enabled && segments.map((segment, index) => <span key={index} aria-hidden="true" className="rail-segment"
       data-terminal={segment.terminal || undefined}
-      style={{ left: segment.x, top: segment.top, height: segment.bottom - segment.top,
-        '--rail-length': segment.bottom - segment.top } as CSSProperties} />)}
+      style={{ left: segment.x, top: segment.top, '--rail-length': segment.bottom - segment.top } as CSSProperties} />)}
   </div>;
 }

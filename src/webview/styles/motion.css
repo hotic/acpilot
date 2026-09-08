@@ -38,12 +38,13 @@
 .process-row-enter > .row-content > .shimmer { animation: acp-row-part-in var(--row-enter-duration) var(--row-part-delay) ease-out both, acp-shimmer 2s linear infinite; }
 @keyframes acp-row-part-in { from { opacity: 0; } to { opacity: 1; } }
 
-/* One measured path from the icon to a short solid-dot endpoint. Scaling only
-   the line keeps the dot circular and synchronized during streamed growth. */
+/* One measured path from the icon to a short solid-dot endpoint. The segment's own
+   height is the single source of length: the line fills it and the dot hangs off its
+   bottom edge, so two separately transitioned transforms can never drift apart. */
 .connected-rail { position: relative; isolation: isolate; }
-.rail-segment { position: absolute; z-index: -1; width: var(--rail-width); transform: translateX(-50%); pointer-events: none; }
-.rail-segment::before { content: ''; position: absolute; inset: 0 auto auto 0; width: 100%; height: 1px; background: var(--rail-color); transform-origin: top; transform: scaleY(var(--rail-length)); transition: transform var(--rail-grow-duration) var(--rail-grow-ease); }
-.rail-segment[data-terminal]::after { content: ''; position: absolute; left: 50%; top: 0; width: var(--rail-dot-size); height: var(--rail-dot-size); border-radius: 50%; background: var(--rail-color); transform: translate(-50%, -50%) translateY(calc(var(--rail-length) * 1px)); transition: transform var(--rail-grow-duration) var(--rail-grow-ease); }
+.rail-segment { position: absolute; z-index: -1; width: var(--rail-width); height: calc(var(--rail-length) * 1px); transform: translateX(-50%); pointer-events: none; transition: height var(--rail-grow-duration) var(--rail-grow-ease); }
+.rail-segment::before { content: ''; position: absolute; inset: 0; background: var(--rail-color); }
+.rail-segment[data-terminal]::after { content: ''; position: absolute; left: 50%; bottom: 0; width: var(--rail-dot-size); height: var(--rail-dot-size); border-radius: 50%; background: var(--rail-color); transform: translate(-50%, 50%); }
 .connected-rail:has(> .process-row-enter) > .rail-segment { animation: acp-row-part-in var(--row-enter-duration) var(--row-enter-file) ease-out both; }
 
 @keyframes acp-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }

@@ -266,11 +266,10 @@ function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; runnin
       </div>
     );
   }
-  const { process, reply, permissions, questions } = splitCodexBlocks(detailBlocks(turn, running));
+  const { process, reply, permissions } = splitCodexBlocks(detailBlocks(turn, running));
   return (
     <div className="flex flex-col gap-gap">
       {(process.length > 0 || (running && reply.length === 0)) && <CodexFold turn={turn} blocks={process} running={running} />}
-      {questions.map(block => <QuestionRecord key={block.id} block={block} />)}
       {reply.map((block, i) => <Prose key={i} block={block} />)}
       {permissions.filter(block => !block.planId).map(block => <Permission key={block.id} block={block} onChoose={id => onPermission(block.id, id)} />)}
       {!running && outcomeOf(turn) && <Outcome turn={turn} />}
@@ -316,6 +315,8 @@ function LineBlock({ block }: { block: AgentBlock }) {
   if (block.type === 'plan') return <Plan block={block} />;
   if (block.type === 'tool_call') return <ToolCall block={block} />;
   if (block.type === 'compaction') return <Compaction block={block} />;
+  // The open card is pinned above the composer by the shell; only a resolved one has a place in the message
+  if (block.type === 'question') return block.outcome ? <QuestionRecord block={block} /> : null;
   return null;
 }
 
@@ -333,7 +334,5 @@ function Compaction({ block }: { block: CompactionBlock }) {
 function Block({ block, onPermission }: { block: AgentBlock; onPermission: OnPermission }) {
   if (block.type === 'text') return <Prose block={block} />;
   if (block.type === 'permission') return block.planId ? null : <Permission block={block} onChoose={id => onPermission(block.id, id)} />;
-  // The open card is pinned above the composer by the shell; only a resolved one has a place in the message
-  if (block.type === 'question') return block.outcome ? <QuestionRecord block={block} /> : null;
   return <LineBlock block={block} />;
 }
