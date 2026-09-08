@@ -1,9 +1,10 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
-import { createInterface } from 'node:readline';
+import { createInterface, type Interface } from 'node:readline';
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
 import type { AgentDef } from './AgentRegistry';
 import { t } from '../i18n';
+import { VERSION } from '../version';
 import { approveGrokPlan, GROK_EXIT_PLAN, parseGrokExitPlan } from './grokPlan';
 
 // What the client side has to accept: updates / permission requests / file reads & writes / questions the agent sends on its own initiative.
@@ -19,7 +20,10 @@ export interface ClientHandlers {
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
 }
 
-export const CLIENT_INFO = { name: 'acpilot', version: '1.0.0' };
+export const CLIENT_INFO = { name: 'acpilot', version: VERSION };
+
+// A CLI that ignores the polite signal is force-killed after this long
+const KILL_GRACE_MS = 2_000;
 
 // One agent subprocess = one long-lived ACP connection. stdio carries ndjson; stderr goes line by line to the Output Channel
 export class AgentProcess {
@@ -28,6 +32,7 @@ export class AgentProcess {
     readonly child: ChildProcessByStdio<Writable, Readable, Readable>,
     readonly conn: acp.ClientConnection,
     readonly init: acp.InitializeResponse,
+    private readonly stderr: Interface,
   ) {}
 
   get agent(): acp.ClientContext { return this.conn.agent; }
@@ -40,14 +45,15 @@ export class AgentProcess {
       env: { ...process.env, ...def.env, ...extraEnv },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    createInterface({ input: child.stderr }).on('line', line => h.onStderr?.(line));
+    const stderr = createInterface({ input: child.stderr });
+    stderr.on('line', line => h.onStderr?.(line));
     child.on('exit', (code, signal) => h.onExit?.(code, signal));
 
     const stream = acp.ndJsonStream(
       Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
       Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>,
     );
-    const app = acp.client({ name: 'acpilot' })
+    const app = acp.client({ name: CLIENT_INFO.name })
       .onNotification(acp.methods.client.session.update, ctx => { h.onUpdate(ctx.params); })
       .onRequest(acp.methods.client.session.requestPermission, ctx => h.onPermission(ctx.params, ctx.signal))
       .onRequest(GROK_EXIT_PLAN, parseGrokExitPlan, ctx => approveGrokPlan(ctx.params, ctx.signal, h.onPermission))
@@ -79,12 +85,29 @@ export class AgentProcess {
         ...(h.onElicitation ? { elicitation: { form: {} } } : {}),
       },
     };
-    const init: acp.InitializeResponse = await Promise.race([conn.agent.request(acp.methods.agent.initialize, initReq), exited]);
-    return new AgentProcess(def, child, conn, init);
+    // A CLI that answers initialize with an error is still running; without this it would sit there as an orphan behind the error notice
+    try {
+      const init: acp.InitializeResponse = await Promise.race([conn.agent.request(acp.methods.agent.initialize, initReq), exited]);
+      return new AgentProcess(def, child, conn, init, stderr);
+    } catch (e) {
+      stderr.close();
+      conn.close();
+      terminate(child);
+      throw e;
+    }
   }
 
   kill() {
+    this.stderr.close();
     this.conn.close();
-    if (this.alive) this.child.kill();
+    terminate(this.child);
   }
+}
+
+function terminate(child: ChildProcessByStdio<Writable, Readable, Readable>) {
+  if (child.exitCode !== null || child.killed) return;
+  child.kill();
+  const force = setTimeout(() => { if (child.exitCode === null) child.kill('SIGKILL'); }, KILL_GRACE_MS);
+  force.unref();
+  child.once('exit', () => clearTimeout(force));
 }

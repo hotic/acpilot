@@ -8,6 +8,14 @@ import * as acp from '@agentclientprotocol/sdk';
 // "refuse" → stopReason refusal with no output; "truncate" → some text, then stopReason max_tokens; "mode:<id>" → current_mode_update to that mode
 // Resume: when resume doesn't know the sessionId, a cwd containing "gone" mimics Devin's session_not_found, otherwise reports unknown session
 // Login: when cwd contains "needs-auth", session/new requires authenticate first; authenticate validates _meta.api_key the way Devin does (only accepts good-key)
+// Process lifecycle knobs (env): FAKE_INIT_FAIL → initialize answers an error while the process stays up (an orphan unless the client kills it);
+// FAKE_STUBBORN → ignores SIGTERM and keeps the event loop busy, so only SIGKILL ends it; FAKE_SILENT_CANCEL → a cancel during background
+// compaction drops the work without the usual "Compaction canceled." prose
+
+if (process.env.FAKE_STUBBORN) {
+  process.on('SIGTERM', () => {});
+  setInterval(() => {}, 1 << 30);
+}
 
 const sessions = new Set<string>();
 const modes = new Map<string, string>();
@@ -20,12 +28,15 @@ const backgroundStyle = process.env.FAKE_COMPACTION;
 let background: ((status: 'start' | 'completed' | 'cancelled') => Promise<void>) | undefined;
 
 const app = acp.agent({ name: 'fake-agent' })
-  .onRequest(acp.methods.agent.initialize, () => ({
-    protocolVersion: acp.PROTOCOL_VERSION,
-    agentInfo: { name: 'fake', version: '0.0.0' },
-    agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} } },
-    authMethods: [{ id: 'fake.login', name: 'Fake login', description: 'run fake login' }],
-  }))
+  .onRequest(acp.methods.agent.initialize, () => {
+    if (process.env.FAKE_INIT_FAIL) throw acp.RequestError.internalError(undefined, 'initialize refused by fixture');
+    return {
+      protocolVersion: acp.PROTOCOL_VERSION,
+      agentInfo: { name: 'fake', version: '0.0.0' },
+      agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} } },
+      authMethods: [{ id: 'fake.login', name: 'Fake login', description: 'run fake login' }],
+    };
+  })
   .onRequest(acp.methods.agent.session.new, ({ params }) => {
     if (params.cwd.includes('needs-auth') && !authed) {
       // Mimic Kimi: the reason goes to stderr as an ndjson log line, the -32000 itself carries nothing
@@ -73,7 +84,10 @@ const app = acp.agent({ name: 'fake-agent' })
   })
   .onNotification(acp.methods.agent.session.cancel, async ({ params }) => {
     cancelled.add(params.sessionId);
-    if (background) { await background('cancelled'); background = undefined; }
+    if (background) {
+      if (!process.env.FAKE_SILENT_CANCEL) await background('cancelled');
+      background = undefined;
+    }
   })
   .onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
     const sid = params.sessionId;
