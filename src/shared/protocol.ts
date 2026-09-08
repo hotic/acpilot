@@ -123,7 +123,7 @@ export type WebviewMsg =
   | { type: 'openInEditor' }
   // A link inside agent output was clicked; host opens it externally after an isSafeExternalUrl check
   | { type: 'openExternal'; url: string }
-  // Settings page: write a setting (host maps it onto acpilot.<key> at user scope), open a file / directory from the inventory lists,
+  // Settings page: write a setting (host maps it onto acpira.<key> at user scope), open a file / directory from the inventory lists,
   // rescan an agent's extension inventory, read the configOptions of its latest session
   | { type: 'setSetting'; key: SettingKey; value: unknown }
   | { type: 'openPath'; path: string }

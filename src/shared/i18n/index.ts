@@ -4,7 +4,7 @@ import type { MsgKey } from './keys';
 
 export type { MsgKey } from './keys';
 
-// Locales the UI ships; `auto` (the acpilot.language setting's default) follows the host's display language
+// Locales the UI ships; `auto` (the acpira.language setting's default) follows the host's display language
 export type Locale = 'zh-CN' | 'en';
 export type Language = 'auto' | Locale;
 export const LOCALES: Locale[] = ['zh-CN', 'en'];

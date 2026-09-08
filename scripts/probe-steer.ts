@@ -62,7 +62,7 @@ const proc = await AgentProcess.spawn(def, bin, process.cwd(), {
 console.log('initialize → agentCapabilities', JSON.stringify(proc.init.agentCapabilities), '_meta', JSON.stringify(proc.init._meta ?? null));
 
 if (importLocal) {
-  const p = new DevinAccountProvider(await mkdtemp(join(tmpdir(), 'acpilot-probe-')), async () => bin);
+  const p = new DevinAccountProvider(await mkdtemp(join(tmpdir(), 'acpira-probe-')), async () => bin);
   const draft = await p.importLocal();
   if (!draft) { console.error('no local login for this CLI'); process.exit(1); }
   await p.authenticate!(proc, draft);

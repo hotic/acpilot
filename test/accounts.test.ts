@@ -36,10 +36,10 @@ class FakeProvider implements AccountProvider {
   }
 }
 
-function tmp() { return mkdtempSync(join(tmpdir(), 'acpilot-acc-')); }
+function tmp() { return mkdtempSync(join(tmpdir(), 'acpira-acc-')); }
 
 // The fake agent gates authentication on this marker; spawn also requires an existing cwd.
-function authCwd() { return mkdtempSync(join(tmpdir(), 'acpilot-needs-auth-')); }
+function authCwd() { return mkdtempSync(join(tmpdir(), 'acpira-needs-auth-')); }
 
 describe('AccountStore', () => {
   it('metadata goes to JSON, secrets go to the vault; re-login with the same label only replaces the secret; the default account is the most recently used', async () => {

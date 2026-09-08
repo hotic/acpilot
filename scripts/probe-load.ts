@@ -23,7 +23,7 @@ const proc = await AgentProcess.spawn(registry.get(agent), bin, cwd, {
   onExit: (c, s) => console.log('exit', c, s),
 });
 
-const p = new DevinAccountProvider(await mkdtemp(join(tmpdir(), 'acpilot-probe-')), async () => bin!);
+const p = new DevinAccountProvider(await mkdtemp(join(tmpdir(), 'acpira-probe-')), async () => bin!);
 const draft = await p.importLocal();
 if (!draft) throw new Error('no local devin login (credentials.toml missing)');
 await p.authenticate!(proc, draft);

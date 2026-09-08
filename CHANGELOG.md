@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- MCP server injection from ACPilot settings is planned for 1.1. Agents still read their own CLI MCP config.
+- MCP server injection from Acpira settings is planned for 1.1. Agents still read their own CLI MCP config.
 - Steer / interrupt follow-up modes are planned for 1.1. Mid-turn messages stay in the host-side queue.
+
+## [1.0.1] - 2026-09-08
+
+### Changed
+
+- Renamed the project and extension to Acpira, published as `hotic.acpira`.
+- Updated command IDs, settings, client metadata, and repository links to the `acpira` namespace.
+- Updated GitHub Release automation to publish the renamed extension to both marketplaces.
+- Extension storage and saved credentials use the new identity; earlier development installs require account re-import and settings reconfiguration.
 
 ## [1.0.0] - 2026-09-08
 

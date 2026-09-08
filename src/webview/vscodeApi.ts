@@ -2,10 +2,10 @@
 export interface VsCodeApi { postMessage(msg: unknown): void }
 
 declare global {
-  interface Window { __acpilotApi?: VsCodeApi }
+  interface Window { __acpiraApi?: VsCodeApi }
   function acquireVsCodeApi(): VsCodeApi;
 }
 
 export function vscodeApi(): VsCodeApi {
-  return (window.__acpilotApi ??= acquireVsCodeApi());
+  return (window.__acpiraApi ??= acquireVsCodeApi());
 }

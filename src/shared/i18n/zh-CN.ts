@@ -294,7 +294,7 @@ export const zhCN = {
   'mode.grok.yolo': '自动批准所有权限请求',
 
   // Settings page
-  'settings.title': 'ACPilot 设置',
+  'settings.title': 'Acpira 设置',
   'settings.back': '返回聊天',
   'settings.general.title': '常规设置',
   'settings.agent.title': '{agent} 设置',

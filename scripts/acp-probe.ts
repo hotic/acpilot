@@ -39,7 +39,7 @@ if (!bin) { console.error(`command not found: ${def.command}`); process.exit(1);
 console.log(`→ ${bin} ${def.args.join(' ')}`);
 
 const providers: Record<string, () => Promise<AccountProvider>> = {
-  devin: async () => new DevinAccountProvider(await mkdtemp(join(tmpdir(), 'acpilot-probe-')), async () => bin),
+  devin: async () => new DevinAccountProvider(await mkdtemp(join(tmpdir(), 'acpira-probe-')), async () => bin),
 };
 
 const proc = await AgentProcess.spawn(def, bin, process.cwd(), {

@@ -12,7 +12,7 @@ const FAKE = fileURLToPath(new URL('./fake-agent.ts', import.meta.url));
 const TSX = fileURLToPath(new URL('../node_modules/.bin/tsx', import.meta.url));
 
 function manager() {
-  const dir = mkdtempSync(join(tmpdir(), 'acpilot-mgr-'));
+  const dir = mkdtempSync(join(tmpdir(), 'acpira-mgr-'));
   const toasts: string[] = [];
   const m = new SessionManager({
     registry: new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE] } }),
@@ -69,7 +69,7 @@ describe('SessionManager', () => {
     await m.init();
     expect(m.agents().find(a => a.id === 'fake')?.available).toBe(true);
     const m2 = new SessionManager({
-      registry: new AgentRegistry({ ghost: { name: 'Ghost', command: '/nonexistent/ghost-cli' } }), store: new TranscriptStore(mkdtempSync(join(tmpdir(), 'acpilot-mgr-'))),
+      registry: new AgentRegistry({ ghost: { name: 'Ghost', command: '/nonexistent/ghost-cli' } }), store: new TranscriptStore(mkdtempSync(join(tmpdir(), 'acpira-mgr-'))),
       log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'ghost', runInTerminal: () => {}, toast: () => {},
     });
     await m2.init();
@@ -80,7 +80,7 @@ describe('SessionManager', () => {
     const hidden: HiddenMap = { devin: { model: ['GLM-5.2'] } };
     const events: HiddenMap[] = [];
     const m = new SessionManager({
-      registry: new AgentRegistry(), store: new TranscriptStore(mkdtempSync(join(tmpdir(), 'acpilot-mgr-'))), log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'fake', runInTerminal: () => {}, toast: () => {},
+      registry: new AgentRegistry(), store: new TranscriptStore(mkdtempSync(join(tmpdir(), 'acpira-mgr-'))), log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'fake', runInTerminal: () => {}, toast: () => {},
       hidden: () => hidden,
     });
     m.subscribe(ev => { if (ev.type === 'hidden') events.push(ev.hidden); });

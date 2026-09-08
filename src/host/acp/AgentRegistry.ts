@@ -56,7 +56,7 @@ export const BUILTIN_AGENTS: AgentDef[] = [
   },
 ];
 
-// Custom agents from the acpilot.agents setting (id → definition fragment)
+// Custom agents from the acpira.agents setting (id → definition fragment)
 export interface CustomAgentSetting {
   name?: string;
   command: string;

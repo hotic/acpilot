@@ -51,7 +51,7 @@ jobs:
           import { readFileSync, appendFileSync } from 'node:fs';
           import { execFileSync } from 'node:child_process';
           const { name, publisher, version } = JSON.parse(readFileSync('package.json', 'utf8'));
-          if (name !== 'acpilot' || publisher !== 'hotic') throw new Error('Unexpected extension identity');
+          if (name !== 'acpira' || publisher !== 'hotic') throw new Error('Unexpected extension identity');
           if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('A stable version is required');
           if (process.env.PUBLISH === 'true') {
             if (process.env.RELEASE_REF !== `v${version}`) throw new Error('Release tag must match package.json');

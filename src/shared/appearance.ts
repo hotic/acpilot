@@ -1,4 +1,4 @@
-// Appearance axes: one-to-one with the acpilot.appearance.* settings. The order is the digit order of the combo code — do not reorder.
+// Appearance axes: one-to-one with the acpira.appearance.* settings. The order is the digit order of the combo code — do not reorder.
 export interface Appearance {
   density: 'cozy' | 'compact' | 'airy';
   radius: '12' | '8' | '16';
@@ -69,7 +69,7 @@ export const BASE_APPEARANCE: Appearance = decodeAppearance('201110200302100', {
   accent: 'agent', motion: 'subtle', fold: 'codex',
 });
 
-// Builds an Appearance from a bag of setting values (acpilot.appearance.<axis>); invalid values fall back to the baseline
+// Builds an Appearance from a bag of setting values (acpira.appearance.<axis>); invalid values fall back to the baseline
 export function appearanceFromSettings(get: (key: AxisKey) => unknown): Appearance {
   const out = { ...BASE_APPEARANCE } as Record<AxisKey, string>;
   for (const ax of AXES) {

@@ -15,7 +15,7 @@ const registry = new AgentRegistry();
 const def = registry.get(agentId);
 const binary = await registry.resolveBinary(agentId);
 if (!binary) throw new Error(`Missing executable: ${agentId}`);
-const cwd = await mkdtemp(join(tmpdir(), 'acpilot-compact-probe-'));
+const cwd = await mkdtemp(join(tmpdir(), 'acpira-compact-probe-'));
 const start = Date.now();
 const log = (event: string, fields: Record<string, unknown> = {}) => console.log(JSON.stringify({ ms: Date.now() - start, event, ...fields }));
 let active = false;

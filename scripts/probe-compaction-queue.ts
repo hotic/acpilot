@@ -10,7 +10,7 @@ import { dataHome, DevinAccountProvider, readCredentials } from '../src/host/acc
 // acknowledgement, while the asynchronous operation may still be running.
 const agent = process.argv[2] ?? 'devin';
 const registry = new AgentRegistry();
-const cwd = await mkdtemp(join(tmpdir(), 'acpilot-queue-probe-'));
+const cwd = await mkdtemp(join(tmpdir(), 'acpira-queue-probe-'));
 const started = Date.now();
 const log = (event: string, fields: Record<string, unknown> = {}) => console.log(JSON.stringify({ ms: Date.now() - started, event, ...fields }));
 let phase = 'seed';

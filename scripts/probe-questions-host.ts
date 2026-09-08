@@ -13,7 +13,7 @@ import type { QuestionAnswers, QuestionBlock } from '../src/shared/transcript';
 const agent = process.argv[2] ?? 'grok';
 const decision = process.argv.includes('--cancel') ? 'cancel' : process.argv.includes('--skip') ? 'skip' : process.argv.includes('--partial') ? 'partial' : 'answer';
 const registry = new AgentRegistry();
-const cwd = await mkdtemp(join(tmpdir(), 'acpilot-questions-'));
+const cwd = await mkdtemp(join(tmpdir(), 'acpira-questions-'));
 const credential = agent === 'devin' ? await readCredentials(join(dataHome(), 'devin', 'credentials.toml')) : undefined;
 if (agent === 'devin' && !credential) throw new Error('No local Devin login');
 const provider = new DevinAccountProvider(cwd, () => registry.resolveBinary(agent));

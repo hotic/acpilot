@@ -1,15 +1,15 @@
-# ACPilot
+# Acpira
 
 A chat interface for ACP coding agents in VS Code and Cursor.
 
 **English** · [简体中文](README.zh.md)
 
-ACPilot lives in the secondary sidebar and drives official agent CLIs over [ACP](https://agentclientprotocol.com) (JSON-RPC over stdio):
+Acpira lives in the secondary sidebar and drives official agent CLIs over [ACP](https://agentclientprotocol.com) (JSON-RPC over stdio):
 
 - `grok agent stdio`
 - `devin acp`
 - `kimi acp`
-- any ACP-compatible command (added via the `acpilot.agents` setting)
+- any ACP-compatible command (added via the `acpira.agents` setting)
 
 The extension manages the UI, sessions, permission approvals, accounts, and context budget. Model calls, agent execution, and context compaction stay in the CLIs.
 
@@ -25,12 +25,12 @@ The extension manages the UI, sessions, permission approvals, accounts, and cont
    - [Grok](https://x.ai) — `grok` (`grok agent stdio`)
    - [Devin](https://devin.ai) — `devin` (`devin acp`)
    - [Kimi Code](https://www.kimi.com) — `kimi` (`kimi acp`)
-3. Open the **secondary sidebar** and the ACPilot view.
+3. Open the **secondary sidebar** and the Acpira view.
 
 ## Get started
 
 1. Install the agent CLI and sign in. Add or switch accounts from the agent menu; see [Accounts](#accounts).
-2. Open the ACPilot view in the secondary sidebar.
+2. Open the Acpira view in the secondary sidebar.
 3. Choose an agent, mode, and model from the toolbar below the composer, then send a message. Follow-ups sent mid-turn are queued. The square button cancels the current turn.
 
 ### Images and files
@@ -39,11 +39,11 @@ The extension manages the UI, sessions, permission approvals, accounts, and cont
 - Drag files from Explorer into the composer, or type `@` to search the workspace. The agent reads those files itself. Image files dropped from Explorer are sent as images.
 - Text files dropped from the system file manager (up to 256 KB) are embedded in the message. Binary files are not supported.
 
-Sessions are stored in the extension's global storage. After a restart, ACPilot resumes the session when the agent allows it; otherwise the transcript remains available as read-only history. When context usage is high, ACPilot can send `/compact` automatically; you can also compact from the context panel.
+Sessions are stored in the extension's global storage. After a restart, Acpira resumes the session when the agent allows it; otherwise the transcript remains available as read-only history. When context usage is high, Acpira can send `/compact` automatically; you can also compact from the context panel.
 
 ### Accounts
 
-ACPilot can store several logins per agent and bind one account to each session. Credentials are supplied when a session starts, so picking a different account starts a new session.
+Acpira can store several logins per agent and bind one account to each session. Credentials are supplied when a session starts, so picking a different account starts a new session.
 
 - The lower half of the agent menu lists saved accounts. Pick one to start a new session with it. **Import CLI login** reads the CLI’s existing local login (for Devin, `~/.local/share/devin/credentials.toml`). **Sign in in terminal** runs the agent’s login command in an isolated directory and does not change your existing local login. This also works on remote servers: copy the link and paste the code.
 - Secrets are stored in the OS keychain (VS Code SecretStorage). `accounts.json` keeps metadata such as email and plan. Transcripts store only the account id.
@@ -62,9 +62,9 @@ pnpm typecheck && pnpm test
 pnpm package        # build a .vsix
 ```
 
-Press F5 to launch an Extension Development Host. Logs are in Output → ACPilot. See [AGENTS.md](AGENTS.md) for the architecture map and protocol notes.
+Press F5 to launch an Extension Development Host. Logs are in Output → Acpira. See [AGENTS.md](AGENTS.md) for the architecture map and protocol notes.
 
-Stable GitHub Releases can publish the same VSIX to Visual Studio Marketplace and Open VSX automatically. See [Publishing ACPilot](RELEASING.md) for the one-time credentials and release steps.
+Stable GitHub Releases can publish the same VSIX to Visual Studio Marketplace and Open VSX automatically. See [Publishing Acpira](RELEASING.md) for the one-time credentials and release steps.
 
 ## License
 

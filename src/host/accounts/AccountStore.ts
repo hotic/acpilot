@@ -23,7 +23,7 @@ interface StoredAccount extends AccountInfo {
   meta?: Record<string, string>;
 }
 
-const SECRET_PREFIX = 'acpilot.account.';
+const SECRET_PREFIX = 'acpira.account.';
 
 // Account metadata goes to <file> (JSON); secrets go into the vault keyed by id; the two sides are linked only by id
 export class AccountStore {

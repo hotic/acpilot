@@ -11,7 +11,7 @@ const [agentId = 'grok', model, effort] = process.argv.slice(2).filter(x => !x.s
 const registry = new AgentRegistry();
 const binary = await registry.resolveBinary(agentId);
 if (!binary) throw new Error(`Missing CLI: ${agentId}`);
-const cwd = await mkdtemp(join(tmpdir(), 'acpilot-controls-'));
+const cwd = await mkdtemp(join(tmpdir(), 'acpira-controls-'));
 const print = (label: string, value: unknown) => console.log(label, JSON.stringify(value));
 let gotUsage: (() => void) | undefined;
 const usage = new Promise<void>(resolve => { gotUsage = resolve; });

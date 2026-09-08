@@ -393,7 +393,7 @@ export class AcpSession {
     await this.start();
   }
 
-  // auto: sent by ACPilot itself (over-threshold /compact); doesn't change the title and renders as a note line.
+  // auto: sent by Acpira itself (over-threshold /compact); doesn't change the title and renders as a note line.
   // Attachments are staged (blobs written, image files read) before the turn opens. running is claimed before that await so a second send arriving
   // meanwhile queues instead of racing onto the wire; if the session was cancelled or closed while staging, the prompt is dropped without a turn
   async prompt(text: string, attachments: Draft[] = [], auto = false, staged?: StagedSend, planId?: string): Promise<void> {

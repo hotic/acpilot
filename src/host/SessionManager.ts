@@ -24,7 +24,7 @@ export interface ManagerDeps {
   // Account layer (optional): agents on the account layer bind an account when opening a session
   accounts?: AccountManager;
   compaction?: () => CompactionPolicy;
-  // Option families hidden from the composer menus (in VS Code, the acpilot.hiddenOptions setting, edited from the settings page)
+  // Option families hidden from the composer menus (in VS Code, the acpira.hiddenOptions setting, edited from the settings page)
   hidden?: () => HiddenMap;
 }
 
@@ -91,7 +91,7 @@ export class SessionManager {
 
   get registry(): AgentRegistry { return this.deps.registry; }
 
-  // Swap the registry (acpilot.agents changed): re-probe the binaries, then push the new list out
+  // Swap the registry (acpira.agents changed): re-probe the binaries, then push the new list out
   setRegistry(r: AgentRegistry) {
     this.deps.registry = r;
     r.probeAll().then(() => this.emit({ type: 'agents', agents: this.agents() })).catch(e => this.deps.log(`agent probe failed: ${msg(e)}`));

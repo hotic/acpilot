@@ -29,7 +29,7 @@ export interface AgentPageProps {
 
 // One agent: a card of facts (the page heading carries the name), accounts when it has an account layer, then five stacked sections: the option families
 // shown in the composer menus, and the extension inventory. Everything read from the CLI's own files is read-only here — rows open the file,
-// ACPilot never writes it. Only the option families have switches
+// Acpira never writes it. Only the option families have switches
 export function AgentPage({ agent, accounts, inventory, controls, settings, env, on }: AgentPageProps) {
   useEffect(() => { if (!inventory) on.refreshInventory(agent.id); }, [agent.id, inventory, on]);
   // Quotas on the account rows are re-read each time the page is opened (recent ones come back from the host's memory)

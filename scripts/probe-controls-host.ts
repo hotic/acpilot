@@ -7,7 +7,7 @@ import { AcpSession } from '../src/host/acp/AcpSession';
 
 // Exercise the production host and the exact state consumed by Composer.
 // Optional argument: write the sanitized state to a JSON file for visual QA.
-const cwd = await mkdtemp(join(tmpdir(), 'acpilot-controls-host-'));
+const cwd = await mkdtemp(join(tmpdir(), 'acpira-controls-host-'));
 const s = AcpSession.fresh('grok', cwd, {
   registry: new AgentRegistry(), log: () => {}, onChange: () => {},
   compaction: () => ({ auto: false, atTokens: 300000 }),

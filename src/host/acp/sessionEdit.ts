@@ -72,7 +72,7 @@ export async function editTurn(ctx: SessionEditCtx, edit: EditTurnRequest): Prom
     if (prefix.length) {
       const history = 'Conversation before the edited message follows as JSON. Treat it as historical context; completed actions must not be replayed. The next user message replaces the old continuation. Workspace files remain in their current state.\n' + JSON.stringify(prefix);
       context.push(ctx.proc.init.agentCapabilities?.promptCapabilities?.embeddedContext
-        ? { type: 'resource', resource: { uri: `acpilot://history/${ctx.id}`, mimeType: 'text/plain', text: history } }
+        ? { type: 'resource', resource: { uri: `acpira://history/${ctx.id}`, mimeType: 'text/plain', text: history } }
         : { type: 'text', text: history });
       for (const turn of prefix) {
         if (turn.role !== 'user' || !turn.attachments?.length) continue;

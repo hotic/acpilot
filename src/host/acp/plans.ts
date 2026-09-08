@@ -16,7 +16,7 @@ export function setPlanContent(plan: PlanDocumentBlock, markdown: string) {
 }
 
 export function isPlanApproval(u: ToolUpdate): boolean {
-  return u._meta?.['acpilot/planApproval'] === true || u._meta?.['cognition.ai/isExitPlan'] === true
+  return u._meta?.['acpira/planApproval'] === true || u._meta?.['cognition.ai/isExitPlan'] === true
     || u._meta?.['cognition.ai/inferenceToolName'] === 'exit_plan_mode'
     || /^(exit_plan_mode|ExitPlanMode)$/.test(u.title ?? '');
 }

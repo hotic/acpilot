@@ -1,5 +1,5 @@
 /* Hallmark · pre-emit critique: P4 H5 E4 S5 R5 V4 */
-/* Hallmark · component: settings surface · genre: modern-minimal (in-app) · theme: ACPilot tokens (tokens.css), no new palette
+/* Hallmark · component: settings surface · genre: modern-minimal (in-app) · theme: Acpira tokens (tokens.css), no new palette
  * states: default · hover · focus-visible · active · disabled · loading (shimmer scan row) · empty
  * Settings-only tokens; everything else comes from tokens.css. Type: section heading above the shell's 13px body scale.
  * Widths: content measure (editor host only), control column; switch geometry on the 4px grid. Plain CSS (no @utility) so it can be imported on its own */

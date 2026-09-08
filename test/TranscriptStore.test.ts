@@ -11,7 +11,7 @@ function record(id: string, title = 'T'): SessionRecord {
 }
 
 function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), 'acpilot-store-'));
+  const dir = mkdtempSync(join(tmpdir(), 'acpira-store-'));
   const logs: string[] = [];
   return { dir, logs, store: new TranscriptStore(dir, l => logs.push(l)) };
 }

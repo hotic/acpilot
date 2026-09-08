@@ -62,7 +62,7 @@ export class WebviewBridge implements vscode.Disposable {
       });
       return;
     }
-    if (m.type === 'openInEditor') { void vscode.commands.executeCommand('acpilot.openInEditor'); return; }
+    if (m.type === 'openInEditor') { void vscode.commands.executeCommand('acpira.openInEditor'); return; }
     if (m.type === 'openFile') {
       const session = this.manager.active();
       if (!session || session.id !== m.sessionId) return;
@@ -168,7 +168,7 @@ export class WebviewBridge implements vscode.Disposable {
 </head>
 <body>
 <div id="root"></div>
-<script nonce="${nonce}">window.__acpilot={host:${JSON.stringify(this.host)}}</script>
+<script nonce="${nonce}">window.__acpira={host:${JSON.stringify(this.host)}}</script>
 <script type="module" nonce="${nonce}" src="${js}"></script>
 </body>
 </html>`;

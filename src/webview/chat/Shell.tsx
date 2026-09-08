@@ -73,7 +73,7 @@ export interface ShellProps {
   accounts?: AccountInfo[];
   accountId?: string;
   accountAction?: AccountAction;
-  // Option families hidden from the composer menus (acpilot.hiddenOptions)
+  // Option families hidden from the composer menus (acpira.hiddenOptions)
   hidden?: HiddenMap;
   title: string;
   status: SessionStatus;

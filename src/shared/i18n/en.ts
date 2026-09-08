@@ -277,7 +277,7 @@ export const en = {
   'mode.grok.plan': 'Plan first, act after approval',
   'mode.grok.yolo': 'Auto-approve every permission request',
 
-  'settings.title': 'ACPilot Settings',
+  'settings.title': 'Acpira Settings',
   'settings.back': 'Back to chat',
   'settings.general.title': 'General settings',
   'settings.agent.title': '{agent} settings',

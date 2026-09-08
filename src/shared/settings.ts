@@ -1,11 +1,11 @@
 import type { AgentId } from './transcript';
 import { isLanguage, type Language, type Locale } from './i18n';
 
-// Hidden option families (acpilot.hiddenOptions): agent → configOption id → source-qualified family keys (legacy family names remain readable; see models.ts) kept out of the composer menus.
+// Hidden option families (acpira.hiddenOptions): agent → configOption id → source-qualified family keys (legacy family names remain readable; see models.ts) kept out of the composer menus.
 // Long lists (Devin's 210 models) are trimmed to what is actually used via this; the option currently selected is never hidden
 export type HiddenMap = Record<AgentId, Record<string, string[]>>;
 
-// The settings the page shows and edits; the host builds it from acpilot.* and pushes it on every change
+// The settings the page shows and edits; the host builds it from acpira.* and pushes it on every change
 export interface SettingsView {
   language: Language;
   // Language resolved against the host's display language
@@ -16,7 +16,7 @@ export interface SettingsView {
   hiddenOptions: HiddenMap;
 }
 
-// Keys the webview may write back; the host maps them onto acpilot.<key> at user scope
+// Keys the webview may write back; the host maps them onto acpira.<key> at user scope
 export type SettingKey = 'language' | 'defaultAgent' | 'autoCompact' | 'compactAtTokens' | 'hiddenOptions';
 
 export const MIN_COMPACT_AT_TOKENS = 10_000;

@@ -11,7 +11,7 @@ let home: string;
 let cwd: string;
 
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), 'acpilot-inv-'));
+  root = await mkdtemp(join(tmpdir(), 'acpira-inv-'));
   home = join(root, 'home');
   cwd = join(root, 'work');
   const put = async (p: string, text: string) => { await mkdir(join(p, '..'), { recursive: true }); await writeFile(p, text); };

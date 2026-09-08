@@ -26,7 +26,7 @@ export async function approveGrokPlan(
 ) {
   const r = await permission({
     sessionId: req.sessionId,
-    toolCall: { toolCallId: req.toolCallId, title: 'exit_plan_mode', rawInput: { planContent: req.planContent }, _meta: { 'acpilot/planApproval': true } },
+    toolCall: { toolCallId: req.toolCallId, title: 'exit_plan_mode', rawInput: { planContent: req.planContent }, _meta: { 'acpira/planApproval': true } },
     options: [
       { optionId: 'approved', name: 'Build', kind: 'allow_once' },
       { optionId: 'rejected', name: t('plan.revise'), kind: 'reject_once' },

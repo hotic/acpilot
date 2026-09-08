@@ -12,7 +12,7 @@ import { groupModels } from '../src/shared/models';
 // Exercises the production session class in an isolated directory. Local Devin
 // credentials remain in memory; output includes only selections and probe replies.
 const agent = process.argv[2] ?? 'grok';
-const cwd = await mkdtemp(join(tmpdir(), `acpilot-edit-${agent}-`));
+const cwd = await mkdtemp(join(tmpdir(), `acpira-edit-${agent}-`));
 const registry = new AgentRegistry();
 const binary = await registry.resolveBinary(agent);
 if (!binary) throw new Error(`CLI unavailable: ${agent}`);

@@ -12,7 +12,7 @@ const plan = process.argv.includes('--plan');
 const decision = process.argv.includes('--cancel') ? 'cancel' : process.argv.includes('--reject') ? 'reject' : 'approve';
 const executionModel = process.argv.find(a => a.startsWith('--model='))?.slice('--model='.length);
 const registry = new AgentRegistry();
-const cwd = await mkdtemp(join(tmpdir(), 'acpilot-modes-'));
+const cwd = await mkdtemp(join(tmpdir(), 'acpira-modes-'));
 const credential = agent === 'devin' ? await readCredentials(join(dataHome(), 'devin', 'credentials.toml')) : undefined;
 if (agent === 'devin' && !credential) throw new Error('No local Devin login');
 const provider = new DevinAccountProvider(cwd, () => registry.resolveBinary(agent));

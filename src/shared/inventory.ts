@@ -1,7 +1,7 @@
 import type { AgentId } from './transcript';
 
 // What the settings page shows per agent: where its executable is, what its own config files declare (MCP servers / skills / rules).
-// Read-only: ACPilot lists and opens these files, it never writes them
+// Read-only: Acpira lists and opens these files, it never writes them
 
 export type McpTransport = 'stdio' | 'http' | 'sse';
 

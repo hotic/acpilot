@@ -238,7 +238,7 @@ describe('AcpSession', () => {
   });
 
   it('file draft pointing at an image on disk is read and sent as pixels; an oversized image draft is dropped with a note, the rest still goes', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'acpilot-att-'));
+    const dir = mkdtempSync(join(tmpdir(), 'acpira-att-'));
     const png = join(dir, 'shot.png');
     writeFileSync(png, 'real-png-bytes');
     const { d, session, blobs } = deps();
@@ -346,8 +346,8 @@ describe('AcpSession', () => {
   });
 
   it('synthesized modes: when the protocol omits modes, backfill from the registry, default to the first one, setMode goes through session/set_mode', async () => {
-    mkdirSync('/tmp/acpilot-no-modes', { recursive: true });
-    const { session } = deps('/tmp/acpilot-no-modes', undefined, SYN_MODES);
+    mkdirSync('/tmp/acpira-no-modes', { recursive: true });
+    const { session } = deps('/tmp/acpira-no-modes', undefined, SYN_MODES);
     const s = session();
     await s.start();
     const v = s.view();
@@ -364,8 +364,8 @@ describe('AcpSession', () => {
   });
 
   it('synthesized modes: yolo auto-approves permission requests, no card shown', async () => {
-    mkdirSync('/tmp/acpilot-no-modes', { recursive: true });
-    const { session } = deps('/tmp/acpilot-no-modes', undefined, SYN_MODES);
+    mkdirSync('/tmp/acpira-no-modes', { recursive: true });
+    const { session } = deps('/tmp/acpira-no-modes', undefined, SYN_MODES);
     const s = session();
     await s.start();
     // plan → yolo: covers the "pull the CLI back to default first" path
@@ -382,8 +382,8 @@ describe('AcpSession', () => {
   });
 
   it('synthesized modes: switching into yolo approves pending permissions too', async () => {
-    mkdirSync('/tmp/acpilot-no-modes', { recursive: true });
-    const { session } = deps('/tmp/acpilot-no-modes', undefined, SYN_MODES);
+    mkdirSync('/tmp/acpira-no-modes', { recursive: true });
+    const { session } = deps('/tmp/acpira-no-modes', undefined, SYN_MODES);
     const s = session();
     await s.start();
     const p = s.prompt('use tool');
@@ -636,8 +636,8 @@ describe('AcpSession', () => {
   });
 
   it('resume: peer reports session_not_found (Devin sweeps empty sessions) → fall back to a new session, history kept', async () => {
-    mkdirSync('/tmp/acpilot-gone', { recursive: true });
-    const { d, logs, session } = deps('/tmp/acpilot-gone');
+    mkdirSync('/tmp/acpira-gone', { recursive: true });
+    const { d, logs, session } = deps('/tmp/acpira-gone');
     const s = session();
     await s.start();
     await s.prompt('hi');
@@ -696,8 +696,8 @@ describe('AcpSession', () => {
   });
 
   it('login: session/new fails with -32000 → auth_required → authenticate → retry succeeds', async () => {
-    mkdirSync('/tmp/acpilot-needs-auth', { recursive: true });
-    const { session } = deps('/tmp/acpilot-needs-auth');
+    mkdirSync('/tmp/acpira-needs-auth', { recursive: true });
+    const { session } = deps('/tmp/acpira-needs-auth');
     const s = session();
     await s.start();
     expect(s.view().status).toBe('auth_required');

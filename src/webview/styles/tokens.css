@@ -211,7 +211,7 @@
 .scroll-fade[data-more-above] { --fade-top: var(--scroll-fade-size); }
 .scroll-fade[data-more-below] { --fade-bottom: var(--scroll-fade-size); }
 
-/* Hallmark · component: question card · theme: existing ACPilot tokens.
+/* Hallmark · component: question card · theme: existing Acpira tokens.
    One question per page, compact type, shared row alignment and persistent actions. */
 .question-header { padding: var(--gap) var(--pad) 0; }
 .question-body {
@@ -316,7 +316,7 @@
   --bg-code: #f3f3f3;
 }
 
-/* Appearance axes (acpilot.appearance.*): change tokens only, never structure */
+/* Appearance axes (acpira.appearance.*): change tokens only, never structure */
 [data-density="compact"] { --row: 24px; --ctl: 24px; --ctl-sm: 20px; --pad: 12px; --pad-y: 12px; --page: 16px; --gap: 6px; --msg-gap: 12px; --hdr: 44px; --text-1-lh: 18px; }
 [data-density="airy"]    { --row: 32px; --ctl: 32px; --ctl-sm: 26px; --pad: 16px; --pad-y: 22px; --page: 24px; --gap: 12px; --msg-gap: 24px; --hdr: 60px; --text-1-lh: 22px; }
 [data-density="compact"] { --row-dense: 20px; --chat-row: 24px; --process-row: 22px; }

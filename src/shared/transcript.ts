@@ -2,7 +2,7 @@
 
 import type { MsgKey } from './i18n/keys';
 
-// Built-in devin / grok; custom ids can be added in acpilot.agents
+// Built-in devin / grok; custom ids can be added in acpira.agents
 export type AgentId = string;
 
 export interface AgentInfo {
@@ -255,7 +255,7 @@ export interface UserTurn {
   edited?: true;
   // Internal execution instruction; the plan card represents it in the UI.
   planId?: string;
-  // Sent automatically by ACPilot (/compact over threshold); rendered as a note line instead of a bubble
+  // Sent automatically by Acpira (/compact over threshold); rendered as a note line instead of a bubble
   auto?: boolean;
 }
 

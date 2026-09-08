@@ -15,11 +15,11 @@ import { TranscriptStore } from './store/TranscriptStore';
 import { WebviewBridge } from './bridge';
 import { WorkspaceFiles } from './files';
 
-const VIEW_ID = 'acpilot.chat';
+const VIEW_ID = 'acpira.chat';
 
 export async function activate(context: vscode.ExtensionContext) {
-  const log = vscode.window.createOutputChannel('ACPilot', { log: true });
-  const cfg = () => vscode.workspace.getConfiguration('acpilot');
+  const log = vscode.window.createOutputChannel('Acpira', { log: true });
+  const cfg = () => vscode.workspace.getConfiguration('acpira');
   const appearance = (): Appearance => appearanceFromSettings((k: AxisKey) => cfg().get(`appearance.${k}`));
   const registry = () => new AgentRegistry(cfg().get<Record<string, CustomAgentSetting>>('agents') ?? {});
   const toast = (level: 'info' | 'error', text: string) => (level === 'error' ? vscode.window.showErrorMessage(text) : vscode.window.showInformationMessage(text));
@@ -62,7 +62,7 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   await manager.init();
 
-  // The settings page's backend: reads / writes acpilot.*, scans agent inventories; every bridge gets a subscription
+  // The settings page's backend: reads / writes acpira.*, scans agent inventories; every bridge gets a subscription
   const settingsCenter = new SettingsCenter({
     read: key => cfg().get(key),
     write: (key, value) => cfg().update(key, value, vscode.ConfigurationTarget.Global),
@@ -91,10 +91,10 @@ export async function activate(context: vscode.ExtensionContext) {
       },
     }, { webviewOptions: { retainContextWhenHidden: true } }),
 
-    vscode.commands.registerCommand('acpilot.newSession', () => manager.newSession()),
-    vscode.commands.registerCommand('acpilot.showLog', () => log.show()),
-    vscode.commands.registerCommand('acpilot.openInEditor', () => {
-      const panel = vscode.window.createWebviewPanel('acpilot.editor', 'ACPilot', vscode.ViewColumn.Active, { retainContextWhenHidden: true });
+    vscode.commands.registerCommand('acpira.newSession', () => manager.newSession()),
+    vscode.commands.registerCommand('acpira.showLog', () => log.show()),
+    vscode.commands.registerCommand('acpira.openInEditor', () => {
+      const panel = vscode.window.createWebviewPanel('acpira.editor', 'Acpira', vscode.ViewColumn.Active, { retainContextWhenHidden: true });
       panel.iconPath = {
         light: vscode.Uri.joinPath(context.extensionUri, 'media', 'icon-light.svg'),
         dark: vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.svg'),
@@ -105,11 +105,11 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('acpilot.appearance')) for (const b of bridges) b.pushAppearance();
-      if (e.affectsConfiguration('acpilot.agents')) { activeRegistry = registry(); manager.setRegistry(activeRegistry); }
-      if (e.affectsConfiguration('acpilot.hiddenOptions')) manager.emitHidden();
-      // Any other acpilot.* knob the settings page shows (language, defaultAgent, compaction, …): re-push the view and follow a language change host-side
-      if (e.affectsConfiguration('acpilot') && !e.affectsConfiguration('acpilot.appearance') && !e.affectsConfiguration('acpilot.agents')) {
+      if (e.affectsConfiguration('acpira.appearance')) for (const b of bridges) b.pushAppearance();
+      if (e.affectsConfiguration('acpira.agents')) { activeRegistry = registry(); manager.setRegistry(activeRegistry); }
+      if (e.affectsConfiguration('acpira.hiddenOptions')) manager.emitHidden();
+      // Any other acpira.* knob the settings page shows (language, defaultAgent, compaction, …): re-push the view and follow a language change host-side
+      if (e.affectsConfiguration('acpira') && !e.affectsConfiguration('acpira.appearance') && !e.affectsConfiguration('acpira.agents')) {
         settingsCenter.emit();
         setHostLocale(settingsCenter.locale());
       }

@@ -1,19 +1,19 @@
 {
-  "name": "acpilot",
-  "displayName": "ACPilot",
+  "name": "acpira",
+  "displayName": "Acpira",
   "description": "A chat interface for ACP coding agents in VS Code and Cursor (Grok, Devin, Kimi Code)",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "hotic",
   "icon": "media/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hotic/acpilot.git"
+    "url": "https://github.com/hotic/acpira.git"
   },
   "bugs": {
-    "url": "https://github.com/hotic/acpilot/issues"
+    "url": "https://github.com/hotic/acpira/issues"
   },
-  "homepage": "https://github.com/hotic/acpilot",
+  "homepage": "https://github.com/hotic/acpira",
   "keywords": [
     "acp",
     "agent",
@@ -39,69 +39,69 @@
     "viewsContainers": {
       "secondarySidebar": [
         {
-          "id": "acpilot",
-          "title": "ACPilot",
+          "id": "acpira",
+          "title": "Acpira",
           "icon": "media/icon.svg"
         }
       ]
     },
     "views": {
-      "acpilot": [
+      "acpira": [
         {
           "type": "webview",
-          "id": "acpilot.chat",
-          "name": "ACPilot",
+          "id": "acpira.chat",
+          "name": "Acpira",
           "icon": "media/icon.svg",
-          "contextualTitle": "ACPilot"
+          "contextualTitle": "Acpira"
         }
       ]
     },
     "commands": [
       {
-        "command": "acpilot.newSession",
-        "title": "%acpilot.cmd.newSession%",
-        "category": "ACPilot",
+        "command": "acpira.newSession",
+        "title": "%acpira.cmd.newSession%",
+        "category": "Acpira",
         "icon": "$(add)"
       },
       {
-        "command": "acpilot.openInEditor",
-        "title": "%acpilot.cmd.openInEditor%",
-        "category": "ACPilot",
+        "command": "acpira.openInEditor",
+        "title": "%acpira.cmd.openInEditor%",
+        "category": "Acpira",
         "icon": "$(open-preview)"
       },
       {
-        "command": "acpilot.showLog",
-        "title": "%acpilot.cmd.showLog%",
-        "category": "ACPilot"
+        "command": "acpira.showLog",
+        "title": "%acpira.cmd.showLog%",
+        "category": "Acpira"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "acpilot.newSession",
-          "when": "view == acpilot.chat",
+          "command": "acpira.newSession",
+          "when": "view == acpira.chat",
           "group": "navigation@1"
         },
         {
-          "command": "acpilot.openInEditor",
-          "when": "view == acpilot.chat",
+          "command": "acpira.openInEditor",
+          "when": "view == acpira.chat",
           "group": "navigation@2"
         },
         {
-          "command": "acpilot.showLog",
-          "when": "view == acpilot.chat"
+          "command": "acpira.showLog",
+          "when": "view == acpira.chat"
         }
       ]
     },
     "configuration": {
-      "title": "ACPilot",
+      "title": "Acpira",
       "properties": {
-        "acpilot.defaultAgent": {
+        "acpira.defaultAgent": {
           "type": "string",
           "default": "grok",
-          "description": "%acpilot.conf.defaultAgent%"
+          "description": "%acpira.conf.defaultAgent%"
         },
-        "acpilot.language": {
+        "acpira.language": {
           "type": "string",
           "enum": [
             "auto",
@@ -109,12 +109,12 @@
             "en"
           ],
           "default": "auto",
-          "description": "%acpilot.conf.language%"
+          "description": "%acpira.conf.language%"
         },
-        "acpilot.agents": {
+        "acpira.agents": {
           "type": "object",
           "default": {},
-          "markdownDescription": "%acpilot.conf.agents%",
+          "markdownDescription": "%acpira.conf.agents%",
           "additionalProperties": {
             "type": "object",
             "properties": {
@@ -145,21 +145,21 @@
             ]
           }
         },
-        "acpilot.compactAtTokens": {
+        "acpira.compactAtTokens": {
           "type": "number",
           "default": 300000,
-          "description": "%acpilot.conf.compactAtTokens%"
+          "description": "%acpira.conf.compactAtTokens%"
         },
-        "acpilot.autoCompact": {
+        "acpira.autoCompact": {
           "type": "boolean",
           "default": true,
-          "description": "%acpilot.conf.autoCompact%"
+          "description": "%acpira.conf.autoCompact%"
         },
-        "acpilot.hiddenOptions": {
+        "acpira.hiddenOptions": {
           "type": "object",
           "default": {},
           "scope": "application",
-          "markdownDescription": "%acpilot.conf.hiddenOptions%",
+          "markdownDescription": "%acpira.conf.hiddenOptions%",
           "additionalProperties": {
             "type": "object",
             "additionalProperties": {
@@ -170,7 +170,7 @@
             }
           }
         },
-        "acpilot.appearance.density": {
+        "acpira.appearance.density": {
           "type": "string",
           "enum": [
             "cozy",
@@ -178,9 +178,9 @@
             "airy"
           ],
           "default": "airy",
-          "description": "%acpilot.conf.appearance.density%"
+          "description": "%acpira.conf.appearance.density%"
         },
-        "acpilot.appearance.radius": {
+        "acpira.appearance.radius": {
           "type": "string",
           "enum": [
             "12",
@@ -188,9 +188,9 @@
             "16"
           ],
           "default": "12",
-          "description": "%acpilot.conf.appearance.radius%"
+          "description": "%acpira.conf.appearance.radius%"
         },
-        "acpilot.appearance.surface": {
+        "acpira.appearance.surface": {
           "type": "string",
           "enum": [
             "hairline",
@@ -198,9 +198,9 @@
             "stroke"
           ],
           "default": "tonal",
-          "description": "%acpilot.conf.appearance.surface%"
+          "description": "%acpira.conf.appearance.surface%"
         },
-        "acpilot.appearance.font": {
+        "acpira.appearance.font": {
           "type": "string",
           "enum": [
             "system",
@@ -208,9 +208,9 @@
             "geist"
           ],
           "default": "inter",
-          "description": "%acpilot.conf.appearance.font%"
+          "description": "%acpira.conf.appearance.font%"
         },
-        "acpilot.appearance.userMessage": {
+        "acpira.appearance.userMessage": {
           "type": "string",
           "enum": [
             "bubble",
@@ -218,9 +218,9 @@
             "plain"
           ],
           "default": "block",
-          "description": "%acpilot.conf.appearance.userMessage%"
+          "description": "%acpira.conf.appearance.userMessage%"
         },
-        "acpilot.appearance.toolLine": {
+        "acpira.appearance.toolLine": {
           "type": "string",
           "enum": [
             "text",
@@ -228,9 +228,9 @@
             "rich"
           ],
           "default": "icon",
-          "description": "%acpilot.conf.appearance.toolLine%"
+          "description": "%acpira.conf.appearance.toolLine%"
         },
-        "acpilot.appearance.thought": {
+        "acpira.appearance.thought": {
           "type": "string",
           "enum": [
             "text",
@@ -238,27 +238,27 @@
             "orb"
           ],
           "default": "orb",
-          "description": "%acpilot.conf.appearance.thought%"
+          "description": "%acpira.conf.appearance.thought%"
         },
-        "acpilot.appearance.sessions": {
+        "acpira.appearance.sessions": {
           "type": "string",
           "enum": [
             "dropdown",
             "drawer"
           ],
           "default": "dropdown",
-          "description": "%acpilot.conf.appearance.sessions%"
+          "description": "%acpira.conf.appearance.sessions%"
         },
-        "acpilot.appearance.composer": {
+        "acpira.appearance.composer": {
           "type": "string",
           "enum": [
             "island",
             "flush"
           ],
           "default": "island",
-          "description": "%acpilot.conf.appearance.composer%"
+          "description": "%acpira.conf.appearance.composer%"
         },
-        "acpilot.appearance.beam": {
+        "acpira.appearance.beam": {
           "type": "string",
           "enum": [
             "line",
@@ -267,9 +267,9 @@
             "full"
           ],
           "default": "full",
-          "description": "%acpilot.conf.appearance.beam%"
+          "description": "%acpira.conf.appearance.beam%"
         },
-        "acpilot.appearance.beamColor": {
+        "acpira.appearance.beamColor": {
           "type": "string",
           "enum": [
             "mono",
@@ -277,9 +277,9 @@
             "colorful"
           ],
           "default": "mono",
-          "description": "%acpilot.conf.appearance.beamColor%"
+          "description": "%acpira.conf.appearance.beamColor%"
         },
-        "acpilot.appearance.send": {
+        "acpira.appearance.send": {
           "type": "string",
           "enum": [
             "accent",
@@ -287,9 +287,9 @@
             "metal"
           ],
           "default": "metal",
-          "description": "%acpilot.conf.appearance.send%"
+          "description": "%acpira.conf.appearance.send%"
         },
-        "acpilot.appearance.accent": {
+        "acpira.appearance.accent": {
           "type": "string",
           "enum": [
             "brand",
@@ -297,9 +297,9 @@
             "vscode"
           ],
           "default": "agent",
-          "description": "%acpilot.conf.appearance.accent%"
+          "description": "%acpira.conf.appearance.accent%"
         },
-        "acpilot.appearance.motion": {
+        "acpira.appearance.motion": {
           "type": "string",
           "enum": [
             "subtle",
@@ -307,16 +307,16 @@
             "full"
           ],
           "default": "subtle",
-          "description": "%acpilot.conf.appearance.motion%"
+          "description": "%acpira.conf.appearance.motion%"
         },
-        "acpilot.appearance.fold": {
+        "acpira.appearance.fold": {
           "type": "string",
           "enum": [
             "codex",
             "cursor"
           ],
           "default": "codex",
-          "description": "%acpilot.conf.appearance.fold%"
+          "description": "%acpira.conf.appearance.fold%"
         }
       }
     }

@@ -8,9 +8,9 @@ import { cloneJson } from './clone';
 import { scanInventory } from './inventory';
 
 export interface SettingsDeps {
-  // Reads one acpilot.* setting; object values come back as a read-only Proxy, so view() JSON-round-trips them
+  // Reads one acpira.* setting; object values come back as a read-only Proxy, so view() JSON-round-trips them
   read: (key: SettingKey) => unknown;
-  // Writes acpilot.<key> at user scope
+  // Writes acpira.<key> at user scope
   write: (key: SettingKey, value: unknown) => PromiseLike<void>;
   // The host's display language (vscode.env.language), for resolving `auto`
   hostLanguage: () => string;
@@ -23,7 +23,7 @@ export interface SettingsDeps {
 
 export type SettingsEvent = { type: 'settings'; settings: SettingsView; locale: Locale };
 
-// The settings page's host-side counterpart: builds the SettingsView from acpilot.*, writes edits back, and scans agent inventories on demand.
+// The settings page's host-side counterpart: builds the SettingsView from acpira.*, writes edits back, and scans agent inventories on demand.
 // No vscode import, so it runs under vitest with injected deps
 export class SettingsCenter {
   private listeners = new Set<(ev: SettingsEvent) => void>();

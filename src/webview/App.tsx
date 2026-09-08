@@ -13,7 +13,7 @@ import { SettingsShell, type SettingsHandlers } from './settings/SettingsShell';
 import type { SettingsPage } from './settings/Nav';
 
 declare global {
-  interface Window { __acpilot?: { host: 'sidebar' | 'editor' } }
+  interface Window { __acpira?: { host: 'sidebar' | 'editor' } }
 }
 
 // Always through the memo: acquireVsCodeApi() throws when called twice, and other components (Link) reach the api via vscodeApi()

@@ -29,7 +29,7 @@ const registry = new AgentRegistry();
 const def = registry.get(agentId);
 const bin = await registry.resolveBinary(agentId);
 if (!bin) { console.error(`command not found: ${def.command}`); process.exit(1); }
-const cwd = await mkdtemp(join(tmpdir(), 'acpilot-questions-'));
+const cwd = await mkdtemp(join(tmpdir(), 'acpira-questions-'));
 const log = (event: string, data: unknown = {}) => console.log(`\n[${event}] ${JSON.stringify(data, null, 2)}`);
 
 const child = spawn(bin, def.args, { cwd, env: { ...process.env, ...def.env }, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -48,7 +48,7 @@ const firstChoice = (schema: acp.ElicitationSchema): Record<string, acp.Elicitat
   return content;
 };
 
-const app = acp.client({ name: 'acpilot-probe' })
+const app = acp.client({ name: 'acpira-probe' })
   .onNotification(acp.methods.client.session.update, ({ params }) => {
     const u = params.update;
     if (u.sessionUpdate === 'agent_message_chunk' && u.content.type === 'text') process.stdout.write(u.content.text);
@@ -94,7 +94,7 @@ const watchdog = setTimeout(() => { console.error('timeout'); child.kill(); proc
 try {
   const init = await conn.agent.request(acp.methods.agent.initialize, {
     protocolVersion: acp.PROTOCOL_VERSION,
-    clientInfo: { name: 'acpilot-probe', version: '0' },
+    clientInfo: { name: 'acpira-probe', version: '0' },
     clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false, elicitation: { form: {} } },
   });
   log('initialize', { agentInfo: init.agentInfo, capabilities: init.agentCapabilities });

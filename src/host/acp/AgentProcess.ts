@@ -23,7 +23,7 @@ export interface ClientHandlers {
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
 }
 
-export const CLIENT_INFO = { name: 'acpilot', version: VERSION };
+export const CLIENT_INFO = { name: 'acpira', version: VERSION };
 
 // A CLI that ignores the polite signal is force-killed after this long
 const KILL_GRACE_MS = 2_000;
