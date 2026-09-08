@@ -85,7 +85,9 @@ export function AgentMessage({ turn, index, running, onPermission, compacting }:
   const plans = turn.blocks.filter(b => b.type === 'plan_document');
   // Keep pending approvals in the activity input even when their controls live
   // on the plan card; removing them makes the process heading report thinking.
-  const content = { ...turn, blocks: turn.blocks.filter(b => b.type !== 'plan_document') };
+  // Older persisted sessions can contain empty thought blocks from ACP deltas.
+  // Filter before grouping so they leave neither a disclosure nor a rail/spacing slot.
+  const content = { ...turn, blocks: turn.blocks.filter(b => b.type !== 'plan_document' && (b.type !== 'thought' || !!b.text.trim())) };
   return <RowEntranceContext.Provider value={running}><div className="agent-message flex min-w-0 flex-col gap-gap">
     <AgentContent turn={content} index={index} running={running} onPermission={onPermission} />
     {plans.map(plan => <PlanDocument key={plan.id} block={plan}

@@ -18,6 +18,36 @@ describe('diffLines', () => {
 });
 
 describe('applyUpdate', () => {
+  it('ignores empty thought deltas while retaining whitespace inside real reasoning', () => {
+    const s = emptyState();
+    expect(applyUpdate(s, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: '' } })).toBe(false);
+    expect(s.turns).toEqual([]);
+    for (const text of ['Hello', ' ', 'world', '']) {
+      applyUpdate(s, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text } });
+    }
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'read', title: 'Read', kind: 'read' });
+    for (const text of ['', '\n  ']) {
+      expect(applyUpdate(s, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text } })).toBe(false);
+    }
+    expect(s.turns[0]).toMatchObject({ blocks: [{ type: 'thought', text: 'Hello world', streaming: false }, { type: 'tool_call' }] });
+  });
+
+  it.each(['completed', 'failed'] as const)('handles a Kimi edit diff followed by a %s text result', status => {
+    const s = emptyState();
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'edit', title: 'Edit', kind: 'edit', status: 'pending' });
+    applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'edit', status: 'in_progress',
+      content: [{ type: 'diff', path: 'sample.ts', oldText: 'const n = 1;', newText: 'const n = 2;' }] });
+    const turn = s.turns[0];
+    if (turn?.role !== 'agent') throw new Error();
+    const before = structuredClone(turn.blocks[0]);
+    const text = status === 'completed' ? 'Replaced 1 occurrence in sample.ts' : 'File changed before edit';
+    applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'edit', status,
+      content: [{ type: 'content', content: { type: 'text', text } }] });
+    expect(turn.blocks[0]).toMatchObject(status === 'completed'
+      ? { ...before, status }
+      : { status, content: { type: 'text', text }, diffStat: undefined });
+  });
+
   it('times observed execution across sparse updates, excluding pending approval and replay', () => {
     const s = emptyState();
     s.turns.push({ role: 'agent', blocks: [], startedAt: 1000 });

@@ -80,11 +80,17 @@ export function applyUpdate(s: NormalizeState, u: acp.SessionUpdate): boolean {
       return true;
     }
     case 'agent_thought_chunk': {
+      const text = textOf(u.content);
+      // Empty deltas carry no reasoning body and must not create a timed disclosure.
+      if (!text) return false;
       closeUserTurn(s);
       const t = currentAgentTurn(s);
       const last = lastBlock(t);
-      if (last?.type === 'thought' && last.streaming) last.text += textOf(u.content);
-      else { sealStreaming(s, t); s.thoughtStartedAt = Date.now(); t.blocks.push({ type: 'thought', text: textOf(u.content), startedAt: s.thoughtStartedAt, streaming: true }); }
+      if (last?.type === 'thought' && last.streaming) last.text += text;
+      else {
+        if (!text.trim()) return false;
+        sealStreaming(s, t); s.thoughtStartedAt = Date.now(); t.blocks.push({ type: 'thought', text, startedAt: s.thoughtStartedAt, streaming: true });
+      }
       return true;
     }
     case 'tool_call': {
@@ -315,8 +321,15 @@ function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
   if (target && !((b.verbKey === 'verb.todo' || b.verbKey === 'verb.ask') && target.fromTitle) && (!target.fromTitle || !b.target)) { b.target = target.text; b.targetMono = target.mono; }
   if (u.content?.length) {
     const c = toolContent(u.content);
-    if (c) b.content = c;
-    if (c?.type === 'diff') b.diffStat = { add: c.lines.filter(l => l.kind === 'add').length, del: c.lines.filter(l => l.kind === 'del').length };
+    // Kimi sends the edit diff before execution, then a plain success receipt.
+    // Preserve the diff on success; failures must still expose their error output.
+    const keepDiff = b.kind === 'edit' && b.status === 'completed' && b.content?.type === 'diff' && c?.type === 'text';
+    if (c && !keepDiff) {
+      b.content = c;
+      b.diffStat = c.type === 'diff'
+        ? { add: c.lines.filter(l => l.kind === 'add').length, del: c.lines.filter(l => l.kind === 'del').length }
+        : undefined;
+    }
   }
   if (!b.content && u.rawOutput !== undefined && u.rawOutput !== null) {
     const text = typeof u.rawOutput === 'string' ? u.rawOutput : JSON.stringify(u.rawOutput, null, 2);
