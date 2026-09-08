@@ -1,4 +1,5 @@
 {
+  "acpira.cmd.openView": "Open Chat",
   "acpira.cmd.newSession": "New Session",
   "acpira.cmd.openInEditor": "Open in Editor",
   "acpira.cmd.showLog": "Show Log",

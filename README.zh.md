@@ -4,7 +4,7 @@
 
 [English](README.md) · **简体中文**
 
-Acpira 位于副侧栏，通过 [ACP](https://agentclientprotocol.com)（JSON-RPC over stdio）驱动官方 Agent CLI：
+Acpira 位于活动栏，通过 [ACP](https://agentclientprotocol.com)（JSON-RPC over stdio）驱动官方 Agent CLI：
 
 - `grok agent stdio`
 - `devin acp`
@@ -25,12 +25,12 @@ Acpira 位于副侧栏，通过 [ACP](https://agentclientprotocol.com)（JSON-RP
    - [Grok](https://x.ai) — `grok`（`grok agent stdio`）
    - [Devin](https://devin.ai) — `devin`（`devin acp`）
    - [Kimi Code](https://www.kimi.com) — `kimi`（`kimi acp`）
-3. 打开**副侧栏**中的 Acpira 视图。
+3. 点击**活动栏**（左侧）的 Acpira 图标。若未显示，在活动栏空白处右键勾选 **Acpira**。也可把视图拖到副侧栏。
 
 ## 开始使用
 
 1. 安装 Agent CLI 并登录。在 Agent 菜单中添加或切换账号，详见 [账号](#账号)。
-2. 打开副侧栏中的 Acpira 视图。
+2. 从活动栏打开 Acpira，或运行 **Acpira: 打开聊天**。
 3. 在输入框下方的工具栏中选择 Agent、模式与模型，然后发送消息。回合进行中发送的后续消息会进入队列。点击方形按钮可取消当前回合。
 
 ### 图片与文件

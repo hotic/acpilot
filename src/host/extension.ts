@@ -93,6 +93,7 @@ export async function activate(context: vscode.ExtensionContext) {
       },
     }, { webviewOptions: { retainContextWhenHidden: true } }),
 
+    vscode.commands.registerCommand('acpira.openView', () => vscode.commands.executeCommand('acpira.chat.focus')),
     vscode.commands.registerCommand('acpira.newSession', () => (sidebar?.viewer ?? manager).newSession()),
     vscode.commands.registerCommand('acpira.showLog', () => log.show()),
     // A new tab is a new conversation: without a session id (title bar / command palette) it opens on a fresh session; a webview passing its id opens that one

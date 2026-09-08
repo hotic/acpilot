@@ -4,7 +4,7 @@ A chat interface for ACP coding agents in VS Code and Cursor.
 
 **English** · [简体中文](README.zh.md)
 
-Acpira lives in the secondary sidebar and drives official agent CLIs over [ACP](https://agentclientprotocol.com) (JSON-RPC over stdio):
+Acpira lives in the Activity Bar and drives official agent CLIs over [ACP](https://agentclientprotocol.com) (JSON-RPC over stdio):
 
 - `grok agent stdio`
 - `devin acp`
@@ -25,12 +25,12 @@ The extension manages the UI, sessions, permission approvals, accounts, and cont
    - [Grok](https://x.ai) — `grok` (`grok agent stdio`)
    - [Devin](https://devin.ai) — `devin` (`devin acp`)
    - [Kimi Code](https://www.kimi.com) — `kimi` (`kimi acp`)
-3. Open the **secondary sidebar** and the Acpira view.
+3. Click the Acpira icon in the **Activity Bar** (left). If it is hidden, right-click the Activity Bar and enable **Acpira**. The view can be dragged to the secondary sidebar.
 
 ## Get started
 
 1. Install the agent CLI and sign in. Add or switch accounts from the agent menu; see [Accounts](#accounts).
-2. Open the Acpira view in the secondary sidebar.
+2. Open the Acpira view from the Activity Bar, or run **Acpira: Open Chat**.
 3. Choose an agent, mode, and model from the toolbar below the composer, then send a message. Follow-ups sent mid-turn are queued. The square button cancels the current turn.
 
 ### Images and files

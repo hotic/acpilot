@@ -37,7 +37,7 @@
   "activationEvents": [],
   "contributes": {
     "viewsContainers": {
-      "secondarySidebar": [
+      "activitybar": [
         {
           "id": "acpira",
           "title": "Acpira",
@@ -52,11 +52,17 @@
           "id": "acpira.chat",
           "name": "Acpira",
           "icon": "media/icon.svg",
-          "contextualTitle": "Acpira"
+          "contextualTitle": "Acpira",
+          "retainContextWhenHidden": true
         }
       ]
     },
     "commands": [
+      {
+        "command": "acpira.openView",
+        "title": "%acpira.cmd.openView%",
+        "category": "Acpira"
+      },
       {
         "command": "acpira.newSession",
         "title": "%acpira.cmd.newSession%",

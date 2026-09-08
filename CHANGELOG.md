@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP server injection from Acpira settings is planned for 1.1. Agents still read their own CLI MCP config.
 - Steer / interrupt follow-up modes are planned for 1.1. Mid-turn messages stay in the host-side queue.
 
+### Added
+
+- Activity Bar chat view (primary sidebar), plus **Acpira: Open Chat**. The view can be moved to the secondary sidebar from the icon context menu.
+
 ## [1.0.2] - 2026-09-08
 
 ### Added
