@@ -1,5 +1,7 @@
 // Normalized shape of the transcript: host-side normalize.ts reduces ACP session/update into these blocks; the webview only understands these
 
+import type { MsgKey } from './i18n/keys';
+
 // Built-in devin / grok; custom ids can be added in acpilot.agents
 export type AgentId = string;
 
@@ -102,6 +104,8 @@ export interface ToolCallBlock {
   id: string;
   kind: ToolKind;
   verb: string;
+  // Set when the verb comes from the tool's identity (e.g. a todo-list tool filed under kind "think") rather than its ACP kind; renders in the current UI locale
+  verbKey?: MsgKey;
   target?: string;
   targetMono?: boolean;
   // Preserve ACP file references independently of the compact heading target.

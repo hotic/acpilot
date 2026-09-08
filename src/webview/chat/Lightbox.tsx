@@ -17,7 +17,7 @@ export function Lightbox({ src, name, onClose }: { src: string; name?: string; o
 
   if (!layer?.current) return null;
   return createPortal(
-    <div role="dialog" aria-label={name ?? t('common.image')} onClick={onClose} className="absolute inset-0 z-40 flex items-center justify-center bg-scrim p-pad">
+    <div role="dialog" aria-modal="true" aria-label={name ?? t('common.image')} onClick={onClose} className="absolute inset-0 z-40 flex items-center justify-center bg-scrim p-pad">
       <img
         src={src}
         alt={name ?? t('common.image')}

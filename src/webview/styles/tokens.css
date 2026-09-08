@@ -89,6 +89,8 @@
   --pad-y: 18px;
   /* Page margin: content's distance from the shell edge (header / conversation flow / composer outline share one vertical line), larger than the card padding --pad */
   --page: 20px;
+  /* Conversation column in the editor panel */
+  --content-w: 720px;
   --gap: 8px;
   --msg-gap: 18px;
   --hdr: 52px;
@@ -196,7 +198,8 @@
 [data-font="geist"] { --font: "Geist Variable", "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
 
 [data-surface="hairline"] { --card-line: var(--line); --card-bg: var(--bg-1); --card-shadow: none; }
-[data-surface="tonal"]    { --card-line: transparent; --card-bg: var(--bg-2); --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+/* Tonal pairs the raised fill with the conversation outline, so cards read as bubbles rather than bare fills */
+[data-surface="tonal"]    { --card-line: var(--conversation-line); --card-bg: var(--bg-2); --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
 [data-surface="stroke"]   { --card-line: var(--line-strong); --card-bg: var(--bg-0); --card-shadow: none; }
 
 [data-accent="brand"]  { --accent: var(--brand); --accent-fg: var(--brand-fg); }
@@ -221,6 +224,7 @@
   --color-card: var(--card-bg);
   --color-card-line: var(--card-line);
   --color-line: var(--line);
+  --color-conversation-line: var(--conversation-line);
   --color-chip: var(--chip);
   --color-chip-hover: var(--chip-hover);
   --color-line-strong: var(--line-strong);

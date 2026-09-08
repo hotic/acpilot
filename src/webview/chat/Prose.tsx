@@ -78,7 +78,7 @@ const COMPONENTS: Components = {
   code: ({ className, children }) => {
     const lang = /language-(\w+)/.exec(className ?? '')?.[1];
     const code = textOf(children).replace(/\n$/, '');
-    return lang === 'mermaid' ? <MermaidBlock chart={code} /> : <CodeBlock code={code} lang={lang} />;
+    return lang === 'mermaid' ? <MermaidBlock chart={code} /> : <CodeBlock code={code} />;
   },
   inlineCode: ({ children }) => <code>{children}</code>,
   a: Link,
@@ -124,6 +124,6 @@ function MermaidBlock({ chart }: { chart: string }) {
     }, 200);
     return () => { dead = true; clearTimeout(timer); };
   }, [chart, theme]);
-  if (failed || !svg) return failed ? <CodeBlock code={chart} lang="mermaid" /> : <div className="acp-mermaid-pending" />;
+  if (failed || !svg) return failed ? <CodeBlock code={chart} /> : <div className="acp-mermaid-pending" />;
   return <div className="acp-mermaid" dangerouslySetInnerHTML={{ __html: svg }} />;
 }

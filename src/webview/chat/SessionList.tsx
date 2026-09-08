@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { LoaderCircle, Pencil, Pin, PinOff, Search, Trash2 } from 'lucide-react';
 import type { AgentInfo, SessionSummary } from '@shared/transcript';
 import { cn } from '../ui/cn';
-import { t } from '../i18n';
+import { t, useLocale } from '../i18n';
 import { AgentMark } from './AgentMark';
 
 // A running session shows a spinning ring (the one place a spinner is allowed: a list has no verb to shimmer); the other states are plain dots
@@ -32,6 +32,7 @@ export interface SessionListProps {
 // Session list: search and agent filters stay visible even without history; pinned sessions get their own section, the rest is one flat list.
 // Each item: vendor mark · title · time; on hover those swap for three actions — pin / rename / delete. Deletion applies immediately, undo lives on the Toast at the shell's bottom
 export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, onRename, onDelete, onPin }: SessionListProps) {
+  const locale = useLocale();
   const [query, setQuery] = useState('');
   const [agentFilter, setAgentFilter] = useState<string>();
   const [editing, setEditing] = useState<string>();
@@ -51,7 +52,7 @@ export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, o
       session={s}
       agentName={nameOf(s.agent)}
       active={s.id === activeId}
-      time={fmtTime(s.updatedAt, dayOf(s.updatedAt))}
+      time={fmtTime(s.updatedAt, dayOf(s.updatedAt), locale)}
       editing={editing === s.id}
       onSelect={() => onSelect(s.id)}
       onEdit={() => setEditing(s.id)}
@@ -197,10 +198,10 @@ function RenameInput({ initial, onDone }: { initial: string; onDone: (title: str
 
 function startOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
 
-// Today shows the time of day, earlier shows month/day
-function fmtTime(iso: string, dayAgo: number): string {
+// Today shows the time of day, earlier shows month/day — both follow the UI locale
+function fmtTime(iso: string, dayAgo: number, locale: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  if (dayAgo <= 0) return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  if (dayAgo <= 0) return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(d);
+  return new Intl.DateTimeFormat(locale, { month: 'numeric', day: 'numeric' }).format(d);
 }

@@ -41,7 +41,13 @@ function QueuedRow({ item, blobUrl, onEdit, onRemove }: { item: QueuedPrompt; bl
       </>}
     >
       {item.attachments.length > 0 && <AttachmentTiles attachments={item.attachments} blobUrl={blobUrl} />}
-      {first && <RowTarget className={onEdit && 'cursor-text'}><span onClick={onEdit}>{first}</span></RowTarget>}
+      {first && (
+        <RowTarget className={onEdit && 'cursor-text'}>
+          {onEdit
+            ? <button type="button" onClick={onEdit} className="text-left">{first}</button>
+            : first}
+        </RowTarget>
+      )}
     </Row>
   );
 }

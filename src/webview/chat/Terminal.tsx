@@ -17,7 +17,7 @@ export function TerminalOutput({ block }: { block: ToolCallBlock }) {
     <pre
       ref={ref}
       onScroll={e => { const el = e.currentTarget; pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}
-      className="term-follow m-0 max-h-term overflow-y-auto rounded-lg bg-code px-pad py-2 font-mono text-mono text-fg-2 whitespace-pre-wrap [overflow-wrap:anywhere]"
+      className="term-follow m-0 max-h-term overflow-y-auto rounded-lg border border-conversation-line bg-code px-pad py-2 font-mono text-mono text-fg-2 whitespace-pre-wrap [overflow-wrap:anywhere]"
     >
       {text}
     </pre>

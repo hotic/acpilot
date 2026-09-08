@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Check, ChevronRight, Compass, FoldVertical, Hand, Pencil, TriangleAlert, X } from 'lucide-react';
 import { IconButton } from '../ui/Button';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
@@ -21,8 +21,7 @@ import { elapsedLabel, foldActivity, splitCodexBlocks } from './folding';
 
 // User message: color block / right-aligned bubble / plain text; ones ACPilot sends automatically (/compact) render as a note line, not a bubble.
 // Attachments (image thumbnails / file pills) sit above the text inside the same bubble.
-// With `onEdit` the whole card opens the editor on click (as Cursor does); the pencil is a hover-only hint in the corner, not a row of its own,
-// so the card stays as tall as its text. Clicks that land on an attachment or that end a text selection leave the card alone.
+// The pencil is the only edit control: a hover-only hint in the corner, not a row of its own, so the card stays as tall as its text.
 // Sticking within the exchange is the caller's job (`HistoryMessage` wraps it), so the editor can take the card's place without a layout jump
 export function UserMessage({ turn, index, blobUrl, onEdit }: { turn: UserTurn; index: number; blobUrl?: (blob: string) => string; onEdit?: () => void }) {
   const { userMessage } = useAppearance();
@@ -33,20 +32,13 @@ export function UserMessage({ turn, index, blobUrl, onEdit }: { turn: UserTurn; 
       </div>
     );
   }
-  const onClick = onEdit && ((e: MouseEvent<HTMLDivElement>) => {
-    if ((e.target as Element).closest('button, a')) return;
-    if (window.getSelection()?.isCollapsed === false) return;
-    onEdit();
-  });
   return (
     <div
-      onClick={onClick}
       className={cn(
         'user-message group relative flex w-full shrink-0 flex-col gap-gap text-1 text-fg-1 [overflow-wrap:anywhere]',
         userMessage !== 'plain' && 'user-message-card rounded-lg px-pad py-gap',
         userMessage === 'bubble' && 'self-end max-w-[88%]',
         userMessage === 'plain' && 'bg-bg-0 py-gap font-medium',
-        onEdit && 'user-message-editable cursor-text',
       )}
     >
       {turn.attachments?.length ? <TurnAttachments attachments={turn.attachments} blobUrl={blobUrl} /> : null}
@@ -88,7 +80,7 @@ function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn;
   return (
     <div className="flex flex-col gap-gap">
       {groups.map((g, gi) => (
-        <div key={gi} className="enter" style={{ '--i': Math.min(i++, 12) } as CSSProperties}>
+        <div key={g.kind === 'block' && 'id' in g.block && g.block.id ? g.block.id : `g${gi}`} className="enter" style={{ '--i': Math.min(i++, 12) } as CSSProperties}>
           {g.kind === 'lines'
             ? <Lines blocks={g.blocks} fold={fold} />
             : <Block block={g.block} onPermission={onPermission} />}
@@ -96,7 +88,7 @@ function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn;
       ))}
       {showActivity && (
         <div className="enter" style={{ '--i': i++ } as CSSProperties}>
-          <Activity label={turn.activity!.label} awaitingApproval={turn.blocks.some(b => b.type === 'permission')} />
+          <Activity turn={turn} />
         </div>
       )}
       {!running && outcomeOf(turn) && (
@@ -141,11 +133,13 @@ function isBusy(b: AgentBlock): boolean {
 }
 
 // Approval waits use a static icon; motion remains reserved for thinking.
-function Activity({ label, awaitingApproval }: { label: string; awaitingApproval?: boolean }) {
+function Activity({ turn }: { turn: AgentTurn }) {
+  const activity = foldActivity(turn);
+  const awaitingApproval = turn.blocks.some(b => b.type === 'permission');
   return (
     <Row lead={awaitingApproval ? <Hand className="size-icon" strokeWidth={1.5} /> : <WaitingDots />} className="font-medium">
-      <RowLabel>{label.split(' ')[0]}</RowLabel>
-      <RowTarget mono className="font-normal">{label.split(' ').slice(1).join(' ')}</RowTarget>
+      <RowLabel>{activity.label}</RowLabel>
+      {activity.target && <RowTarget mono={activity.mono} className="font-normal">{activity.target}</RowTarget>}
     </Row>
   );
 }
@@ -241,7 +235,7 @@ function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; runnin
     return (
       <div className="flex flex-col gap-gap">
         {turn.blocks.map((block, i) => <Block key={'id' in block ? block.id : i} block={block} onPermission={onPermission} />)}
-        {running && turn.blocks.length === 0 && <Activity label={turn.activity?.label ?? t('host.thinking')} awaitingApproval={turn.blocks.some(b => b.type === 'permission')} />}
+        {running && turn.blocks.length === 0 && <Activity turn={turn} />}
         {!running && outcomeOf(turn) && <Outcome turn={turn} />}
       </div>
     );

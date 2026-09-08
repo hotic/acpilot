@@ -21,8 +21,8 @@ const FOLD_KEY: Record<ToolCallBlock['status'], MsgKey> = {
 };
 
 export function toolVerb(block: ToolCallBlock): string {
-  // Stored verbs use the host locale at creation time; render from semantic kind.
-  return t(FOLD_KEY[block.status], { verb: t(`verb.${block.kind}`) });
+  // Stored verbs use the host locale at creation time; render from semantic kind, or from verbKey when the verb came from the tool's identity
+  return t(FOLD_KEY[block.status], { verb: t(block.verbKey ?? `verb.${block.kind}`) });
 }
 
 export interface FoldActivity {

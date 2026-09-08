@@ -21,7 +21,7 @@ export function DraftChips({ drafts, onRemove }: { drafts: Draft[]; onRemove: (i
   return (
     <div className="flex flex-wrap gap-1 px-2 pt-2">
       {drafts.map((d, i) => (
-        <Removable key={i} label={t('common.removeNamed', { name: d.name ?? t('common.image') })} onRemove={() => onRemove(i)}>
+        <Removable key={d.kind === 'file' ? d.uri : `${d.name ?? d.kind}-${i}`} label={t('common.removeNamed', { name: d.name ?? t('common.image') })} onRemove={() => onRemove(i)}>
           <AttachmentTag
             name={d.name}
             image={d.kind === 'image' || (d.kind === 'file' && !!imageMimeOf(d.name))}
@@ -43,7 +43,7 @@ export function TurnAttachments({ attachments, blobUrl }: { attachments: Attachm
     <div className="scroll-thin flex shrink-0 gap-1 overflow-x-auto">
       {attachments.map((a, i) => (
         <AttachmentTag
-          key={i}
+          key={a.kind === 'file' ? a.uri : a.blob ?? `${a.kind}-${i}`}
           name={a.name}
           image={a.kind === 'image' || (a.kind === 'file' && !!imageMimeOf(a.name))}
           src={a.kind === 'image' && blobUrl && a.blob ? blobUrl(a.blob) : undefined}
@@ -62,13 +62,14 @@ export function AttachmentTiles({ attachments, blobUrl }: { attachments: Attachm
   return (
     <span className="flex shrink-0 self-center items-center gap-1">
       {attachments.map((a, i) => {
+        const key = a.kind === 'file' ? a.uri : a.blob ?? `${a.kind}-${i}`;
         const src = a.kind === 'image' && blobUrl && a.blob ? blobUrl(a.blob) : undefined;
         return src
-          ? <button key={i} type="button" title={a.name} aria-label={t('common.previewImage', { name: a.name ?? t('common.image') })} onClick={() => setPreview({ src, name: a.name })}
+          ? <button key={key} type="button" title={a.name} aria-label={t('common.previewImage', { name: a.name ?? t('common.image') })} onClick={() => setPreview({ src, name: a.name })}
               className="flex size-lead shrink-0 cursor-zoom-in overflow-hidden rounded-xs outline-none focus-visible:ring-1 focus-visible:ring-focus">
               <img src={src} alt="" className="size-full object-cover" />
             </button>
-          : <AttachmentTag key={i} name={a.name} image={a.kind === 'image' || (a.kind === 'file' && !!imageMimeOf(a.name))} title={a.kind === 'file' ? a.uri : undefined} onPreview={() => undefined} />;
+          : <AttachmentTag key={key} name={a.name} image={a.kind === 'image' || (a.kind === 'file' && !!imageMimeOf(a.name))} title={a.kind === 'file' ? a.uri : undefined} onPreview={() => undefined} />;
       })}
       {preview && <Lightbox src={preview.src} name={preview.name} onClose={() => setPreview(null)} />}
     </span>

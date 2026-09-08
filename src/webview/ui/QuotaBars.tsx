@@ -35,7 +35,7 @@ function QuotaBar({ window: w }: { window: QuotaWindow }) {
           style={{ width: `${pct}%` }}
         />
       </span>
-      <span>{pct}%</span>
+      <span>{t('quota.left', { pct })}</span>
     </span>
   );
 }
