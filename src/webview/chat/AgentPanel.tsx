@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, Plus } from 'lucide-react';
 import type { AccountInfo, AgentInfo } from '@shared/transcript';
 import type { AddAccountVia } from '@shared/protocol';
-import { MenuFooter, MenuHeader, MenuList } from '../ui/Popover';
+import { MenuFooter, MenuHeader, MenuList } from '../ui/Menu';
 import { QuotaBars } from '../ui/QuotaBars';
 import { t } from '../i18n';
 import { AgentMark } from './AgentMark';

@@ -18,7 +18,6 @@ import './settings.css';
 export interface SettingsHandlers {
   setSetting: <K extends SettingKey>(key: K, value: SettingsView[K]) => void;
   openPath: (path: string) => void;
-  openSettingsJson: (key?: string) => void;
   refreshInventory: (agent: AgentId) => void;
   selectAccount: (id: string) => void;
   addAccount: (agent: AgentId) => void;
@@ -86,7 +85,6 @@ export function SettingsShell(p: SettingsShellProps) {
                     <AgentPage
                       key={agent.id}
                       agent={agent}
-                      agents={p.agents}
                       accounts={p.accounts.filter(a => a.agent === agent.id)}
                       inventory={p.inventories[agent.id]}
                       controls={p.controls[agent.id]}

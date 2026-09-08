@@ -5,7 +5,7 @@ import type { HiddenMap, SettingsView } from '@shared/settings';
 import type { AgentInventory } from '@shared/inventory';
 import type { Locale } from '@shared/i18n';
 import { BASE_APPEARANCE, type Appearance } from './appearance';
-import { setLocale, t } from './i18n';
+import { LocaleContext, setLocale, t } from './i18n';
 import { Shell, type ShellHandlers } from './chat/Shell';
 import { useVsCodeTheme } from './useVsCodeTheme';
 import { vscodeApi } from './vscodeApi';
@@ -60,6 +60,8 @@ export function App() {
   const [page, setPage] = useState<SettingsPage>({ kind: 'general' });
   const theme = useVsCodeTheme();
 
+  useEffect(() => { document.documentElement.lang = locale; }, [locale]);
+
   useEffect(() => {
     const onMsg = (e: MessageEvent<HostMsg>) => {
       const m = e.data;
@@ -82,7 +84,6 @@ export function App() {
         case 'inventory': setInventories(inv => ({ ...inv, [m.agent]: m.inventory })); break;
         case 'controls': setControls(c => ({ ...c, [m.agent]: m.controls })); break;
         case 'files': settleFiles(m.seq, m.files); break;
-        case 'toast': break;
       }
     };
     window.addEventListener('message', onMsg);
@@ -127,7 +128,6 @@ export function App() {
   const settingsOn = useMemo<SettingsHandlers>(() => ({
     setSetting: (key, value) => post({ type: 'setSetting', key, value }),
     openPath: path => post({ type: 'openPath', path }),
-    openSettingsJson: key => post({ type: 'openSettingsJson', ...(key ? { key } : {}) }),
     // Drop the cached copy first so the page shows the scanning shimmer until the reply lands
     refreshInventory: agent => { setInventories(inv => { const { [agent]: _drop, ...rest } = inv; return rest; }); post({ type: 'inventory', agent }); },
     selectAccount: id => post({ type: 'selectAccount', id }),
@@ -137,7 +137,8 @@ export function App() {
   }), []);
 
   if (!init || !settings) return null;
-  const agent = agents.find(a => a.id === session?.agent) ?? agents[0] ?? { id: 'grok', name: 'Grok Build' };
+  const agent = agents.find(a => a.id === session?.agent) ?? agents[0];
+  if (!agent) return null;
   // A locale change re-renders through a fresh dictionary: t() reads module state, so the tree remounts on key
   if (view === 'settings') {
     return (
@@ -161,6 +162,7 @@ export function App() {
     );
   }
   return (
+    <LocaleContext.Provider value={locale}>
     <Shell
       key={locale}
       appearance={appearance}
@@ -172,7 +174,6 @@ export function App() {
       accountId={session?.accountId}
       accountAction={accountActions.find(action => action.agent === agent.id)}
       hidden={hidden}
-      followUp={settings.followUp}
       title={session?.title ?? t('session.untitled')}
       status={session?.status ?? 'starting'}
       error={session?.error}
@@ -191,5 +192,6 @@ export function App() {
       replayKey={session?.id}
       onOpenSettings={() => setView('settings')}
     />
+    </LocaleContext.Provider>
   );
 }

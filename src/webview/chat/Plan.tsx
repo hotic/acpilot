@@ -1,23 +1,51 @@
-import type { ReactNode } from 'react';
-import { Check, ChevronsDown, ChevronsUp, ListTodo } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { Check, ChevronRight, ChevronsDown, ChevronsUp, ListTodo } from 'lucide-react';
 import type { PlanBlock, PlanEntry, PlanStatus } from '@shared/transcript';
 import { useAppearance } from '../appearance';
 import { t } from '../i18n';
-import { Disclosure } from '../ui/Disclosure';
-import { Row } from '../ui/Row';
+import { Card } from '../ui/Card';
+import { Collapse } from '../ui/Collapse';
+import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { cn } from '../ui/cn';
 
-// Plan: one row plus the expanded entries; entries are Rows too, with a status dot in the lead slot.
-// This is the copy that stays in the transcript; the live one is the PlanBar above the composer
-export function Plan({ block }: { block: PlanBlock }) {
+// Plan card, Cursor-style: a tonal card whose header row carries the entry being worked on plus done / total,
+// with the full entry list collapsing underneath. Collapsed by default so a long plan doesn't flood the transcript.
+// Shared by the transcript copy (Plan) and the live one pinned above the composer (PlanBar).
+export function PlanCard({ entries, live }: { entries: PlanEntry[]; live?: boolean }) {
   const { toolLine } = useAppearance();
-  const done = block.entries.filter(e => e.status === 'completed').length;
+  const [open, setOpen] = useState(false);
+  const done = entries.filter(e => e.status === 'completed').length;
+  const current = entries.find(e => e.status === 'in_progress') ?? entries.find(e => e.status === 'pending');
   const lead = toolLine === 'text' ? undefined : <ListTodo className="size-icon" strokeWidth={1.5} />;
   return (
-    <Disclosure lead={lead} indent={false} body={<PlanEntries entries={block.entries} />}>
-      <span>{t('plan.title')}</span>
-      <span className="text-fg-3 tabular-nums">{done} / {block.entries.length}</span>
-    </Disclosure>
+    <Card className={cn('group flex flex-col px-pad py-1', open && 'pb-2')} data-open={open || undefined}>
+      <Row
+        as="button" interactive aria-expanded={open} onClick={() => setOpen(o => !o)}
+        lead={lead}
+        trailing={<>
+          <span>{done} / {entries.length}</span>
+          <ChevronRight className="size-3 transition-transform group-data-[open]:rotate-90" strokeWidth={1.75} />
+        </>}
+      >
+        <RowLabel className={cn(live && current && 'shimmer')}>{t('plan.title')}</RowLabel>
+        {current && <RowTarget>{current.title}</RowTarget>}
+      </Row>
+      <Collapse open={open}>
+        <div className="pt-1">
+          <PlanEntries entries={entries} />
+        </div>
+      </Collapse>
+    </Card>
+  );
+}
+
+// The transcript copy of a plan: same card as the live PlanBar, kept in history after the turn ends.
+// A little vertical air so the card doesn't cling to the tool rows around it.
+export function Plan({ block }: { block: PlanBlock }) {
+  return (
+    <div className="py-1">
+      <PlanCard entries={block.entries} />
+    </div>
   );
 }
 

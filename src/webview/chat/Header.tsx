@@ -3,7 +3,8 @@ import type { AccountInfo, AgentInfo, SessionSummary } from '@shared/transcript'
 import { useAppearance } from '../appearance';
 import { t } from '../i18n';
 import { IconButton } from '../ui/Button';
-import { Menu, Popover } from '../ui/Popover';
+import { Popover } from '../ui/Popover';
+import { Menu } from '../ui/Menu';
 import { quotaSummary } from '../ui/QuotaBars';
 import { AgentMark } from './AgentMark';
 import { AgentPanel } from './AgentPanel';
@@ -21,6 +22,7 @@ export interface HeaderProps {
   activeSessionId?: string;
   on: Pick<ShellHandlers, 'selectSession' | 'newSession' | 'renameSession' | 'deleteSession' | 'pinSession' | 'selectAgent' | 'selectAccount' | 'addAccount' | 'removeAccount' | 'refreshQuota'>;
   onToggleDrawer?: () => void;
+  drawerOpen?: boolean;
   // Swaps the chat for the settings page (webview-local view state)
   onOpenSettings?: () => void;
 }
@@ -28,7 +30,7 @@ export interface HeaderProps {
 // Header: a plain text title on the left (sharing the conversation flow's left edge), account / session history / new session icons on the right
 // (the common layout of Claude Code / Codex / Cursor); one divider below. The drawer axis swaps the left side for a menu button.
 // The person icon is the account layer's home (login state, switching, adding): it opens the agent panel, whose footer leads to the accounts page
-export function Header({ title, sessions, agent, agents, accounts, accountId, activeSessionId, on, onToggleDrawer, onOpenSettings }: HeaderProps) {
+export function Header({ title, sessions, agent, agents, accounts, accountId, activeSessionId, on, onToggleDrawer, onOpenSettings, drawerOpen }: HeaderProps) {
   const { sessions: mode } = useAppearance();
   const account = accounts?.find(a => a.id === accountId);
   // Tooltip: agent · account, with the remaining allowance appended once known ("Devin · s@x.io · Weekly 94%")
@@ -62,7 +64,7 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
       {mode === 'drawer'
         ? (
           <>
-            <button type="button" onClick={onToggleDrawer} className="-ml-2 inline-flex h-ctl min-w-0 items-center gap-1.5 rounded-md px-2 text-2 font-medium text-fg-strong transition-colors hover:bg-hover focus-visible:bg-hover">
+            <button type="button" onClick={onToggleDrawer} aria-expanded={drawerOpen} className="-ml-2 inline-flex h-ctl min-w-0 items-center gap-1.5 rounded-md px-2 text-2 font-medium text-fg-strong transition-colors hover:bg-hover focus-visible:bg-hover">
               <MenuIcon className="size-icon shrink-0 text-fg-3" strokeWidth={1.75} />
               <span className="truncate">{title}</span>
             </button>
@@ -76,7 +78,7 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
             <div className="-mr-1.5 flex shrink-0 items-center gap-0.5">
               {/* New sessions start after choosing an agent from the plus menu. */}
               <Menu
-                side="bottom" align="end" width="sm"
+                side="bottom" align="end" width="md"
                 items={agents.map(a => ({ id: a.id, label: a.name, icon: <AgentMark id={a.id} name={a.name} />, disabled: a.available === false }))}
                 onSelect={id => on.newSession(id)}
               >

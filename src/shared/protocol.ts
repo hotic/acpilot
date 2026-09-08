@@ -69,7 +69,6 @@ export type HostMsg =
   // Answers to the inventory / controls requests, one agent at a time (both are lazy: scanned / read on demand)
   | { type: 'inventory'; agent: AgentId; inventory: AgentInventory }
   | { type: 'controls'; agent: AgentId; controls: ConfigControl[] }
-  | { type: 'toast'; level: 'info' | 'error'; text: string }
   // Reply to searchFiles; seq echoes the request so stale replies can be dropped
   | { type: 'files'; seq: number; files: FileHit[] };
 
@@ -122,9 +121,8 @@ export type WebviewMsg =
   // A link inside agent output was clicked; host opens it externally after an isSafeExternalUrl check
   | { type: 'openExternal'; url: string }
   // Settings page: write a setting (host maps it onto acpilot.<key> at user scope), open a file / directory from the inventory lists,
-  // open settings.json (or the Settings UI filtered to `key`), rescan an agent's extension inventory, read the configOptions of its latest session
+  // rescan an agent's extension inventory, read the configOptions of its latest session
   | { type: 'setSetting'; key: SettingKey; value: unknown }
   | { type: 'openPath'; path: string }
-  | { type: 'openSettingsJson'; key?: string }
   | { type: 'inventory'; agent: AgentId }
   | { type: 'controls'; agent: AgentId };

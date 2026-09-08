@@ -1,38 +1,5 @@
 import type { AgentId } from './transcript';
-import type { Language, Locale } from './i18n';
-
-// What happens when a message is sent while a turn is running:
-// queue     — hold it, send after the turn ends (client-side; works with every agent)
-// steer     — send it now as a second session/prompt; agents that support it fold it into the running turn at the next model call
-//             (verified on Devin: `scripts/probe-steer.ts`). Agents without support fall back to queue
-// interrupt — session/cancel the running turn, then send
-export type FollowUp = 'queue' | 'steer' | 'interrupt';
-export const FOLLOW_UPS: FollowUp[] = ['queue', 'steer', 'interrupt'];
-
-// One entry of acpilot.mcpServers (keyed by name in the setting). Handed to agents over ACP in session/new / load / resume.
-// stdio when `command` is set, otherwise http (or sse when type says so). `agents` limits it to some agents; absent = every agent
-export interface McpServerSetting {
-  type?: 'stdio' | 'http' | 'sse';
-  command?: string;
-  args?: string[];
-  env?: Record<string, string>;
-  url?: string;
-  headers?: Record<string, string>;
-  agents?: AgentId[];
-  enabled?: boolean;
-}
-
-export type McpTransport = 'stdio' | 'http' | 'sse';
-
-export function mcpTransport(s: McpServerSetting): McpTransport {
-  if (s.type) return s.type;
-  return s.command ? 'stdio' : 'http';
-}
-
-// Is this server meant for the given agent (ignoring transport capability, which only the live process knows)?
-export function mcpAppliesTo(s: McpServerSetting, agent: AgentId): boolean {
-  return s.enabled !== false && (!s.agents || s.agents.includes(agent));
-}
+import { isLanguage, type Language, type Locale } from './i18n';
 
 // Hidden option families (acpilot.hiddenOptions): agent → configOption id → source-qualified family keys (legacy family names remain readable; see models.ts) kept out of the composer menus.
 // Long lists (Devin's 210 models) are trimmed to what is actually used via this; the option currently selected is never hidden
@@ -44,23 +11,51 @@ export interface SettingsView {
   // Language resolved against the host's display language
   locale: Locale;
   defaultAgent: AgentId;
-  followUp: FollowUp;
   autoCompact: boolean;
   compactAtTokens: number;
-  mcpServers: Record<string, McpServerSetting>;
   hiddenOptions: HiddenMap;
 }
 
 // Keys the webview may write back; the host maps them onto acpilot.<key> at user scope
-export type SettingKey = 'language' | 'defaultAgent' | 'followUp' | 'autoCompact' | 'compactAtTokens' | 'mcpServers' | 'hiddenOptions';
+export type SettingKey = 'language' | 'defaultAgent' | 'autoCompact' | 'compactAtTokens' | 'hiddenOptions';
+
+export const MIN_COMPACT_AT_TOKENS = 10_000;
 
 export const DEFAULT_SETTINGS: SettingsView = {
   language: 'auto',
   locale: 'en',
   defaultAgent: 'grok',
-  followUp: 'queue',
   autoCompact: true,
   compactAtTokens: 300_000,
-  mcpServers: {},
   hiddenOptions: {},
 };
+
+// A hand-edited settings.json or a forged webview message can send anything; fall back per key so the page never sees an illegal value
+export function sanitizeSetting<K extends SettingKey>(key: K, value: unknown): SettingsView[K] {
+  const fallback = DEFAULT_SETTINGS[key];
+  switch (key) {
+    case 'language':
+      return (isLanguage(value) ? value : fallback) as SettingsView[K];
+    case 'defaultAgent':
+      return (typeof value === 'string' && value.trim() ? value.trim() : fallback) as SettingsView[K];
+    case 'autoCompact':
+      return (typeof value === 'boolean' ? value : fallback) as SettingsView[K];
+    case 'compactAtTokens': {
+      const n = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : fallback as number;
+      return Math.max(MIN_COMPACT_AT_TOKENS, n) as SettingsView[K];
+    }
+    case 'hiddenOptions':
+      return (isHiddenMap(value) ? value : fallback) as SettingsView[K];
+  }
+}
+
+function isHiddenMap(v: unknown): v is HiddenMap {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+  for (const families of Object.values(v as Record<string, unknown>)) {
+    if (!families || typeof families !== 'object' || Array.isArray(families)) return false;
+    for (const names of Object.values(families as Record<string, unknown>)) {
+      if (!Array.isArray(names) || names.some(n => typeof n !== 'string')) return false;
+    }
+  }
+  return true;
+}

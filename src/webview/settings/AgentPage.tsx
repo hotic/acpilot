@@ -1,8 +1,8 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
-import { Braces, FileText, Globe, KeyRound, Plus, Server, SlidersHorizontal, Sparkles, X } from 'lucide-react';
+import { FileText, Globe, KeyRound, Plus, Server, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import type { AccountInfo, AgentInfo, ConfigControl } from '@shared/transcript';
-import type { AgentInventory, InventoryFile, InventoryMcp, InventorySkill } from '@shared/inventory';
-import { mcpAppliesTo, mcpTransport, type McpServerSetting, type McpTransport, type SettingsView } from '@shared/settings';
+import type { AgentInventory, InventoryFile, InventoryMcp, InventorySkill, McpTransport } from '@shared/inventory';
+import type { SettingsView } from '@shared/settings';
 import { familyHidden, groupModels, setFamilyVisible, variantLabel, type ModelFamily } from '@shared/models';
 import { IconButton } from '../ui/Button';
 import { QuotaBars } from '../ui/QuotaBars';
@@ -16,7 +16,6 @@ const SECTIONS: AgentSection[] = ['models', 'mcp', 'skills', 'rules', 'config'];
 
 export interface AgentPageProps {
   agent: AgentInfo;
-  agents: AgentInfo[];
   // Accounts of this agent only
   accounts: AccountInfo[];
   inventory?: AgentInventory;
@@ -29,23 +28,22 @@ export interface AgentPageProps {
 
 // One agent: a card of facts (the page heading carries the name), accounts when it has an account layer, then five stacked sections: the option families
 // shown in the composer menus, and the extension inventory. Everything read from the CLI's own files is read-only here — rows open the file,
-// ACPilot never writes it. Only the ACPilot-injected MCP list and the option families have switches
-export function AgentPage({ agent, agents, accounts, inventory, controls, settings, env, on }: AgentPageProps) {
+// ACPilot never writes it. Only the option families have switches
+export function AgentPage({ agent, accounts, inventory, controls, settings, env, on }: AgentPageProps) {
   useEffect(() => { if (!inventory) on.refreshInventory(agent.id); }, [agent.id, inventory, on]);
   // Quotas on the account rows are re-read each time the page is opened (recent ones come back from the host's memory)
   useEffect(() => { if (agent.accounts) on.refreshQuota?.(agent.id); }, [agent.id, agent.accounts, on]);
 
-  const injected = useMemo(() => Object.entries(settings.mcpServers).filter(([, s]) => s.enabled !== false), [settings.mcpServers]);
   const counts: Record<AgentSection, number> = {
     models: controls?.reduce((n, c) => n + groupModels(c.options).length, 0) ?? 0,
-    mcp: injected.filter(([, s]) => mcpAppliesTo(s, agent.id)).length + (inventory?.mcp.length ?? 0),
+    mcp: inventory?.mcp.length ?? 0,
     skills: inventory?.skills.length ?? 0,
     rules: inventory?.rules.filter(r => r.exists).length ?? 0,
     config: inventory?.config.filter(c => c.exists).length ?? 0,
   };
   const sections: Record<AgentSection, ReactNode> = {
     models: <ModelsSection agent={agent} controls={controls} settings={settings} on={on} />,
-    mcp: <McpSection agent={agent} agents={agents} inventory={inventory} settings={settings} env={env} on={on} />,
+    mcp: <McpSection agent={agent} inventory={inventory} env={env} on={on} />,
     skills: <SkillsSection agent={agent} inventory={inventory} env={env} on={on} />,
     rules: <FilesSection kind="rules" agent={agent} files={inventory?.rules} env={env} on={on} />,
     config: <FilesSection kind="config" agent={agent} files={inventory?.config} env={env} on={on} />,
@@ -90,10 +88,9 @@ export function AgentPage({ agent, agents, accounts, inventory, controls, settin
   );
 }
 
-// Facts card: executable (with install state), version, follow-up capability. Only the path may truncate; the words around it keep their width
+// Facts card: executable (with install state) and version. Only the path may truncate; the words around it keep their width
 function AgentFacts({ agent, inventory, env }: { agent: AgentInfo; inventory?: AgentInventory; env: SettingsEnv }) {
   const version = inventory?.runtime?.version ? t('settings.agent.version', { name: inventory.runtime.name ?? agent.name, version: inventory.runtime.version }) : undefined;
-  const steer = inventory ? (inventory.steer ? t('settings.agent.steer') : t('settings.agent.noSteer')) : undefined;
   return (
     <Group>
       <FactRow label={t('settings.fact.binary')}>
@@ -104,7 +101,6 @@ function AgentFacts({ agent, inventory, env }: { agent: AgentInfo; inventory?: A
             : <><Dot ok={false} /><span className="truncate font-sans text-2 text-fg-2">{t('settings.agent.notInstalled', { command: agent.id })}</span></>}
       </FactRow>
       <FactRow label={t('settings.fact.version')}>{version ?? <span className="text-fg-2">{t('settings.fact.noLive')}</span>}</FactRow>
-      <FactRow label={t('settings.fact.followUp')}>{steer ?? <span className="text-fg-2">—</span>}</FactRow>
     </Group>
   );
 }
@@ -125,7 +121,7 @@ function ModelsSection({ agent, controls, settings, on }: { agent: AgentInfo; co
   };
   // Second line: what the family spans — its effort levels, Fast / 1M — so the row says which switch is being flipped
   const summary = (f: ModelFamily) => {
-    if (f.variants.length === 1) return f.variants[0]!.name === f.name ? undefined : variantLabel(f.variants[0]!, f);
+    if (f.variants.length === 1) return f.variants[0]!.name === f.name ? undefined : variantLabel(f.variants[0]!, f, { standard: t('composer.standard') });
     const parts = [f.efforts.filter(Boolean).join(' / '), f.hasFast && 'Fast', f.hasLong && '1M'].filter(Boolean);
     return parts.join(' · ');
   };
@@ -194,23 +190,9 @@ function Grouped<T>({ items, sourceOf, row, env, on, empty, loading }: { items: 
 // Does the list come as several cards (so the Section must not wrap them in one)?
 const asCards = (n: number | undefined) => (n ?? 0) > 0;
 
-// Two MCP lists: what ACPilot hands over via ACP (switchable per agent) and what the CLI reads from its own files (read-only)
-function McpSection({ agent, agents, inventory, settings, env, on }: Omit<AgentPageProps, 'accounts' | 'controls'>) {
-  const entries = Object.entries(settings.mcpServers);
-  const caps = inventory?.runtime?.mcp;
-  const supported = (tr: McpTransport) => !caps || tr === 'stdio' || (tr === 'http' ? caps.http : caps.sse);
-
-  // Membership toggle: `agents` absent means every agent; the list collapses back to "absent" once it covers everyone again
-  const toggle = (name: string, s: McpServerSetting, onFor: boolean) => {
-    const all = agents.map(a => a.id);
-    const cur = s.agents ?? all;
-    const next = onFor ? [...new Set([...cur, agent.id])] : cur.filter(a => a !== agent.id);
-    const covers = all.every(a => next.includes(a));
-    const { agents: _drop, ...rest } = s;
-    on.setSetting('mcpServers', { ...settings.mcpServers, [name]: covers ? rest : { ...rest, agents: next } });
-  };
-
-  const nativeRow = (m: InventoryMcp) => (
+// The MCP servers the CLI reads from its own files (read-only). Injecting servers over ACP is not offered yet: the wire supports it, the UI does not
+function McpSection({ agent, inventory, env, on }: { agent: AgentInfo; inventory?: AgentInventory; env: SettingsEnv; on: SettingsHandlers }) {
+  const row = (m: InventoryMcp) => (
     <ItemRow
       key={`${m.source}:${m.name}`}
       lead={TRANSPORT_ICON[m.transport]}
@@ -219,36 +201,10 @@ function McpSection({ agent, agents, inventory, settings, env, on }: Omit<AgentP
       dim={!m.enabled}
     />
   );
-
   return (
-    <>
-      <Section
-        title={t('settings.mcp.injected')}
-        desc={t(entries.length ? 'settings.mcp.injected.desc' : 'settings.mcp.injected.none')}
-        action={<SectionAction icon={<Braces strokeWidth={1.5} />} onClick={() => on.openSettingsJson('acpilot.mcpServers')}>{t('settings.mcp.edit')}</SectionAction>}
-      >
-        {entries.length ? entries.map(([name, s]) => {
-          const tr = mcpTransport(s);
-          const ok = supported(tr);
-          const off = s.enabled === false;
-          const target = s.command ? [s.command, ...(s.args ?? [])].join(' ') : s.url;
-          return (
-            <ItemRow
-              key={name}
-              lead={TRANSPORT_ICON[tr]}
-              title={name}
-              desc={!ok ? t('settings.mcp.unsupported', { agent: agent.name, transport: tr }) : `${off ? `${t('settings.mcp.disabled')} · ` : ''}${tr} · ${target}`}
-              dim={off}
-              trailing={<Switch checked={!off && ok && mcpAppliesTo(s, agent.id)} disabled={off || !ok} onChange={v => toggle(name, s, v)} label={`${name} · ${agent.name}`} />}
-            />
-          );
-        }) : null}
-      </Section>
-
-      <Section title={t('settings.mcp.native')} desc={t('settings.mcp.native.desc', { agent: agent.name })} cards={asCards(inventory?.mcp.length)}>
-        <Grouped items={inventory?.mcp} sourceOf={m => m.source} row={nativeRow} env={env} on={on} empty={t('settings.mcp.none')} loading={!inventory} />
-      </Section>
-    </>
+    <Section desc={t('settings.mcp.native.desc', { agent: agent.name })} cards={asCards(inventory?.mcp.length)}>
+      <Grouped items={inventory?.mcp} sourceOf={m => m.source} row={row} env={env} on={on} empty={t('settings.mcp.none')} loading={!inventory} />
+    </Section>
   );
 }
 

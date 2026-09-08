@@ -7,9 +7,10 @@ import { Button, Chip, IconButton } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { cn } from '../ui/cn';
 import { t } from '../i18n';
-import { MenuFooter, MenuHeader, MenuList, Popover } from '../ui/Popover';
+import { Popover } from '../ui/Popover';
+import { MenuFooter, MenuHeader, MenuList } from '../ui/Menu';
 import { Row, RowTarget } from '../ui/Row';
-import { ModelOptions } from './Composer';
+import { ModelOptions } from './ModelPicker';
 import { Prose } from './Prose';
 
 type ExecutionModel = { configId: string; value: string };
@@ -41,7 +42,7 @@ export function PlanDocument({ block, permission: suppliedPermission, onChoose }
   const family = model && groupModels(model.options).find(f => f.variants.some(v => v.id === choice?.value));
   const variant = family?.variants.find(v => v.id === choice?.value);
   const params = family && variant && (family.efforts.length > 1 || variant.effort || variant.fast || variant.long)
-    ? variantLabel(variant, family) : undefined;
+    ? variantLabel(variant, family, { standard: t('composer.standard') }) : undefined;
   // Keep the selected executor visible after the menu closes, including source
   // and parameters that distinguish otherwise identical model names.
   const executor = family && variant
@@ -103,7 +104,7 @@ export function PlanDocument({ block, permission: suppliedPermission, onChoose }
           </Popover>}
           <Button variant="primary" className="shrink-0"
             disabled={busy || !ctx.build || !block.markdown}
-            onClick={() => ctx.build?.(block.id, choice, primary?.id)}>Build</Button>
+            onClick={() => ctx.build?.(block.id, choice, primary?.id)}>{t('plan.build')}</Button>
         </div>
       </div>
     </Card>

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Paperclip } from 'lucide-react';
 import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PermissionBlock, QueuedPrompt, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
 import type { HiddenMap } from '@shared/settings';
-import type { FollowUp } from '@shared/settings';
 import type { AccountAction, AddAccountVia, EditTurnRequest, FileHit } from '@shared/protocol';
 import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
 import { t } from '../i18n';
@@ -69,8 +68,6 @@ export interface ShellProps {
   accountAction?: AccountAction;
   // Option families hidden from the composer menus (acpilot.hiddenOptions)
   hidden?: HiddenMap;
-  // Follow-up handling while a turn runs; the composer placeholder explains it
-  followUp?: FollowUp;
   title: string;
   status: SessionStatus;
   error?: string;
@@ -143,13 +140,26 @@ export function Shell(p: ShellProps) {
     />
   );
 
-  const composerProps: ComposerProps = {
-    running: p.running, disabled: p.status !== 'ready', followUp: p.followUp,
+  const composerProps: ComposerProps = useMemo(() => ({
+    running: p.running, disabled: p.status !== 'ready',
     theme: p.theme, turns: p.turns, controls: p.controls, hidden: p.hidden?.[p.agent.id],
     usage: p.usage, canCompact: p.canCompact, cwd: p.cwd ?? '',
     onSend: on.send, onSearchFiles: on.searchFiles, onNotice: notice, onStop: on.stop,
     onSetMode: on.setMode, onSetConfig: on.setConfig, onCompact: on.compact,
-  };
+  }), [p.running, p.status, p.theme, p.turns, p.controls, p.hidden, p.agent.id, p.usage, p.canCompact, p.cwd, on.send, on.searchFiles, notice, on.stop, on.setMode, on.setConfig, on.compact]);
+  const planDoc = useMemo(() => ({
+    controls: p.controls, hidden: p.hidden?.[p.agent.id], running: p.running, ready: p.status === 'ready',
+    permissions: p.turns.flatMap(t => t.role === 'agent' ? t.blocks.filter((b): b is PermissionBlock => b.type === 'permission') : []),
+    build: p.activeSessionId && on.buildPlan ? (id: string, model?: { configId: string; value: string }, optionId?: string) => on.buildPlan!(p.activeSessionId!, id, model, optionId) : undefined,
+    open: p.activeSessionId && on.openPlan ? (id: string) => on.openPlan!(p.activeSessionId!, id) : undefined,
+  }), [p.controls, p.hidden, p.agent.id, p.running, p.status, p.turns, p.activeSessionId, on.buildPlan, on.openPlan]);
+  const history = useMemo(() => on.editTurn && p.activeSessionId ? {
+    sessionId: p.activeSessionId, composer: composerProps, edit: on.editTurn,
+    editing: editing?.sessionId === p.activeSessionId ? editing.index : undefined,
+    select: (index: number | undefined) => setEditing(current => index === undefined
+      ? current?.sessionId === p.activeSessionId ? undefined : current
+      : { sessionId: p.activeSessionId!, index }),
+  } : undefined, [on.editTurn, p.activeSessionId, composerProps, editing]);
 
   return (
     <AppearanceContext.Provider value={a}>
@@ -182,22 +192,12 @@ export function Shell(p: ShellProps) {
               activeSessionId={p.activeSessionId}
               on={handlers}
               onToggleDrawer={() => setDrawerOpen(o => !o)}
+              drawerOpen={drawerOpen}
               onOpenSettings={p.onOpenSettings}
             />
             <div className="relative flex min-h-0 flex-1 flex-col">
-              <PlanDocumentContext.Provider value={{ controls: p.controls, hidden: p.hidden?.[p.agent.id], running: p.running, ready: p.status === 'ready',
-                permissions: p.turns.flatMap(t => t.role === 'agent' ? t.blocks.filter((b): b is PermissionBlock => b.type === 'permission') : []),
-                build: p.activeSessionId && on.buildPlan ? (id, model, optionId) => on.buildPlan!(p.activeSessionId!, id, model, optionId) : undefined,
-                open: p.activeSessionId && on.openPlan ? id => on.openPlan!(p.activeSessionId!, id) : undefined,
-              }}>
-                <HistoryContext.Provider value={on.editTurn && p.activeSessionId ? {
-                  sessionId: p.activeSessionId, composer: composerProps, edit: on.editTurn,
-                  editing: editing?.sessionId === p.activeSessionId ? editing.index : undefined,
-                  // A late reply from another session must not close its editor.
-                  select: index => setEditing(current => index === undefined
-                    ? current?.sessionId === p.activeSessionId ? undefined : current
-                    : { sessionId: p.activeSessionId!, index }),
-                } : undefined}>
+              <PlanDocumentContext.Provider value={planDoc}>
+                <HistoryContext.Provider value={history}>
                   <Thread key={p.activeSessionId} turns={p.turns} running={p.running} wide={wide} replayKey={p.replayKey} blobUrl={blobUrl} onPermission={on.permission} />
                 </HistoryContext.Provider>
               </PlanDocumentContext.Provider>
@@ -207,7 +207,7 @@ export function Shell(p: ShellProps) {
                 </div>
               )}
             </div>
-            <div className={cn('shrink-0', wide && a.composer === 'island' && 'mx-auto w-full max-w-[calc(720px+2*var(--pad))]')}>
+            <div className={cn('shrink-0', wide && a.composer === 'island' && 'mx-auto w-full max-w-[calc(var(--content-w)+2*var(--pad))]')}>
               <PlanBar key={p.activeSessionId} turns={p.turns} running={p.running} />
               {alertTurn && (
                 <Alert
@@ -288,7 +288,7 @@ function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: Thre
   });
   return (
     <div ref={ref} className="thread-scroll scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto px-page">
-      <div key={replayKey} className={cn('mx-auto flex flex-col gap-msg pt-pad-y pb-gap', wide && 'max-w-[720px]')}>
+      <div key={replayKey} className={cn('mx-auto flex flex-col gap-msg pt-pad-y pb-gap', wide && 'max-w-(--content-w)')}>
         {exchanges.map(exchange => (
           <section key={exchange.key} className="flex min-w-0 flex-col gap-msg">
             {exchange.messages}

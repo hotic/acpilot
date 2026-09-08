@@ -1,9 +1,10 @@
 import type { AgentId } from '@shared/transcript';
 import type { AgentInventory, AgentRuntimeInfo } from '@shared/inventory';
-import { DEFAULT_SETTINGS, type SettingKey, type SettingsView } from '@shared/settings';
+import { sanitizeSetting, type SettingKey, type SettingsView } from '@shared/settings';
 import { resolveLocale, type Locale } from '@shared/i18n';
 import type { AgentRegistry } from './acp/AgentRegistry';
 import { agentExt } from './agentExt';
+import { cloneJson } from './clone';
 import { scanInventory } from './inventory';
 
 export interface SettingsDeps {
@@ -18,7 +19,6 @@ export interface SettingsDeps {
   runtimeInfo: (agent: AgentId) => AgentRuntimeInfo | undefined;
   home: () => string;
   cwd: () => string;
-  log: (line: string) => void;
 }
 
 export type SettingsEvent = { type: 'settings'; settings: SettingsView; locale: Locale };
@@ -30,11 +30,11 @@ export class SettingsCenter {
 
   constructor(private deps: SettingsDeps) {}
 
+  // getConfiguration().get() hands back a read-only Proxy that postMessage can't clone; a JSON round-trip fixes the object values.
+  // Values are then checked against the shape the readers expect, so a hand-edited settings.json cannot break the page
   private read<K extends SettingKey>(key: K): SettingsView[K] {
     const v = this.deps.read(key);
-    if (v === undefined) return DEFAULT_SETTINGS[key];
-    // getConfiguration().get() hands back a read-only Proxy that postMessage can't clone; a JSON round-trip fixes the object values
-    return (typeof v === 'object' && v !== null ? JSON.parse(JSON.stringify(v)) : v) as SettingsView[K];
+    return sanitizeSetting(key, typeof v === 'object' && v !== null ? cloneJson(v) : v);
   }
 
   view(): SettingsView {
@@ -42,10 +42,8 @@ export class SettingsCenter {
       language: this.read('language'),
       locale: this.locale(),
       defaultAgent: this.read('defaultAgent'),
-      followUp: this.read('followUp'),
       autoCompact: this.read('autoCompact'),
       compactAtTokens: this.read('compactAtTokens'),
-      mcpServers: this.read('mcpServers'),
       hiddenOptions: this.read('hiddenOptions'),
     };
   }
@@ -54,9 +52,10 @@ export class SettingsCenter {
     return resolveLocale(this.read('language'), this.deps.hostLanguage());
   }
 
-  // Write, then push: VS Code's own onDidChangeConfiguration also fires (and covers hand edits of settings.json), a double push is harmless
+  // Write, then push: VS Code's own onDidChangeConfiguration also fires (and covers hand edits of settings.json), a double push is harmless.
+  // The page only ever sends values it rendered, but the message can come from any webview script, so the value is checked like a file edit
   async set(key: SettingKey, value: unknown): Promise<void> {
-    await this.deps.write(key, value);
+    await this.deps.write(key, sanitizeSetting(key, value));
     this.emit();
   }
 

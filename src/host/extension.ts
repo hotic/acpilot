@@ -70,7 +70,6 @@ export async function activate(context: vscode.ExtensionContext) {
     runtimeInfo: agent => manager.runtimeInfo(agent),
     home: homedir,
     cwd: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? homedir(),
-    log: line => log.info(line),
   });
   setHostLocale(settingsCenter.locale());
 
@@ -108,7 +107,7 @@ export async function activate(context: vscode.ExtensionContext) {
       if (e.affectsConfiguration('acpilot.appearance')) for (const b of bridges) b.pushAppearance();
       if (e.affectsConfiguration('acpilot.agents')) { activeRegistry = registry(); manager.setRegistry(activeRegistry); }
       if (e.affectsConfiguration('acpilot.hiddenOptions')) manager.emitHidden();
-      // Any other acpilot.* knob the settings page shows (language, followUp, mcpServers, …): re-push the view and follow a language change host-side
+      // Any other acpilot.* knob the settings page shows (language, defaultAgent, compaction, …): re-push the view and follow a language change host-side
       if (e.affectsConfiguration('acpilot') && !e.affectsConfiguration('acpilot.appearance') && !e.affectsConfiguration('acpilot.agents')) {
         settingsCenter.emit();
         setHostLocale(settingsCenter.locale());

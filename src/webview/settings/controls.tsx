@@ -3,7 +3,7 @@ import { ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '../ui/cn';
 import { Card } from '../ui/Card';
 import { Chip, IconButton } from '../ui/Button';
-import { Menu, type MenuItem } from '../ui/Popover';
+import { Menu, type MenuItem } from '../ui/Menu';
 import { t } from '../i18n';
 
 // Settings use a navigation column beside one content column. Page and section headings belong to the content.
@@ -88,10 +88,7 @@ export function Section({ title, desc, count, action, cards, children }: Section
 }
 
 // A small text action for a Section's title line: quiet Chip, no caret
-export function SectionAction({ icon, onClick, children, title }: { icon?: ReactNode; onClick: () => void; children?: ReactNode; title?: string }) {
-  if (children === undefined) {
-    return <IconButton onClick={onClick} title={title} aria-label={title} className="-mr-1.5">{icon}</IconButton>;
-  }
+export function SectionAction({ icon, onClick, children, title }: { icon?: ReactNode; onClick: () => void; children: ReactNode; title?: string }) {
   return <Chip caret={false} icon={icon} onClick={onClick} title={title} className="-mr-2 shrink-0">{children}</Chip>;
 }
 
@@ -162,7 +159,7 @@ export function Select<V extends string>({ options, value, onChange, label, clas
   const cur = options.find(o => o.value === value);
   const items: MenuItem[] = options.map(o => ({ id: o.value, label: o.label, icon: o.icon, hint: o.hint, disabled: o.disabled, checked: o.value === value }));
   return (
-    <Menu side="bottom" align="end" items={items} onSelect={id => onChange(id as V)}>
+    <Menu side="bottom" align="end" width="md" items={items} onSelect={id => onChange(id as V)}>
       {({ open, toggle, ref }) => (
         <Chip
           ref={ref}
