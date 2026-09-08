@@ -19,6 +19,9 @@ dist/
 # Internal docs (not published)
 docs/
 
+# Local agent skills
+.agents/skills/
+
 # Lab playground (local only)
 lab/
 src/lab/

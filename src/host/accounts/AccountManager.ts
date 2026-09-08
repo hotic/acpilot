@@ -97,6 +97,8 @@ export class AccountManager {
     this.deps.log(`account imported: ${agent} ${a.label}`);
     this.deps.toast('info', t('host.imported', { label: a.label }));
     this.emit();
+    // Quota is decoration: do not wait on the vendor before the row appears
+    void this.refreshQuota(a.id);
     return a;
   }
 
@@ -108,6 +110,7 @@ export class AccountManager {
       this.deps.log(`account imported: ${agent} ${a.label}`);
       this.deps.toast('info', t('host.imported', { label: a.label }));
       this.emit();
+      void this.refreshQuota(a.id);
       return a;
     }
     return this.login(agent);
@@ -127,6 +130,7 @@ export class AccountManager {
       this.deps.log(`account login: ${agent} ${a.label}`);
       this.deps.toast('info', t('host.accountAdded', { label: a.label }));
       this.emit();
+      void this.refreshQuota(a.id);
       return a;
     } finally { clearTimeout(timer); }
   }

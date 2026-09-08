@@ -1,7 +1,7 @@
 {
   "name": "acpira",
   "displayName": "Acpira",
-  "description": "A chat interface for ACP coding agents in VS Code and Cursor (Grok, Devin, Kimi Code)",
+  "description": "VS Code chat shell for official agent CLIs (Grok Build, Kimi Code, Devin) over ACP",
   "version": "1.0.1",
   "publisher": "hotic",
   "icon": "media/icon.png",

@@ -32,8 +32,9 @@ export interface AgentPageProps {
 // Acpira never writes it. Only the option families have switches
 export function AgentPage({ agent, accounts, inventory, controls, settings, env, on }: AgentPageProps) {
   useEffect(() => { if (!inventory) on.refreshInventory(agent.id); }, [agent.id, inventory, on]);
-  // Quotas on the account rows are re-read each time the page is opened (recent ones come back from the host's memory)
-  useEffect(() => { if (agent.accounts) on.refreshQuota?.(agent.id); }, [agent.id, agent.accounts, on]);
+  // Re-read when the page opens and whenever the set of accounts changes (a login finishes while this page is already open)
+  const accountKey = accounts.map(a => a.id).join();
+  useEffect(() => { if (agent.accounts) on.refreshQuota?.(agent.id); }, [agent.id, agent.accounts, accountKey, on]);
 
   const counts: Record<AgentSection, number> = {
     models: controls?.reduce((n, c) => n + groupModels(c.options).length, 0) ?? 0,

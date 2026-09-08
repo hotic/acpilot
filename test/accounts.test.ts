@@ -294,6 +294,13 @@ describe('account layer wired into sessions', () => {
     await m.dispose();
   }, 20_000);
 
+  it('quota: fetched as soon as an account is stored, even without a session hand-off', async () => {
+    const { accounts } = setup();
+    const a = await accounts.add('fake');
+    expect(a?.quota).toBeUndefined();
+    await vi.waitFor(() => expect(accounts.get(a!.id)?.quota?.windows[0]?.remaining).toBe(0.9));
+  });
+
   it('"+" auto-decides: import when the local login was never imported; fall back to terminal login when already imported or not logged in locally', async () => {
     const { accounts, provider, toasts } = setup();
     // first time: the local login is not in the list yet → import directly
