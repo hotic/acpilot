@@ -1,7 +1,6 @@
-import { Check, FileText, Globe, X } from 'lucide-react';
+import { Check, ChevronRight, FileText, Globe, X } from 'lucide-react';
 import type { ToolCallBlock } from '@shared/transcript';
 import { useAppearance } from '../appearance';
-import { t } from '../i18n';
 import { Disclosure } from '../ui/Disclosure';
 import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { cn } from '../ui/cn';
@@ -42,12 +41,7 @@ export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; gro
   if (files.length) return (
     <div className="flex flex-col">
       <Row lead={lead} trailing={trailing}>{label}</Row>
-      <ResultList items={files} kind={block.kind} />
-      {block.content && block.content.type !== 'list' && !isLineCount(block) && (
-        <Disclosure indent={false} body={<ToolBody block={block} />}>
-          <RowLabel className="text-fg-3">{t('tool.output')}</RowLabel>
-        </Disclosure>
-      )}
+      <ResultList items={files} kind={block.kind} detail={block} />
     </div>
   );
   // A history row without details has no second disclosure to open.
@@ -61,6 +55,20 @@ export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; gro
   );
 }
 
+// Several ACP read calls form one visible list, retaining each call's full output.
+export function ReadGroup({ blocks }: { blocks: ToolCallBlock[] }) {
+  const { toolLine } = useAppearance();
+  const first = blocks[0]!;
+  return <div className="read-group flex flex-col">
+    <Row lead={toolLine === 'text' ? undefined : <FileText className="size-icon" strokeWidth={1.5} />}>
+      <RowLabel>{toolVerb(first)}</RowLabel>
+    </Row>
+    <div className={cn('flex flex-col', toolLine !== 'text' && 'timeline')}>
+      {blocks.map(block => <ResultList key={block.id} items={toolFiles(block)} kind="read" rail={false} detail={block} />)}
+    </div>
+  </div>;
+}
+
 function ToolBody({ block }: { block: ToolCallBlock }) {
   const c = block.content;
   if (!c) return null;
@@ -72,16 +80,26 @@ function ToolBody({ block }: { block: ToolCallBlock }) {
 
 // Search / fetch hits as a list of dense rows (Kimi-style): lead icon in the same column as the tool rows with a dashed timeline rail
 // threading through them, the hit itself on the left, and a faint right-aligned suffix — the line number for `path:line`, the host for URLs
-function ResultList({ items, kind }: { items: string[]; kind: ToolCallBlock['kind'] }) {
+function ResultList({ items, kind, rail = true, detail }: { items: string[]; kind: ToolCallBlock['kind']; rail?: boolean; detail?: ToolCallBlock }) {
   const { toolLine } = useAppearance();
   const Icon = kind === 'fetch' ? Globe : FileText;
   return (
-    <div className={cn('flex flex-col', toolLine !== 'text' && 'timeline')}>
-      {items.map(it => {
+    <div className={cn('flex flex-col', rail && toolLine !== 'text' && 'timeline')}>
+      {items.map((it, index) => {
         const { main, aside } = splitHit(it);
+        const lead = toolLine === 'text' ? undefined : <Icon className="size-icon" strokeWidth={1.5} />;
+        const target = <RowTarget mono={kind !== 'fetch'} className="text-fg-2">{main}</RowTarget>;
+        // ACP output belongs to the call; expose it once on its first file row.
+        if (index === 0 && detail?.content && detail.content.type !== 'list' && !isLineCount(detail)) {
+          return <Disclosure key={it} dense lead={lead} title={it} indent={false}
+            trailing={<>{aside}<ChevronRight className="file-toggle-chevron size-3 transition-transform" strokeWidth={1.5} /></>}
+            body={<ToolBody block={detail} />}>
+            {target}
+          </Disclosure>;
+        }
         return (
-          <Row key={it} dense lead={toolLine === 'text' ? undefined : <Icon className="size-icon" strokeWidth={1.5} />} trailing={aside}>
-            <RowTarget mono={kind !== 'fetch'} className="text-fg-2">{main}</RowTarget>
+          <Row key={it} dense lead={lead} trailing={aside} title={it}>
+            {target}
           </Row>
         );
       })}

@@ -1,4 +1,17 @@
-import type { ToolCallBlock } from '@shared/transcript';
+import type { AgentBlock, ToolCallBlock } from '@shared/transcript';
+
+// Group adjacent successful reads only; preserve ordering and visible failures.
+export function groupReadCalls(blocks: AgentBlock[]): (AgentBlock | ToolCallBlock[])[] {
+  const result: (AgentBlock | ToolCallBlock[])[] = [];
+  for (const block of blocks) {
+    if (block.type === 'tool_call' && block.kind === 'read' && block.status === 'completed' && toolFiles(block).length) {
+      const previous = result[result.length - 1];
+      if (Array.isArray(previous)) previous.push(block);
+      else result.push([block]);
+    } else result.push(block);
+  }
+  return result;
+}
 
 // Only explicit paths become file rows; prose and search patterns remain output.
 function fileHit(text: string): string | undefined {

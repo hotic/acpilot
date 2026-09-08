@@ -3,11 +3,19 @@ import { applyUpdate, emptyState } from '../src/host/acp/normalize';
 import { setLocale } from '../src/webview/i18n';
 import { foldActivity, toolVerb } from '../src/webview/chat/folding';
 import type { AgentTurn, ToolCallBlock } from '../src/shared/transcript';
-import { isLineCount, toolFiles } from '../src/webview/chat/toolDetails';
+import { groupReadCalls, isLineCount, toolFiles } from '../src/webview/chat/toolDetails';
 
 afterEach(() => setLocale('en'));
 
 describe('ACP tool presentation', () => {
+  it('groups consecutive reads while preserving output and action boundaries', () => {
+    const a: ToolCallBlock = { type: 'tool_call', id: 'a', kind: 'read', verb: 'Read', status: 'completed', target: 'a.ts', content: { type: 'text', text: 'source A' } };
+    const b = { ...a, id: 'b', target: 'b.ts', content: { type: 'text' as const, text: 'source B' } };
+    const failed = { ...a, id: 'failed', status: 'failed' as const };
+    const prose = { type: 'text' as const, markdown: 'Next step' };
+    expect(groupReadCalls([a, b, failed, a, prose, b])).toEqual([[a, b], failed, [a], prose, [b]]);
+    expect(groupReadCalls([a, { ...b, status: 'in_progress' }])).toEqual([[a], { ...b, status: 'in_progress' }]);
+  });
   it('supports title-first notifications followed by typed actions and raw file paths', () => {
     const s = emptyState();
     applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'r', title: 'read_file' });
