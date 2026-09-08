@@ -25,9 +25,15 @@ let compactions = 0;
 // Background-compaction fixtures are released explicitly through setConfig so
 // tests can place a follow-up between the RPC acknowledgement and status events.
 const backgroundStyle = process.env.FAKE_COMPACTION;
+const grokUsage = process.env.FAKE_GROK_USAGE;
 let background: ((status: 'start' | 'completed' | 'cancelled') => Promise<void>) | undefined;
 
 const app = acp.agent({ name: 'fake-agent' })
+  .onRequest('_x.ai/session/info', value => value as { sessionId: string }, ({ params }) => {
+    if (!grokUsage || grokUsage === 'unsupported') throw acp.RequestError.methodNotFound('_x.ai/session/info');
+    if (grokUsage === 'malformed') return { result: { sessionId: params.sessionId, context: { used: -1, total: 0 } } };
+    return { result: { sessionId: params.sessionId, context: { used: usedTokens, total: config.model === 'm2' ? 250_000 : 1_000_000 } } };
+  })
   .onRequest(acp.methods.agent.initialize, () => {
     if (process.env.FAKE_INIT_FAIL) throw acp.RequestError.internalError(undefined, 'initialize refused by fixture');
     return {
@@ -166,7 +172,7 @@ const app = acp.agent({ name: 'fake-agent' })
       await send({ sessionUpdate: 'compaction_update', compactionId: id, status: 'in_progress' });
       if (compactions === 1) usedTokens = Math.round(usedTokens * 0.2);
       await send({ sessionUpdate: 'compaction_update', compactionId: id, status: 'completed' });
-      await send({ sessionUpdate: 'usage_update', used: usedTokens, size: 1_000_000 });
+      if (!grokUsage) await send({ sessionUpdate: 'usage_update', used: usedTokens, size: 1_000_000 });
       return { stopReason: 'end_turn' };
     }
 
@@ -198,8 +204,9 @@ const app = acp.agent({ name: 'fake-agent' })
       usedTokens += 400_000;
       await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'lots of context' } });
       await send({ sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'compact', description: 'compact it' }] });
-      await send({ sessionUpdate: 'usage_update', used: usedTokens, size: 1_000_000 });
-      return { stopReason: 'end_turn' };
+      if (!grokUsage) await send({ sessionUpdate: 'usage_update', used: usedTokens, size: 1_000_000 });
+      // Deliberately different from the live window: this is aggregate spend.
+      return { stopReason: 'end_turn', _meta: { usage: { totalTokens: 9_999_999, inputTokens: 9_000_000, modelCalls: 20 } } };
     }
 
     if (text.includes('slow')) {

@@ -10,6 +10,7 @@ import { capturePlan, planDocuments } from './plans';
 import { CompactionCompletion, isCompactCommand } from './compaction';
 import { applyModelSources, type ModelSources } from '@shared/modelSources';
 import { readModelSources } from './modelSources';
+import { fetchGrokUsage } from './grokUsage';
 import { preparePrompt, type BlobStore } from './attachments';
 import { activityOf, applyUpdate, endTurn, failTurn, initControls, applyConfigOptions, type NormalizeState } from './normalize';
 import { PermissionGate } from './permissions';
@@ -89,6 +90,9 @@ export class AcpSession {
   // (Kimi: "provider managed:kimi-code has no credential configured"), and that is what the Notice should show instead of a generic "log in"
   private authHint?: string;
   private modelSources: ModelSources = {};
+  private usageRevision = 0;
+  private usageNotifications = false;
+  private grokUsageUnavailable = false;
 
   constructor(record: SessionRecord, private deps: SessionDeps) {
     this.id = record.id;
@@ -203,6 +207,7 @@ export class AcpSession {
     try {
       await this.connect();
       await this.openSession();
+      await this.refreshGrokUsage();
       // If an old session was parked in plan, the freshly spawned CLI process is actually in default, so fire one shot to realign (yolo is purely host-side, no realign needed)
       // status is rewritten inside openSession, so the narrowing has to be relaxed before comparing here
       const status = this.status as SessionView['status'];
@@ -218,6 +223,8 @@ export class AcpSession {
   }
 
   private async connect() {
+    this.usageNotifications = false;
+    this.grokUsageUnavailable = false;
     const def = this.deps.registry.get(this.agent);
     this.modelSources = await readModelSources(this.agent, this.cwd);
     const bin = await this.deps.registry.resolveBinary(this.agent);
@@ -320,6 +327,23 @@ export class AcpSession {
     this.log(`session/new ok: ${r.sessionId} · modes ${this.state.controls.modes.length} · options ${this.state.controls.options.map(o => `${o.id}(${o.options.length})`).join(' ') || '-'}`);
   }
 
+  // Refresh before settling a turn so auto-compaction sees the current window.
+  // Standard notifications take precedence, including ones arriving in flight.
+  private async refreshGrokUsage() {
+    if (this.agent !== 'grok' || !this.proc || !this.acpSessionId || this.status !== 'ready'
+      || this.usageNotifications || this.grokUsageUnavailable) return;
+    const proc = this.proc, sessionId = this.acpSessionId, state = this.state;
+    const revision = ++this.usageRevision;
+    let usage: Usage | undefined;
+    try { usage = await fetchGrokUsage(proc.agent, sessionId); }
+    catch (e) {
+      if (e instanceof acp.RequestError && e.code === -32601) this.grokUsageUnavailable = true;
+      this.log(`context unavailable: ${msg(e)}`);
+    }
+    if (this.proc === proc && this.acpSessionId === sessionId && this.state === state
+      && this.status === 'ready' && this.usageRevision === revision) this.state.usage = usage;
+  }
+
   private fail(e: unknown) {
     if (isAuth(e)) {
       this.status = 'auth_required';
@@ -353,6 +377,7 @@ export class AcpSession {
       try {
         await this.handoff();
         await this.openSession();
+        await this.refreshGrokUsage();
       } catch (e) { this.fail(e); }
       this.touch();
       return;
@@ -424,11 +449,13 @@ export class AcpSession {
         if (pending) { this.log('waiting for compaction completion'); await pending; }
         if (this.status !== 'ready') { this.queue.flush(); return; }
       }
+      await this.refreshGrokUsage();
       this.settle(stop);
     } catch (e) {
       // The error stays on the turn (the webview shows it as a card, history keeps the row); the session itself is still usable, so status stays ready —
       // except when the peer says the credential is gone, which is the Notice's business
       this.log(`prompt failed: ${msg(e)}`);
+      await this.refreshGrokUsage();
       this.settle('cancelled', turnErrorOf(e));
       if (isAuth(e)) this.status = 'auth_required';
     }
@@ -522,6 +549,10 @@ export class AcpSession {
     if (!this.proc || this.status !== 'ready' || !c.options.some(o => o.id === configId)) return;
     const r = await this.proc.agent.request(acp.methods.agent.session.setConfigOption, { sessionId: this.acpSessionId!, configId, value });
     applyConfigOptions(c, r.configOptions);
+    if (this.agent === 'grok' && !this.usageNotifications && c.options.find(o => o.id === configId)?.category === 'model') {
+      this.state.usage = undefined;
+      await this.refreshGrokUsage();
+    }
     this.touch();
   }
 
@@ -628,6 +659,10 @@ export class AcpSession {
     // A user_message_chunk echoed by the agent mid-turn is the one we just sent; it's already in turns
     if (this.phase.running && u.sessionUpdate === 'user_message_chunk') return;
     if (!applyUpdate(this.state, u)) return;
+    if (u.sessionUpdate === 'usage_update') {
+      this.usageNotifications = true;
+      this.usageRevision++;
+    }
     if (u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update') {
       const plan = capturePlan(this.state.turns, u);
       // Kimi 0.41.0 confirms the exit in tool output but omits current_mode_update.
