@@ -1,9 +1,9 @@
 import { useCallback, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { X } from 'lucide-react';
-import type { ConfigControl, Draft, SessionControls, Turn, Usage } from '@shared/transcript';
+import type { Draft, SessionControls, Turn, Usage } from '@shared/transcript';
 import type { FileHit } from '@shared/protocol';
 import type { HiddenMap } from '@shared/settings';
-import { groupModels, visibleOptions } from '@shared/models';
+import { composerControls } from '@shared/composerControls';
 import { useAppearance } from '../appearance';
 import { t } from '../i18n';
 import { cn } from '../ui/cn';
@@ -15,7 +15,7 @@ import { DraftChips } from './Attachments';
 import { collectDrafts, hasPayload } from './drafts';
 import { MentionList, mentionAt, useMentionHits } from './Mention';
 import { modeIcon } from './modeIcons';
-import { OptionControl } from './ModelPicker';
+import { ModelControl, OptionControl, ReasoningControl } from './ModelPicker';
 import { ContextRing } from './ContextUsage';
 import { useComposerDraft } from './useComposerDraft';
 
@@ -34,7 +34,8 @@ export interface ComposerProps {
   cwd: string;
   onSend: (text: string, attachments: Draft[]) => void | Promise<void>;
   // Inline history editors keep their draft until the host accepts the resend.
-  edit?: { text: string; attachments?: ReactNode; hasAttachments: boolean; onCancel: () => void };
+  // Outside-dismiss editors omit cancel and attachment-removal buttons.
+  edit?: { text: string; attachments?: ReactNode; hasAttachments: boolean; onCancel: () => void; dismissOnOutside?: boolean };
   // Where the unsent draft (text + attachments) is parked while another session is shown; the session id. Absent: nothing is kept across remounts
   draftKey?: string;
   onSearchFiles: (query: string) => Promise<FileHit[]>;
@@ -47,8 +48,7 @@ export interface ComposerProps {
 }
 
 // Composer has three layers: attachment chips (when any), the input area, and a toolbar row below.
-// The row's left side ("mode · reasoning level …") lists whatever the agent's ACP session provides, minus the model family;
-// the right side holds "context ring · model · send" — the model sits where Cursor / Devin put it, next to the send button.
+// One layout for all ACP agents: mode on the left; context, model with reasoning, and send on the right.
 // Attachments come from pasting / dropping (images, OS files, Explorer items) or from an @ mention that searches the workspace
 export function Composer(p: ComposerProps) {
   const { composer } = useAppearance();
@@ -62,16 +62,7 @@ export function Composer(p: ComposerProps) {
   const beamActive = focused || openMenus > 0;
   const mode = p.controls.modes.find(m => m.id === p.controls.modeId);
   const dim = p.running || p.disabled;
-  // Model options leave the left row and join the right, next to the send button. ACP's category=model is the signal when the agent
-  // provides it (Grok's monolithic names decompose into nothing, so the name heuristic alone would leave its model on the left);
-  // agents without categories fall back to that heuristic (Devin's 210-option list decomposes into families)
-  const isModel = (c: ConfigControl) => {
-    if (c.category) return c.category === 'model';
-    const shown = visibleOptions(c.options, p.hidden?.[c.id], c.value);
-    return groupModels(shown).length < shown.length;
-  };
-  const modelControls = p.controls.options.filter(isModel);
-  const leftControls = p.controls.options.filter(c => !isModel(c));
+  const { models, reasoning, other } = composerControls(p.controls.options);
   // Files are read asynchronously after a paste / drop; sending is held until every read has landed, so a message never leaves without its attachments
   const [reading, setReading] = useState(0);
   const [sending, setSending] = useState(false);
@@ -178,7 +169,7 @@ export function Composer(p: ComposerProps) {
       onDrop={onDrop}
     >
       {p.edit?.attachments}
-      <DraftChips drafts={drafts} onRemove={i => setDrafts(d => d.filter((_, j) => j !== i))} />
+      <DraftChips drafts={drafts} onRemove={p.edit?.dismissOnOutside ? undefined : i => setDrafts(d => d.filter((_, j) => j !== i))} />
       <textarea
         ref={textarea}
         rows={1}
@@ -204,7 +195,7 @@ export function Composer(p: ComposerProps) {
       {/* The row is a container: below the sm tier (a 380 sidebar leaves ~324 here) the mode chip collapses to icon + caret so the option chips keep their room —
           the same move Cursor makes in a narrow sidebar; the editor panel is wide enough for the names */}
       <fieldset disabled={p.disabled || sending} className="@container flex min-w-0 items-center gap-1 px-2 pt-1 pb-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {/* Mode is the one solid chip and never truncates; single-line rows with a glyph each, the description rides along as a tooltip */}
           {p.controls.modes.length > 0 && (
             <Menu
@@ -230,15 +221,20 @@ export function Composer(p: ComposerProps) {
               }}
             </Menu>
           )}
-          {leftControls.map(c => (
-            <OptionControl key={c.id} control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
-          ))}
         </div>
-        {p.usage && <ContextRing usage={p.usage} turns={p.turns} canCompact={!!p.canCompact && !dim} onCompact={p.onCompact} onOpenChange={onOpenChange} />}
-        {modelControls.map(c => (
+        <div className="min-w-0 flex-1" />
+        {other.map(c => (
           <OptionControl key={c.id} end control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
         ))}
-        {p.edit && <IconButton title={t('history.cancel')} aria-label={t('history.cancel')} onClick={p.edit.onCancel}><X /></IconButton>}
+        {p.usage && <ContextRing usage={p.usage} turns={p.turns} canCompact={!!p.canCompact && !dim} onCompact={p.onCompact} onOpenChange={onOpenChange} />}
+        {models.map((c, i) => (
+          <ModelControl key={c.id} control={c} hidden={p.hidden?.[c.id]} reasoning={i === 0 ? reasoning : undefined}
+            onSetReasoning={p.onSetConfig} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
+        ))}
+        {!models.length && reasoning.map(c => (
+          <ReasoningControl key={c.id} control={c} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
+        ))}
+        {p.edit && !p.edit.dismissOnOutside && <IconButton title={t('history.cancel')} aria-label={t('history.cancel')} onClick={p.edit.onCancel}><X /></IconButton>}
         <SendButton running={p.running} filled={canSend} theme={p.theme} onClick={p.running ? p.onStop : send} />
       </fieldset>
     </div>

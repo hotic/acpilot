@@ -36,10 +36,10 @@ export interface RadioPillsProps<V extends string> {
   onChange: (value: V) => void;
 }
 
-// Equal-width segments share one track; only the selected segment gets an inset fill.
+// Content-sized segments share spare space without squeezing longer labels; narrow tracks can wrap.
 export function RadioPills<V extends string>({ label, options, value, onChange }: RadioPillsProps<V>) {
   return (
-    <div role="radiogroup" aria-label={label} className="grid min-w-fit flex-1 auto-cols-fr grid-flow-col gap-0.5 rounded-md bg-hover p-0.5">
+    <div role="radiogroup" aria-label={label} className="flex min-w-0 flex-1 flex-wrap gap-0.5 rounded-md bg-hover p-0.5">
       {options.map(o => (
         <button
           key={o.value}
@@ -49,7 +49,7 @@ export function RadioPills<V extends string>({ label, options, value, onChange }
           disabled={o.disabled}
           onClick={() => onChange(o.value)}
           className={cn(
-            'inline-flex h-ctl-sm min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-sm px-1 text-3 outline-none transition-colors focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-fg-2 disabled:text-fg-3 disabled:opacity-50',
+            'inline-flex h-ctl-sm min-w-max grow basis-auto items-center justify-center whitespace-nowrap rounded-sm px-1.5 text-3 outline-none transition-colors focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-fg-2 disabled:text-fg-3 disabled:opacity-50',
             o.value === value ? 'bg-active text-fg-1' : 'text-fg-2 enabled:hover:bg-hover enabled:hover:text-fg-1',
           )}
         >

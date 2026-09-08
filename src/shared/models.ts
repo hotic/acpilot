@@ -114,12 +114,12 @@ export function findVariant(f: ModelFamily, effort: string, fast: boolean, long:
   return hit(fast, long) ?? hit(fast, false) ?? hit(false, long) ?? hit(false, false) ?? f.variants.find(v => v.effort === effort);
 }
 
-// Text on the params chip: "Max · Fast · 1M"; when the family has an effort dimension but this variant has no effort word, call it Standard; also Standard when there's nothing at all.
+// Text on the params chip: "Max Fast 1M"; when the family has an effort dimension but this variant has no effort word, call it Standard; also Standard when there's nothing at all.
 // Callers that show this in the UI pass a translated `standard`; tests and host-side labels keep the English default
 export function variantLabel(v: ModelVariant, f: ModelFamily, labels?: { standard: string }): string {
   const standard = labels?.standard ?? 'Standard';
   const parts = [v.effort || (f.efforts.length > 1 ? standard : ''), v.fast && 'Fast', v.long && '1M'].filter(Boolean);
-  return parts.join(' · ') || standard;
+  return parts.join(' ') || standard;
 }
 
 // Model family → vendor brand key (see webview chat/marks.tsx for the matching logos). Purely heuristic: case-insensitive keyword

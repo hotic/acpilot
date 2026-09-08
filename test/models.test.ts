@@ -106,11 +106,11 @@ describe('model name parsing', () => {
     expect(findVariant(glm!, 'Low', false, false)).toBeUndefined();
   });
 
-  it('variant label: effort · Fast · 1M; families without effort words use Standard', () => {
+  it('variant label: effort Fast 1M; families without effort words use Standard', () => {
     const fams = groupModels(opts(DEVIN));
     const opus = fams[0]!, opus46 = fams[3]!, swe16 = fams.find(f => f.name === 'SWE-1.6')!, adaptive = fams.find(f => f.name === 'Adaptive')!;
-    expect(variantLabel(opus.variants.find(v => v.name === 'Claude Opus 5 Max Fast')!, opus)).toBe('Max · Fast');
-    expect(variantLabel(opus46.variants.find(v => v.name === 'Claude Opus 4.6 Thinking 1M')!, opus46)).toBe('Thinking · 1M');
+    expect(variantLabel(opus.variants.find(v => v.name === 'Claude Opus 5 Max Fast')!, opus)).toBe('Max Fast');
+    expect(variantLabel(opus46.variants.find(v => v.name === 'Claude Opus 4.6 Thinking 1M')!, opus46)).toBe('Thinking 1M');
     expect(variantLabel(opus46.variants.find(v => v.name === 'Claude Opus 4.6')!, opus46)).toBe('Standard');
     expect(variantLabel(swe16.variants.find(v => v.fast)!, swe16)).toBe('Fast');
     expect(variantLabel(swe16.variants.find(v => !v.fast)!, swe16)).toBe('Standard');

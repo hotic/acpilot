@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { ConfigControl } from '@shared/transcript';
 import { findVariant, groupModels, modelBrand, variantLabel, visibleOptions, type ModelFamily, type ModelVariant } from '@shared/models';
+import { effortOptions } from '@shared/composerControls';
 import { t } from '../i18n';
 import { cn } from '../ui/cn';
 import { Chip } from '../ui/Button';
@@ -20,12 +21,10 @@ interface OptionMenuProps {
   end?: boolean;
 }
 
-// A single configOption, minus the families hidden in the settings: names that decompose into a "family × params" structure (Devin's 210 models)
-// get the model panel, otherwise one flat menu
+// Non-model options stay flat; reasoning must never be parsed as model families.
 export function OptionControl({ control, hidden, ...rest }: OptionMenuProps & { hidden?: string[] }) {
   const shown = useMemo(() => ({ ...control, options: visibleOptions(control.options, hidden, control.value) }), [control, hidden]);
-  const families = useMemo(() => groupModels(shown.options), [shown.options]);
-  return families.length < shown.options.length || families.some(f => f.source) ? <ModelControl {...rest} control={shown} families={families} /> : <OptionMenu {...rest} control={shown} />;
+  return <OptionMenu {...rest} control={shown} />;
 }
 
 // The same model identity / variant picker can live behind a different trigger,
@@ -43,28 +42,45 @@ export function ModelOptions({ control, hidden, onSelect, close }: {
   return <ModelPanel families={families} cur={cur} curVar={curVar} onSelect={onSelect} close={close} />;
 }
 
-// One chip for the whole model choice, "family + params" with the params faint (as in Cursor's toolbar and Devin's own composer). It opens one panel:
-// the searchable family list with the current family's params as a small form underneath — Devin's detail pane, laid out vertically because
-// a 380 sidebar has no room beside the list. Picking a family closes the panel; changing params keeps it open.
-// Switching families tries to keep the current params; if there's no matching tier it falls back to the family's first tier
-function ModelControl({ control: c, families, onSelect, onOpenChange }: OptionMenuProps & { families: ModelFamily[] }) {
+// Every ACP uses the Devin-style model chip and panel. Separate ACP reasoning
+// options join the footer, while Devin's embedded variants retain their wire IDs.
+export function ModelControl({ control, hidden, reasoning = [], onSetReasoning, onSelect, onOpenChange }: OptionMenuProps & {
+  hidden?: string[];
+  reasoning?: ConfigControl[];
+  onSetReasoning: (id: string, value: string) => void;
+}) {
+  const c = useMemo(() => ({ ...control, options: visibleOptions(control.options, hidden, control.value) }), [control, hidden]);
+  const families = useMemo(() => groupModels(c.options), [c.options]);
   const cur = families.find(f => f.variants.some(v => v.id === c.value));
   const curVar = cur?.variants.find(v => v.id === c.value);
-  // Params are worth showing when the family offers a choice, or its only variant carries a flag (a lone "Composer 2.5 Fast")
   const params = cur && curVar && (cur.efforts.length > 1 || curVar.effort || curVar.fast || curVar.long) ? variantLabel(curVar, cur, { standard: t('composer.standard') }) : undefined;
-  const meta = [cur?.source, params].filter(Boolean).join(' · ') || undefined;
+  const levels = reasoning.map(r => effortOptions(r.options).find(o => o.id === r.value)?.name);
+  // Provider identity stays in the expanded list; the chip reads as one model name.
+  const meta = [params, ...levels].filter(Boolean).join(' ') || undefined;
   return (
     <Popover
       side="top" align="end" width="md" role="menu" onOpenChange={onOpenChange}
-      content={close => <ModelPanel families={families} cur={cur} curVar={curVar} onSelect={onSelect} close={close} />}
+      content={close => <ModelPanel families={families} cur={cur} curVar={curVar} onSelect={onSelect} close={close}
+        reasoning={reasoning} onSetReasoning={onSetReasoning} />}
     >
       {({ open, toggle, ref }) => (
-        <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={c.name} meta={meta} icon={<ModelMark family={cur?.name ?? c.name} />}>
+        <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={[cur?.name ?? c.name, meta].filter(Boolean).join(' ')} meta={meta} icon={<ModelMark family={cur?.name ?? c.name} />}>
           {cur?.name ?? c.options.find(o => o.id === c.value)?.name ?? c.name}
         </Chip>
       )}
     </Popover>
   );
+}
+
+// Agents without a model selector still use the same reasoning field and labels.
+export function ReasoningControl({ control: c, onSelect, onOpenChange }: OptionMenuProps) {
+  const options = effortOptions(c.options);
+  return <Popover side="top" align="end" width="md" onOpenChange={onOpenChange}
+    content={() => <EffortField options={options.map(o => ({ value: o.id, label: o.name }))} value={c.value ?? ''} onChange={onSelect} />}>
+    {({ open, toggle, ref }) => <Chip ref={ref} narrow="text" data-open={open || undefined} onClick={toggle} title={t('composer.effort')}>
+      {options.find(o => o.id === c.value)?.name ?? t('composer.effort')}
+    </Chip>}
+  </Popover>;
 }
 
 interface ModelPanelProps {
@@ -73,9 +89,11 @@ interface ModelPanelProps {
   curVar?: ModelVariant;
   onSelect: (value: string) => void;
   close: () => void;
+  reasoning?: ConfigControl[];
+  onSetReasoning?: (id: string, value: string) => void;
 }
 
-function ModelPanel({ families, cur, curVar, onSelect, close }: ModelPanelProps) {
+function ModelPanel({ families, cur, curVar, onSelect, close, reasoning = [], onSetReasoning }: ModelPanelProps) {
   const items = families.map((f): MenuItem => ({ id: f.key, label: f.name, description: f.source, icon: <ModelMark family={f.name} />, checked: f === cur }));
   const pickFamily = (key: string) => {
     const f = families.find(x => x.key === key);
@@ -87,7 +105,14 @@ function ModelPanel({ families, cur, curVar, onSelect, close }: ModelPanelProps)
       items={items}
       searchable={families.length >= SEARCH_FROM}
       onSelect={pickFamily}
-      footer={cur && curVar && cur.variants.length > 1 ? <ModelParams family={cur} variant={curVar} onSelect={onSelect} /> : undefined}
+      footer={(cur && curVar && cur.variants.length > 1) || reasoning.length ? (
+        <div className="mt-1 flex flex-col border-t border-line pt-1">
+          {cur && curVar && cur.variants.length > 1 && <ModelParams family={cur} variant={curVar} onSelect={onSelect} />}
+          {reasoning.map(c => <EffortField key={c.id} label={reasoning.length > 1 ? c.name : undefined}
+            options={effortOptions(c.options).map(o => ({ value: o.id, label: o.name }))} value={c.value ?? ''}
+            onChange={value => onSetReasoning?.(c.id, value)} />)}
+        </div>
+      ) : undefined}
     />
   );
 }
@@ -102,12 +127,9 @@ function ModelParams({ family: f, variant: v, onSelect }: { family: ModelFamily;
   const pickEffort = (e: string) => { const hit = findVariant(f, e, v.fast, v.long); if (hit) onSelect(hit.id); };
   const flip = (key: 'fast' | 'long') => { const hit = at(v.effort, key === 'fast' ? !v.fast : v.fast, key === 'long' ? !v.long : v.long); if (hit) onSelect(hit.id); };
   return (
-    <div className="mt-1 flex flex-col border-t border-line pt-1">
+    <div className="flex flex-col">
       {f.efforts.length > 1 && !thinkingSwitch && (
-        <div className={cn('flex min-h-row gap-2 px-2 py-1', f.efforts.length > 3 ? 'flex-col' : 'flex-wrap items-center')}>
-          <span className="shrink-0 text-2 text-fg-2">{t('composer.effort')}</span>
-          <RadioPills label={t('composer.effort')} options={f.efforts.map(e => ({ value: e, label: e || t('composer.standard') }))} value={v.effort} onChange={pickEffort} />
-        </div>
+        <EffortField options={f.efforts.map(e => ({ value: e, label: e || t('composer.standard') }))} value={v.effort} onChange={pickEffort} />
       )}
       {thinkingSwitch && (
         <SwitchRow label="Thinking" checked={v.effort === 'Thinking'} disabled={!findVariant(f, v.effort === 'Thinking' ? '' : 'Thinking', v.fast, v.long)} onChange={on => pickEffort(on ? 'Thinking' : '')} />
@@ -116,6 +138,19 @@ function ModelParams({ family: f, variant: v, onSelect }: { family: ModelFamily;
       {f.hasLong && <SwitchRow label="1M" checked={v.long} disabled={!at(v.effort, v.fast, !v.long)} onChange={() => flip('long')} />}
     </div>
   );
+}
+
+// Shared segmented field for both embedded variants and native thought_level.
+function EffortField({ options, value, onChange, label = t('composer.effort') }: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  label?: string;
+}) {
+  return <div className={cn('flex min-h-row gap-2 px-2 py-1', options.length > 3 ? 'flex-col' : 'flex-wrap items-center')}>
+    <span className="shrink-0 text-2 text-fg-2">{label}</span>
+    <RadioPills label={label} options={options} value={value} onChange={onChange} />
+  </div>;
 }
 
 // Flat configOption menu; long lists are searchable. Vendor marks only appear when at least one option names a known brand

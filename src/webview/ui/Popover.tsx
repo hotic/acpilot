@@ -72,16 +72,25 @@ export function Popover({ side = 'bottom', align = 'start', width, trigger = 'cl
   useLayoutEffect(() => {
     const a = anchor.current, l = layer?.current, p = panel.current;
     if (!open || !a || !l || !p) return;
-    const ar = a.getBoundingClientRect(), lr = l.getBoundingClientRect();
-    const k = lr.width / l.offsetWidth || 1;
-    const pad = parseFloat(getComputedStyle(l).getPropertyValue('--pad')) || 0;
-    const w = p.offsetWidth, lw = l.offsetWidth;
-    const s: CSSProperties = {};
-    if (side === 'bottom') s.top = `calc(${(ar.bottom - lr.top) / k}px + var(--pop-gap))`;
-    else s.bottom = `calc(${(lr.bottom - ar.top) / k}px + var(--pop-gap))`;
-    if (align === 'start') s.left = Math.max(pad, Math.min((ar.left - lr.left) / k, lw - pad - w));
-    else s.right = Math.max(pad, Math.min((lr.right - ar.right) / k, lw - pad - w));
-    setStyle(s);
+    const position = () => {
+      const ar = a.getBoundingClientRect(), lr = l.getBoundingClientRect();
+      const k = lr.width / l.offsetWidth || 1;
+      const pad = parseFloat(getComputedStyle(l).getPropertyValue('--pad')) || 0;
+      const w = p.offsetWidth, lw = l.offsetWidth;
+      const s: CSSProperties = {};
+      if (side === 'bottom') s.top = `calc(${(ar.bottom - lr.top) / k}px + var(--pop-gap))`;
+      else s.bottom = `calc(${(lr.bottom - ar.top) / k}px + var(--pop-gap))`;
+      if (align === 'start') s.left = Math.max(pad, Math.min((ar.left - lr.left) / k, lw - pad - w));
+      else s.right = Math.max(pad, Math.min((lr.right - ar.right) / k, lw - pad - w));
+      setStyle(s);
+    };
+    position();
+    // Sidebar resizing and changed model labels must reposition an open panel.
+    const observer = new ResizeObserver(position);
+    observer.observe(l);
+    observer.observe(a);
+    observer.observe(p);
+    return () => observer.disconnect();
   }, [open, side, align, layer]);
 
   useEffect(() => {
