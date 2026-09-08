@@ -64,6 +64,8 @@ pnpm package        # 打 .vsix
 
 按 F5 启动 Extension Development Host。日志在 Output → ACPilot。架构与协议说明见 [AGENTS.md](AGENTS.md)。
 
+发布正式版 GitHub Release 后，可自动将同一份 VSIX 发布到 VS Code Marketplace 和 Open VSX。首次凭据配置、版本发布和失败重试见 [发布说明](RELEASING.md)。
+
 ## 许可证
 
 [MIT](LICENSE)
