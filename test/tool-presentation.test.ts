@@ -47,6 +47,45 @@ describe('ACP tool presentation', () => {
     expect(toolVerb({ ...block, verb: '读取' })).toBe('Read');
   });
 
+  it('labels a todo-list tool by name whatever kind the agent filed it under', () => {
+    const s = emptyState();
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'td', title: 'todo_write', kind: 'think', status: 'in_progress' });
+    const turn = s.turns[0] as AgentTurn;
+    setLocale('zh-CN');
+    expect(foldActivity(turn)).toMatchObject({ label: '正在更新待办', target: undefined, active: true });
+    applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'td', status: 'completed' });
+    expect(foldActivity(turn)).toMatchObject({ label: '已更新待办' });
+    setLocale('en');
+    expect(toolVerb(turn.blocks[0] as ToolCallBlock)).toBe('Update todos');
+  });
+
+  it('infers the kind of well-known tool names when the agent omits or grab-bags it', () => {
+    const s = emptyState();
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'w', title: 'web_search', status: 'in_progress', rawInput: { query: 'acp spec' } });
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'b', title: 'bash', kind: 'other', status: 'in_progress', rawInput: { command: 'ls -la' } });
+    const [web, sh] = (s.turns[0] as AgentTurn).blocks as ToolCallBlock[];
+    expect(web).toMatchObject({ kind: 'search', target: 'acp spec' });
+    expect(sh).toMatchObject({ kind: 'execute', target: 'ls -la' });
+    setLocale('zh-CN');
+    expect(toolVerb(web!)).toBe('正在搜索');
+    expect(toolVerb(sh!)).toBe('正在运行');
+  });
+
+  it('shows the file for delete/move and the URL for fetch', () => {
+    const s = emptyState();
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'd', title: 'Delete', kind: 'delete', status: 'in_progress', rawInput: { file_path: '/repo/old.ts' } });
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'f', title: 'Fetch', kind: 'fetch', status: 'in_progress', rawInput: { url: 'https://example.com/spec' } });
+    const [del, fet] = (s.turns[0] as AgentTurn).blocks as ToolCallBlock[];
+    expect(del).toMatchObject({ target: 'old.ts', locations: [{ path: '/repo/old.ts' }] });
+    expect(fet).toMatchObject({ target: 'https://example.com/spec' });
+  });
+
+  it('keeps a specific kind even when the tool name suggests another', () => {
+    const s = emptyState();
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'r', title: 'read_file', kind: 'edit', status: 'in_progress', rawInput: { path: '/repo/a.ts' } });
+    expect((s.turns[0] as AgentTurn).blocks[0]).toMatchObject({ kind: 'edit' });
+  });
+
   it('shows the latest finished action between tool completion and the next thought', () => {
     setLocale('zh-CN');
     const turn: AgentTurn = { role: 'agent', blocks: [

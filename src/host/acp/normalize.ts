@@ -241,6 +241,27 @@ const VERB_KEY: Record<ToolKind, MsgKey> = {
 };
 const verbOf = (kind: ToolKind): string => t(VERB_KEY[kind]);
 
+// Some agents file their todo-list tool under kind "think"/"other"; recognize it by name and give it its own verb
+const TODO_TITLE = /^todo([_\s-]?(write|update|read|list))?$/i;
+
+// Well-known tool names pin down the kind when the agent omitted it or used a grab-bag kind.
+// Specific kinds (read/edit/…) always win — only "other" and "think" are treated as unreliable.
+const KIND_BY_TITLE: [RegExp, ToolKind][] = [
+  [/^(read|open|view|cat)(_[a-z]+)*$/i, 'read'],
+  [/^(write|edit|create|patch|apply_?patch|str_?replace|insert)(_[a-z]+)*$/i, 'edit'],
+  [/^(list|ls|dir|glob|grep|find|search)(_[a-z]+)*$/i, 'search'],
+  [/^(web_?search|google|bing)(_[a-z]+)*$/i, 'search'],
+  [/^(bash|shell|terminal|exec|execute|run|command)(_[a-z]+)*$/i, 'execute'],
+  [/^(web_?fetch|fetch|browse|curl)(_[a-z]+)*$/i, 'fetch'],
+];
+
+function inferKind(title: string | null | undefined): ToolKind | undefined {
+  if (!title) return undefined;
+  const name = title.trim();
+  for (const [re, kind] of KIND_BY_TITLE) if (re.test(name)) return kind;
+  return undefined;
+}
+
 function toolBlock(tc: acp.ToolCall): ToolCallBlock {
   const b: ToolCallBlock = { type: 'tool_call', id: tc.toolCallId, kind: tc.kind ?? 'other', verb: verbOf(tc.kind ?? 'other'), status: tc.status ?? 'pending' };
   mergeTool(b, tc);
@@ -250,17 +271,23 @@ function toolBlock(tc: acp.ToolCall): ToolCallBlock {
 // Fields of tool_call and tool_call_update are all optional; overwrite only the ones provided
 function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
   if (u.kind) { b.kind = u.kind; b.verb = verbOf(u.kind); }
+  if (u.title && TODO_TITLE.test(u.title.trim())) { b.verbKey = 'verb.todo'; b.verb = t('verb.todo'); }
+  if (!b.verbKey && (b.kind === 'other' || b.kind === 'think')) {
+    const inferred = inferKind(u.title ?? undefined);
+    if (inferred) { b.kind = inferred; b.verb = verbOf(inferred); }
+  }
   if (u.status) b.status = u.status;
   if (u.locations) b.locations = u.locations.map(l => ({ path: l.path, ...(l.line != null ? { line: l.line } : {}) }));
   // Some ACP tools supply a path in rawInput instead of locations.
   const raw = u.rawInput as Record<string, unknown> | undefined;
-  if (!b.locations?.length && (b.kind === 'read' || b.kind === 'edit')) {
+  if (!b.locations?.length && (b.kind === 'read' || b.kind === 'edit' || b.kind === 'delete' || b.kind === 'move')) {
     const path = pathFromRaw(raw);
     if (path) b.locations = [{ path }];
   }
-  // A target inferred from the title is only a fallback while there is no target yet; don't overwrite what rawInput / locations provided
+  // A target inferred from the title is only a fallback while there is no target yet; don't overwrite what rawInput / locations provided.
+  // A todo tool's title is just its own name — redundant next to the todo verb, so drop it.
   const target = pickTarget(u, b.kind);
-  if (target && (!target.fromTitle || !b.target)) { b.target = target.text; b.targetMono = target.mono; }
+  if (target && !(b.verbKey === 'verb.todo' && target.fromTitle) && (!target.fromTitle || !b.target)) { b.target = target.text; b.targetMono = target.mono; }
   if (u.content?.length) {
     const c = toolContent(u.content);
     if (c) b.content = c;
@@ -291,9 +318,10 @@ function pickTarget(u: acp.ToolCall | acp.ToolCallUpdate, kind: ToolKind): { tex
     const q = typeof raw?.pattern === 'string' ? raw.pattern : typeof raw?.query === 'string' ? raw.query : undefined;
     if (q) return { text: q, mono: true };
   }
+  if (kind === 'fetch' && typeof raw?.url === 'string' && raw.url) return { text: raw.url, mono: true };
   const loc = u.locations?.[0]?.path;
   if (loc) return { text: basename(loc), mono: false };
-  if (kind === 'read' || kind === 'edit') {
+  if (kind === 'read' || kind === 'edit' || kind === 'delete' || kind === 'move') {
     const path = pathFromRaw(raw);
     if (path) return { text: basename(path), mono: false };
   }

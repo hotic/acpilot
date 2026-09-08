@@ -234,6 +234,7 @@ export const zhCN = {
   'host.thinking': '正在思考',
   'host.working': '正在处理',
   'tool.output': '输出',
+  'turns.processHistory': '过程记录',
   'host.doing': '正在{verb} {target}',
   'host.awaitingApproval': '等待批准',
   'host.replying': '正在回复',
@@ -250,6 +251,8 @@ export const zhCN = {
   'verb.fetch': '抓取',
   'verb.switch_mode': '切换模式',
   'verb.other': '调用工具',
+  // A todo-list tool is recognized by name regardless of the kind the agent filed it under
+  'verb.todo': '更新待办',
 
   // Synthetic Grok modes
   'mode.grok.default': '直接干活，权限请求逐个请示',

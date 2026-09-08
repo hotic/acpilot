@@ -220,6 +220,7 @@ export const en = {
   'host.thinking': 'Thinking',
   'host.working': 'Working',
   'tool.output': 'Output',
+  'turns.processHistory': 'Process history',
   'host.doing': '{verb} {target}',
   'host.awaitingApproval': 'Awaiting approval',
   'host.replying': 'Replying',
@@ -235,6 +236,8 @@ export const en = {
   'verb.fetch': 'Fetch',
   'verb.switch_mode': 'Switch mode',
   'verb.other': 'Use tool',
+  // A todo-list tool is recognized by name regardless of the kind the agent filed it under
+  'verb.todo': 'Update todos',
 
   'mode.grok.default': 'Work directly, asking for each permission',
   'mode.grok.plan': 'Plan first, act after approval',
