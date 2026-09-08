@@ -4,6 +4,7 @@ import type { HiddenMap } from '@shared/settings';
 import type { AgentRuntimeInfo } from '@shared/inventory';
 import { captureTurnSettings } from '@shared/turnSettings';
 import { AgentRegistry } from './acp/AgentRegistry';
+import { AgentPool } from './acp/AgentPool';
 import { AcpSession, type CompactionPolicy, type SessionRecord } from './acp/AcpSession';
 import type { AccountManager } from './accounts/AccountManager';
 import { TranscriptStore, summarize, type SessionPrefs } from './store/TranscriptStore';
@@ -45,6 +46,7 @@ export class SessionManager {
   private trash = new Map<string, { summary: SessionSummary; timer: NodeJS.Timeout }>();
   private listeners = new Set<(ev: ManagerEvent) => void>();
   private accountActionState = new Map<AgentId, AccountAction>();
+  private readonly pool: AgentPool;
   // Sessions seen running at the last onChange; a running → idle edge is the moment to re-read the account's quota
   private wasRunning = new Set<string>();
   // Mode of each live session at the last onChange: a change that did not come through setMode (a permission answer like Devin's
@@ -55,6 +57,11 @@ export class SessionManager {
 
   constructor(private deps: ManagerDeps) {
     deps.accounts?.subscribe(accounts => this.emit({ type: 'accounts', accounts }));
+    this.pool = new AgentPool({
+      registry: () => this.deps.registry,
+      log: line => this.deps.log(line),
+      spawnEnv: (agent, accountId) => this.deps.accounts?.spawnEnv(agent, accountId) ?? Promise.resolve(undefined),
+    });
   }
 
   async init() {
@@ -63,6 +70,12 @@ export class SessionManager {
     this.activeId = this.index[0]?.id;
     await this.deps.registry.probeAll();
     this.deps.accounts?.refreshQuotas().catch(e => this.deps.log(`quota refresh failed: ${msg(e)}`));
+    this.warm(this.deps.defaultAgent());
+  }
+
+  private warm(agent: AgentId, accountId?: string) {
+    const acc = accountId ?? (this.deps.accounts?.supports(agent) ? this.deps.accounts.defaultFor(agent)?.id : undefined);
+    this.pool.ensure(agent, this.deps.cwd(), acc);
   }
 
   // The mode / config values last chosen for an agent, replayed onto its next new session
@@ -177,6 +190,7 @@ export class SessionManager {
     // session's own) is not a new choice; a change after that is
     const view = s.view();
     if (view.status === 'ready') {
+      this.pool.ensure(s.agent, s.cwd, s.accountId);
       const prev = this.modeSeen.get(s.id);
       const mode = view.controls.modeId ?? '';
       this.modeSeen.set(s.id, mode);
@@ -188,6 +202,7 @@ export class SessionManager {
     return {
       registry: this.deps.registry, log: this.deps.log, onChange: this.onChange, blobs: this.deps.store,
       notify: (text: string) => this.deps.toast('info', text), accounts: this.deps.accounts, compaction: this.deps.compaction,
+      pool: this.pool,
     };
   }
 
@@ -202,14 +217,26 @@ export class SessionManager {
   async newSession(agent?: AgentId, accountId?: string): Promise<void> {
     const id = agent ?? this.deps.defaultAgent();
     const acc = this.deps.accounts?.supports(id) ? accountId ?? this.deps.accounts.defaultFor(id)?.id : undefined;
+    const cwd = this.deps.cwd();
+    const cur = this.current();
+    if (cur && this.keepEmpty(cur, id, acc, cwd)) return;
     await this.dropEmptyCurrent();
-    const s = AcpSession.fresh(id, this.deps.cwd(), this.sessionDeps(), acc);
+    const s = AcpSession.fresh(id, cwd, this.sessionDeps(), acc);
+    s.previewControls(await this.knownControls(id), this.lastSettings(id));
     this.live.set(s.id, s);
     this.activeId = s.id;
     this.onChange(s);
     await s.start();
     const last = this.lastSettings(id);
     if (last) await s.adoptControls(last);
+  }
+
+  // Same agent / account / cwd and still empty: keep the process instead of killing it to spawn another
+  private keepEmpty(cur: AcpSession, agent: AgentId, accountId: string | undefined, cwd: string) {
+    if (cur.agent !== agent || cur.accountId !== accountId || cur.cwd !== cwd) return false;
+    const v = cur.view();
+    if (v.turns.length > 0 || cur.isRunning) return false;
+    return v.status === 'starting' || v.status === 'ready';
   }
 
   // If the current session hasn't said a word yet (just opened / stuck on login), replace it directly; don't leave a trail of empty "New session" entries.
@@ -411,6 +438,7 @@ export class SessionManager {
       s.dispose();
     }
     this.live.clear();
+    this.pool.dispose();
     // Trashed entries are cleaned up when their time comes
     for (const [id, t] of this.trash) { clearTimeout(t.timer); await this.deps.store.remove(id); }
     this.trash.clear();

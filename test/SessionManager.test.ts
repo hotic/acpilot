@@ -68,12 +68,14 @@ describe('SessionManager', () => {
     expect(m.agents().find(a => a.id === 'fake')?.available).toBeUndefined();
     await m.init();
     expect(m.agents().find(a => a.id === 'fake')?.available).toBe(true);
+    await m.dispose();
     const m2 = new SessionManager({
       registry: new AgentRegistry({ ghost: { name: 'Ghost', command: '/nonexistent/ghost-cli' } }), store: new TranscriptStore(mkdtempSync(join(tmpdir(), 'acpira-mgr-'))),
       log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'ghost', runInTerminal: () => {}, toast: () => {},
     });
     await m2.init();
     expect(m2.agents().find(a => a.id === 'ghost')?.available).toBe(false);
+    await m2.dispose();
   });
 
   it('hidden options: read from the host as a plain copy and re-pushed on emitHidden', () => {
@@ -145,4 +147,34 @@ describe('SessionManager', () => {
     expect(m2.active()!.controls.modeId).toBe('plan');
     await m2.dispose();
   }, 30_000);
+
+  it('newSession on an empty starting/ready session keeps the process instead of respawning', async () => {
+    const { m } = manager();
+    await m.init();
+    await m.newSession();
+    const a = m.activeId!;
+    await m.newSession();
+    expect(m.activeId).toBe(a);
+    expect(m.sessions().map(s => s.id)).toEqual([a]);
+    await m.dispose();
+  }, 20_000);
+
+  it('the first session takes the warm process started at init', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'acpira-mgr-'));
+    const logs: string[] = [];
+    const m = new SessionManager({
+      registry: new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE] } }),
+      store: new TranscriptStore(dir),
+      log: line => logs.push(line),
+      cwd: () => '/tmp',
+      defaultAgent: () => 'fake',
+      runInTerminal: () => {},
+      toast: () => {},
+    });
+    await m.init();
+    await m.newSession();
+    expect(logs.some(l => l.includes('reuse warm'))).toBe(true);
+    expect(m.active()?.status).toBe('ready');
+    await m.dispose();
+  }, 20_000);
 });
