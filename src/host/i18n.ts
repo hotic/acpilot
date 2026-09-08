@@ -5,7 +5,6 @@ import { translate, en, type Locale, type MsgKey, type Params } from '@shared/i1
 let current: Locale = 'en';
 
 export function setHostLocale(locale: Locale) { current = locale; }
-export function hostLocale(): Locale { return current; }
 
 export function t(key: MsgKey, params?: Params): string {
   return translate(current, key, params);

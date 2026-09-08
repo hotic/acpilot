@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
 import type { AgentId, AgentInfo, SessionOption } from '@shared/transcript';
 import { t } from '../i18n';
+import { expandPath } from '../inventory';
 
 // How an ACP agent is launched: command, args, candidate binary paths, login command
 export interface AgentDef {
@@ -125,7 +126,8 @@ export async function resolveCommand(command: string, candidates: string[] = [])
 }
 
 export function expandHome(p: string): string {
-  return p.startsWith('~/') ? join(homedir(), p.slice(2)) : p;
+  // expandPath joins relative paths onto cwd; keep those as-is and only reuse the `~/` branch
+  return p.startsWith('~/') ? expandPath(p, { home: homedir(), cwd: process.cwd() }) : p;
 }
 
 async function executable(p: string): Promise<boolean> {

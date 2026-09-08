@@ -1,8 +1,9 @@
 import type { AgentId } from './transcript';
-import type { McpTransport } from './settings';
 
 // What the settings page shows per agent: where its executable is, what its own config files declare (MCP servers / skills / rules).
 // Read-only: ACPilot lists and opens these files, it never writes them
+
+export type McpTransport = 'stdio' | 'http' | 'sse';
 
 export type InventoryScope = 'user' | 'project';
 
@@ -45,7 +46,7 @@ export interface AgentInventory {
   // Resolved executable; null when not found
   binary: string | null;
   runtime?: AgentRuntimeInfo;
-  // Whether a second session/prompt mid-turn steers the running turn (registry knowledge, see FollowUp)
+  // Whether a second session/prompt mid-turn steers the running turn (registry knowledge; 1.0 always queues)
   steer: boolean;
   config: InventoryFile[];
   mcp: InventoryMcp[];

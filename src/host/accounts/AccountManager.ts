@@ -2,6 +2,7 @@ import type { AccountInfo, AccountQuota, AgentId } from '@shared/transcript';
 import type { AgentProcess } from '../acp/AgentProcess';
 import type { AccountStore } from './AccountStore';
 import type { AccountProvider } from './types';
+import { msg } from '../errors';
 import { t } from '../i18n';
 
 export interface AccountManagerDeps {
@@ -64,7 +65,7 @@ export class AccountManager {
         if (quota) this.quotas.set(id, quota); else this.quotas.delete(id);
         this.emit();
       } catch (e) {
-        this.deps.log(`quota ${a.label}: ${e instanceof Error ? e.message : String(e)}`);
+        this.deps.log(`quota ${a.label}: ${msg(e)}`);
       } finally { this.fetching.delete(id); }
     })();
     this.fetching.set(id, run);

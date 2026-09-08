@@ -1,8 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import type { AgentId } from '@shared/transcript';
-import type { AgentInventory, AgentRuntimeInfo, InventoryFile, InventoryMcp, InventoryScope, InventorySkill } from '@shared/inventory';
-import type { McpTransport } from '@shared/settings';
+import type { AgentInventory, AgentRuntimeInfo, InventoryFile, InventoryMcp, InventoryScope, InventorySkill, McpTransport } from '@shared/inventory';
 import type { AgentExt, McpSource, RuleSource } from './agentExt';
 
 // Read-only scan of an agent's extension points (see agentExt.ts). Pure node: no vscode import, so it runs under vitest against temp directories

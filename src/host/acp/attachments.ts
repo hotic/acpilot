@@ -3,7 +3,8 @@ import { basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { Attachment, Draft } from '@shared/transcript';
-import { MAX_IMAGE_BYTES, base64Bytes, extOfMime, imageMimeOf } from '@shared/attachments';
+import { MAX_IMAGE_BYTES, MAX_TEXT_BYTES, base64Bytes, extOfMime, imageMimeOf } from '@shared/attachments';
+import { msg } from '../errors';
 import { t } from '../i18n';
 
 // Where a session parks attachment payloads (TranscriptStore implements it): the name is what the turn keeps and the webview loads via blobBase,
@@ -28,7 +29,7 @@ export async function preparePrompt(sessionId: string, text: string, drafts: Dra
   const out: PreparedPrompt = { blocks: text ? [{ type: 'text', text }] : [], attachments: [], problems: [] };
   const stage = async (ext: string, bytes: Uint8Array, label: string) => {
     try { return await blobs.saveBlob(sessionId, ext, bytes); }
-    catch (e) { out.problems.push(t('host.attachStageFailed', { label, error: e instanceof Error ? e.message : String(e) })); return undefined; }
+    catch (e) { out.problems.push(t('host.attachStageFailed', { label, error: msg(e) })); return undefined; }
   };
   for (const d of drafts) {
     if (d.kind === 'image') {
@@ -37,8 +38,11 @@ export async function preparePrompt(sessionId: string, text: string, drafts: Dra
       out.blocks.push({ type: 'image', mimeType: d.mimeType, data: d.data });
       out.attachments.push({ kind: 'image', blob: saved?.name, mimeType: d.mimeType, name: d.name });
     } else if (d.kind === 'text') {
+      // The webview refuses oversized drops too, but the ceiling is enforced here as well: the text is embedded into the prompt verbatim
+      const bytes = Buffer.from(d.text, 'utf8');
+      if (bytes.byteLength > MAX_TEXT_BYTES) { out.problems.push(t('attach.tooBigText', { name: d.name, kb: MAX_TEXT_BYTES >> 10 })); continue; }
       // The embedded resource is addressed by the blob on disk, so an agent that insists on reading a real file finds one
-      const saved = await stage('.txt', Buffer.from(d.text, 'utf8'), d.name);
+      const saved = await stage('.txt', bytes, d.name);
       const uri = saved ? pathToFileURL(saved.path).href : `attachment:///${encodeURIComponent(d.name)}`;
       out.blocks.push({ type: 'resource', resource: { uri, mimeType: 'text/plain', text: d.text } });
       out.attachments.push({ kind: 'text', blob: saved?.name, name: d.name });

@@ -2,9 +2,13 @@ import { basename } from 'node:path';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { MsgKey } from '@shared/i18n';
 import { t } from '../i18n';
+import { TOOL_OUTPUT_MAX } from '../limits';
 import type {
-  AgentBlock, AgentTurn, CompactionBlock, CompactionStatus, ConfigControl, DiffLine, PlanPriority, PlanStatus, SessionControls, SessionOption, SlashCommand, ToolCallBlock, ToolContent, ToolKind, Turn, TurnError, Usage,
+  AgentBlock, AgentTurn, CompactionBlock, CompactionStatus, ConfigControl, PlanPriority, PlanStatus, SessionControls, SessionOption, SlashCommand, ToolCallBlock, ToolContent, ToolKind, Turn, TurnError, Usage,
 } from '@shared/transcript';
+import { diffLines } from './diff';
+
+export { diffLines };
 
 // Normalize ACP session/update into transcript blocks. Pure functions + in-place mutation of the Turn array; AcpSession pushes to the webview
 
@@ -251,7 +255,7 @@ function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
   // Some ACP tools supply a path in rawInput instead of locations.
   const raw = u.rawInput as Record<string, unknown> | undefined;
   if (!b.locations?.length && (b.kind === 'read' || b.kind === 'edit')) {
-    const path = [raw?.path, raw?.file_path, raw?.filePath].find((v): v is string => typeof v === 'string' && !!v);
+    const path = pathFromRaw(raw);
     if (path) b.locations = [{ path }];
   }
   // A target inferred from the title is only a fallback while there is no target yet; don't overwrite what rawInput / locations provided
@@ -264,15 +268,23 @@ function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
   }
   if (!b.content && u.rawOutput !== undefined && u.rawOutput !== null) {
     const text = typeof u.rawOutput === 'string' ? u.rawOutput : JSON.stringify(u.rawOutput, null, 2);
-    if (text.trim()) b.content = { type: 'text', text: text.slice(0, 20_000) };
+    if (text.trim()) b.content = { type: 'text', text: text.slice(0, TOOL_OUTPUT_MAX) };
   }
 }
 
 // What the row shows: execute shows the command; with locations, the file name; otherwise the title
+export function pathFromRaw(raw: Record<string, unknown> | undefined): string | undefined {
+  return [raw?.path, raw?.file_path, raw?.filePath].find((v): v is string => typeof v === 'string' && !!v);
+}
+
+export function commandFromRaw(raw: Record<string, unknown> | undefined): string | undefined {
+  return typeof raw?.command === 'string' ? raw.command : typeof raw?.cmd === 'string' ? raw.cmd : undefined;
+}
+
 function pickTarget(u: acp.ToolCall | acp.ToolCallUpdate, kind: ToolKind): { text: string; mono: boolean; fromTitle?: boolean } | undefined {
   const raw = u.rawInput as Record<string, unknown> | undefined;
   if (kind === 'execute') {
-    const cmd = typeof raw?.command === 'string' ? raw.command : typeof raw?.cmd === 'string' ? raw.cmd : undefined;
+    const cmd = commandFromRaw(raw);
     if (cmd) return { text: cmd, mono: true };
   }
   if (kind === 'search') {
@@ -282,7 +294,7 @@ function pickTarget(u: acp.ToolCall | acp.ToolCallUpdate, kind: ToolKind): { tex
   const loc = u.locations?.[0]?.path;
   if (loc) return { text: basename(loc), mono: false };
   if (kind === 'read' || kind === 'edit') {
-    const path = [raw?.path, raw?.file_path, raw?.filePath].find((v): v is string => typeof v === 'string' && !!v);
+    const path = pathFromRaw(raw);
     if (path) return { text: basename(path), mono: false };
   }
   if (u.title) return { text: stripVerb(u.title), mono: false, fromTitle: true };
@@ -298,59 +310,10 @@ function toolContent(items: acp.ToolCallContent[]): ToolContent | undefined {
   const diff = items.find(c => c.type === 'diff');
   if (diff && diff.type === 'diff') return { type: 'diff', lines: diffLines(diff.oldText ?? '', diff.newText) };
   const texts = items.filter(c => c.type === 'content').map(c => c.type === 'content' ? textOf(c.content) : '').filter(Boolean);
-  if (texts.length) return { type: 'text', text: texts.join('\n').slice(0, 20_000) };
+  if (texts.length) return { type: 'text', text: texts.join('\n').slice(0, TOOL_OUTPUT_MAX) };
   const term = items.find(c => c.type === 'terminal');
   if (term && term.type === 'terminal') return { type: 'text', text: t('host.terminalNotWired', { id: term.terminalId }) };
   return undefined;
-}
-
-// Line-level diff: LCS finds the common lines; the rest are marked add / del; beyond 800 combined lines only stats are given, no LCS
-export function diffLines(oldText: string, newText: string): DiffLine[] {
-  const a = oldText ? oldText.split('\n') : [];
-  const b = newText.split('\n');
-  if (a.length + b.length > 800) {
-    return [
-      { kind: 'hunk', text: t('host.hunk', { a: a.length, b: b.length }) },
-      ...a.slice(0, 40).map(t => ({ kind: 'del' as const, text: `-${t}` })),
-      ...b.slice(0, 40).map(t => ({ kind: 'add' as const, text: `+${t}` })),
-    ];
-  }
-  const m = a.length, n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
-  for (let i = m - 1; i >= 0; i--) for (let j = n - 1; j >= 0; j--) {
-    dp[i]![j] = a[i] === b[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
-  }
-  const out: DiffLine[] = [];
-  let i = 0, j = 0;
-  while (i < m && j < n) {
-    if (a[i] === b[j]) { out.push({ kind: 'ctx', text: ` ${a[i]}` }); i++; j++; }
-    else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) { out.push({ kind: 'del', text: `-${a[i]}` }); i++; }
-    else { out.push({ kind: 'add', text: `+${b[j]}` }); j++; }
-  }
-  while (i < m) out.push({ kind: 'del', text: `-${a[i++]}` });
-  while (j < n) out.push({ kind: 'add', text: `+${b[j++]}` });
-  return collapseContext(out);
-}
-
-// Keep only 3 lines of context around changes; the middle is collapsed into a hunk line
-function collapseContext(lines: DiffLine[], keep = 3): DiffLine[] {
-  const out: DiffLine[] = [];
-  let run: DiffLine[] = [];
-  const flush = (atEnd: boolean) => {
-    if (run.length <= keep * 2 || (out.length === 0 && run.length <= keep) || (atEnd && run.length <= keep)) out.push(...run);
-    else {
-      const head = out.length === 0 ? [] : run.slice(0, keep);
-      const tail = atEnd ? [] : run.slice(-keep);
-      out.push(...head, { kind: 'hunk', text: t('host.unchanged', { n: run.length - head.length - tail.length }) }, ...tail);
-    }
-    run = [];
-  };
-  for (const l of lines) {
-    if (l.kind === 'ctx') run.push(l);
-    else { flush(false); out.push(l); }
-  }
-  flush(true);
-  return out;
 }
 
 // What's happening right now: feeds the Activity line of Turns

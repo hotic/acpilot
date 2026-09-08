@@ -8,6 +8,7 @@ import type { AccountQuota, QuotaWindow } from '@shared/transcript';
 import type { AgentProcess } from '../acp/AgentProcess';
 import type { AccountCredential, AccountDraft, AccountProvider, LoginFlow } from './types';
 import { t } from '../i18n';
+import { VERSION } from '../version';
 
 // Devin CLI login = a PKCE exchange for a long-lived API key, stored in $XDG_DATA_HOME/devin/credentials.toml (four keys).
 // ACP mode does not read that file (so usage isn't billed to another account); the host must hand the key over via _meta.api_key in authenticate —
@@ -84,7 +85,7 @@ export class DevinAccountProvider implements AccountProvider {
     const res = await fetch(base + USER_STATUS_PATH, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'connect-protocol-version': '1' },
-      body: JSON.stringify({ metadata: { apiKey: cred.secret, ideName: 'acpilot', ideVersion: '1.0.0', extensionVersion: '1.0.0' } }),
+      body: JSON.stringify({ metadata: { apiKey: cred.secret, ideName: 'acpilot', ideVersion: VERSION, extensionVersion: VERSION } }),
       signal: AbortSignal.timeout(QUOTA_TIMEOUT),
     });
     if (!res.ok) throw new Error(`GetUserStatus ${res.status}`);

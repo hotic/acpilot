@@ -6,10 +6,10 @@ import { AcpSession } from '../src/host/acp/AcpSession';
 const FAKE = fileURLToPath(new URL('./fake-agent.ts', import.meta.url));
 const TSX = fileURLToPath(new URL('../node_modules/.bin/tsx', import.meta.url));
 
-function fixture(agent: string, auto = false) {
+function fixture(agent: string, auto = false, env: Record<string, string> = {}) {
   const logs: string[] = [];
   const session = AcpSession.fresh(agent, '/tmp', {
-    registry: new AgentRegistry({ [agent]: { command: TSX, args: [FAKE], env: { FAKE_COMPACTION: agent } } }),
+    registry: new AgentRegistry({ [agent]: { command: TSX, args: [FAKE], env: { FAKE_COMPACTION: agent, ...env } } }),
     log: line => logs.push(line), onChange: () => {},
     blobs: { saveBlob: async () => { throw new Error('No attachments'); }, readBlob: async () => { throw new Error('No attachments'); } },
     compaction: () => ({ auto, atTokens: 300_000 }),
@@ -64,6 +64,24 @@ describe('background compaction queue', () => {
       await until(() => !s.isRunning);
       expect(s.view().turns).toHaveLength(6);
       expect(s.view().usage?.used).toBeLessThan(300_000);
+    } finally { s.dispose(); }
+  });
+
+  it('cancel releases a background wait even when the agent never confirms the cancellation in prose', async () => {
+    const { session: s, logs } = fixture('devin', false, { FAKE_SILENT_CANCEL: '1' });
+    try {
+      await s.start();
+      await s.prompt('hi');
+      logs.length = 0;
+      const compact = s.compact();
+      await until(() => logs.some(l => l.includes('waiting for compaction completion')));
+      expect(s.isRunning).toBe(true);
+      await s.cancel();
+      await compact;
+      expect(s.isRunning).toBe(false);
+      expect(s.view().status).toBe('ready');
+      await s.prompt('after');
+      expect(s.view().turns.at(-2)).toMatchObject({ role: 'user', text: 'after' });
     } finally { s.dispose(); }
   });
 
