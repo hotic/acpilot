@@ -113,6 +113,9 @@ export interface ToolCallBlock {
   // Explicit read parameters; kept separately because later ACP locations omit the range.
   readRange?: { path: string; start: number; end?: number };
   status: ToolStatus;
+  // A command the agent parked in the background (Devin's exec past its timeout): it stays in_progress until the process exits,
+  // so it must not pass for what the agent is doing right now
+  background?: boolean;
   // Observed execution time; initial pending approvals and replay-only tools have no timer.
   startedAt?: number;
   endedAt?: number;

@@ -151,7 +151,7 @@ export const zhCN = {
   'turns.explored': '探索了 {n} 处',
   'turns.elapsed': '用时 {t}',
   'turns.done': '已完成',
-  'turns.compacting': '正在压缩上下文',
+  'turns.compacting': '正在压缩',
   'turns.compacted': '上下文已压缩',
   'turns.compactFailed': '压缩上下文失败',
   'turns.compactCancelled': '压缩上下文已取消',
@@ -188,6 +188,7 @@ export const zhCN = {
   'plan.approvals': '审批选项',
   'plan.approvalsAria': '选择执行模型及审批选项',
   'fold.pending': '正在{verb}',
+  'fold.queued': '等待{verb}',
   'fold.done': '已{verb}',
   'fold.failed': '{verb}失败',
   'fold.cancelled': '已取消{verb}',
@@ -296,6 +297,9 @@ export const zhCN = {
   // A todo-list tool is recognized by name regardless of the kind the agent filed it under
   'verb.todo': '更新待办',
   'verb.ask': '提问',
+  // Background-shell tools (Devin's get_output / kill_shell); the target is the parked command they act on
+  'verb.wait': '等待后台命令',
+  'verb.kill': '终止后台命令',
 
   // Synthetic Grok modes
   'mode.grok.default': '直接干活，权限请求逐个请示',

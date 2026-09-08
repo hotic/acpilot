@@ -140,7 +140,7 @@ export const en = {
   'turns.explored': 'Explored {n} places',
   'turns.elapsed': 'Took {t}',
   'turns.done': 'Done',
-  'turns.compacting': 'Compacting context',
+  'turns.compacting': 'Compacting',
   'turns.compacted': 'Context compacted',
   'turns.compactFailed': 'Compaction failed',
   'turns.compactCancelled': 'Compaction cancelled',
@@ -177,6 +177,7 @@ export const en = {
   'plan.approvalsAria': 'Choose execution model and approval options',
   // Per-tool fold labels, keyed by status; each locale orders {verb} as its grammar requires
   'fold.pending': '{verb}…',
+  'fold.queued': '{verb} queued',
   'fold.done': '{verb}',
   'fold.failed': '{verb} failed',
   'fold.cancelled': '{verb} cancelled',
@@ -281,6 +282,9 @@ export const en = {
   'verb.todo': 'Update todos',
   // The agent's ask-user-question tool, recognized by name too
   'verb.ask': 'Ask',
+  // Background-shell tools (Devin's get_output / kill_shell); the target is the parked command they act on
+  'verb.wait': 'Wait for background command',
+  'verb.kill': 'Stop background command',
 
   'mode.grok.default': 'Work directly, asking for each permission',
   'mode.grok.plan': 'Plan first, act after approval',

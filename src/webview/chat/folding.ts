@@ -15,7 +15,7 @@ export function splitCodexBlocks(blocks: AgentBlock[]) {
 }
 
 const FOLD_KEY: Record<ToolCallBlock['status'], MsgKey> = {
-  pending: 'fold.pending',
+  pending: 'fold.queued',
   in_progress: 'fold.pending',
   completed: 'fold.done',
   failed: 'fold.failed',
@@ -39,9 +39,10 @@ export function foldActivity(turn: AgentTurn): FoldActivity {
   if (turn.blocks.some(b => b.type === 'permission')) return { kind: 'other', label: t('host.awaitingApproval') };
   if (turn.blocks.some(b => b.type === 'question' && !b.outcome)) return { kind: 'other', label: t('host.awaitingAnswers') };
   // Concurrent calls can finish out of order; a newer completed call must not hide an active one.
+  // A command parked in the background keeps running on its own and is never the agent's current action.
   for (let i = turn.blocks.length - 1; i >= 0; i--) {
     const b = turn.blocks[i]!;
-    if (b.type === 'tool_call' && (b.status === 'pending' || b.status === 'in_progress')) {
+    if (b.type === 'tool_call' && !b.background && (b.status === 'pending' || b.status === 'in_progress')) {
       return { kind: b.kind, label: toolVerb(b), target: b.target, mono: b.targetMono, active: true };
     }
     if (b.type === 'compaction' && b.status === 'in_progress') return { kind: 'compaction', label: t('turns.compacting') };
@@ -53,7 +54,7 @@ export function foldActivity(turn: AgentTurn): FoldActivity {
     if (b.type === 'text' && b.streaming) return { kind: 'other', label: t('host.replying'), active: true };
     // An open thought may already be followed by unreported tool-argument generation.
     if (b.type === 'thought' && b.streaming) return { kind: 'think', label: t('host.working'), active: true };
-    if (b.type === 'tool_call') return { kind: b.kind, label: toolVerb(b), target: b.target, mono: b.targetMono };
+    if (b.type === 'tool_call' && !b.background) return { kind: b.kind, label: toolVerb(b), target: b.target, mono: b.targetMono };
   }
   return { kind: 'other', label: t('host.working'), active: true };
 }

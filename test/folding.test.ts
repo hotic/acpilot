@@ -42,13 +42,34 @@ describe('Codex process folding', () => {
     const turn: AgentTurn = { role: 'agent', blocks: [run, read], activity: { kind: 'think', label: 'Thinking' } };
     expect(foldActivity(turn)).toEqual({ kind: 'execute', label: 'Run…', target: 'pnpm test', mono: true, active: true });
     expect(foldActivity({ role: 'agent', blocks: [{ ...run, status: 'completed' }], activity: turn.activity }).label).toBe('Run');
-    expect(foldActivity({ role: 'agent', blocks: [{ type: 'compaction', id: 'c', status: 'in_progress' }] }).label).toBe('Compacting context');
+    expect(foldActivity({ role: 'agent', blocks: [{ type: 'compaction', id: 'c', status: 'in_progress' }] }).label).toBe('Compacting');
+  });
+
+  it('a parked background command never reads as the current action; a wait on it names the command', () => {
+    const parked: ToolCallBlock = { ...run, id: 'bg', target: 'python3 snap.py save', background: true };
+    const thinking = { type: 'thought' as const, text: 'checking progress', streaming: true };
+    expect(foldActivity({ role: 'agent', blocks: [parked, thinking] })).toEqual({ kind: 'think', label: 'Working', active: true });
+    expect(foldActivity({ role: 'agent', blocks: [parked, { ...thinking, streaming: false }] })).toEqual({ kind: 'other', label: 'Working', active: true });
+    const wait: ToolCallBlock = { type: 'tool_call', id: 'w', kind: 'other', verb: 'Wait for background command', verbKey: 'verb.wait', target: 'python3 snap.py save', targetMono: true, status: 'in_progress' };
+    expect(foldActivity({ role: 'agent', blocks: [parked, wait] })).toEqual({ kind: 'other', label: 'Wait for background command…', target: 'python3 snap.py save', mono: true, active: true });
+    setLocale('zh-CN');
+    expect(toolVerb(wait)).toBe('正在等待后台命令');
   });
 
   it('preserves failed and cancelled outcomes in action labels', () => {
     expect(toolVerb(read)).toBe('Read');
     expect(toolVerb({ ...run, status: 'failed' })).toBe('Run failed');
     expect(toolVerb({ ...run, status: 'cancelled' })).toBe('Run cancelled');
+  });
+
+  it('distinguishes announced reads from execution and completion', () => {
+    expect(toolVerb({ ...read, status: 'pending' })).toBe('Read queued');
+    expect(toolVerb({ ...read, status: 'in_progress' })).toBe('Read…');
+    expect(toolVerb(read)).toBe('Read');
+    setLocale('zh-CN');
+    expect(toolVerb({ ...read, status: 'pending' })).toBe('等待读取');
+    expect(toolVerb({ ...read, status: 'in_progress' })).toBe('正在读取');
+    expect(toolVerb(read)).toBe('已读取');
   });
 
   it('uses elapsed wall time with compact units, without appending action summaries', () => {
@@ -64,6 +85,6 @@ describe('Codex process folding', () => {
     const turn: AgentTurn = { role: 'agent', blocks: [run], startedAt: 1000, endedAt: 287000 };
     expect(elapsedLabel(turn)).toBe('用时 4 分钟 46 秒');
     expect(toolVerb({ ...run, status: 'failed' })).toBe('运行失败');
-    expect(foldActivity({ role: 'agent', blocks: [{ type: 'compaction', id: 'c', status: 'in_progress' }] }).label).toBe('正在压缩上下文');
+    expect(foldActivity({ role: 'agent', blocks: [{ type: 'compaction', id: 'c', status: 'in_progress' }] }).label).toBe('正在压缩');
   });
 });

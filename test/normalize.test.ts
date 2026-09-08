@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyUpdate, diffLines, emptyState, endTurn, failTurn } from '../src/host/acp/normalize';
+import { activityOf, applyUpdate, diffLines, emptyState, endTurn, failTurn } from '../src/host/acp/normalize';
 
 describe('diffLines', () => {
   it('LCS line-level diff, keeping only context near changes', () => {
@@ -123,6 +123,52 @@ describe('applyUpdate', () => {
     const t = s.turns[0];
     if (t?.role !== 'agent') throw new Error();
     expect(t.blocks[0]).toMatchObject({ type: 'tool_call', id: 'x', verb: 'Run', target: 'ls -la', targetMono: true, status: 'in_progress' });
+  });
+
+  // Devin 3000.6.14 wire shape: exec past its timeout is parked with cognition.ai/background, then get_output ("Read shell", no kind) blocks on it
+  it('Devin background shell: the parked exec is flagged, get_output becomes a wait naming that command, and neither passes for the current action', () => {
+    const s = emptyState();
+    s.turns.push({ role: 'agent', blocks: [], startedAt: 1 });
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'exec:0', title: 'Ran python3', kind: 'execute', rawInput: { command: 'python3 snap.py save', timeout: 10000 }, _meta: { 'cognition.ai/inferenceToolName': 'exec' } });
+    applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'exec:0', status: 'in_progress', _meta: { 'cognition.ai/inferenceToolName': 'exec' } });
+    expect(activityOf(s.turns)?.label).toBe('Run python3 snap.py save');
+    applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'exec:0', status: 'in_progress',
+      _meta: { 'cognition.ai/inferenceToolName': 'exec', 'cognition.ai/background': true, 'cognition.ai/backgroundShellId': '0d95e3', 'cognition.ai/backgroundCommand': 'python3 snap.py save' } });
+    const t = s.turns[0];
+    if (t?.role !== 'agent') throw new Error();
+    expect(t.blocks[0]).toMatchObject({ kind: 'execute', status: 'in_progress', background: true, target: 'python3 snap.py save' });
+    // The agent has moved on: a streaming thought is the current action, not the parked command
+    applyUpdate(s, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'checking progress' } });
+    expect(activityOf(s.turns)?.label).toBe('Working');
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'get_output:1', title: 'Read shell', rawInput: { shell_id: '0d95e3', timeout: 60000 }, _meta: { 'cognition.ai/inferenceToolName': 'get_output' } });
+    applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'get_output:1', status: 'in_progress' });
+    expect(t.blocks[2]).toMatchObject({ kind: 'other', verbKey: 'verb.wait', verb: 'Wait for background command', target: 'python3 snap.py save', targetMono: true, status: 'in_progress' });
+    expect(t.blocks[2]).not.toHaveProperty('background');
+    expect(activityOf(s.turns)?.label).toBe('Wait for background command python3 snap.py save');
+    applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'get_output:1', status: 'completed', _meta: { 'cognition.ai/inferenceToolName': 'get_output' } });
+    applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'exec:0', status: 'completed', content: [{ type: 'content', content: { type: 'text', text: 'saved 33/33' } }],
+      _meta: { 'cognition.ai/inferenceToolName': 'exec', terminal_exit: { terminal_id: '0d95e3', exit_code: 0, signal: null } } });
+    expect(t.blocks[0]).toMatchObject({ status: 'completed', content: { type: 'text', text: 'saved 33/33' } });
+    expect(t.blocks[2]).toMatchObject({ status: 'completed', target: 'python3 snap.py save' });
+  });
+
+  it('a wait on an unknown shell falls back to the shell id, and the title alone identifies the tool without _meta', () => {
+    const s = emptyState();
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'w', title: 'Read shell', status: 'in_progress', rawInput: { shell_id: 'abc123', timeout: 5000 } });
+    const t = s.turns[0];
+    if (t?.role !== 'agent') throw new Error();
+    expect(t.blocks[0]).toMatchObject({ kind: 'other', verbKey: 'verb.wait', target: 'abc123', targetMono: true });
+  });
+
+  it('kill_shell ("Kill shell", no kind) stops the parked command by name', () => {
+    const s = emptyState();
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'exec_0', title: 'Ran sleep', kind: 'execute', rawInput: { command: 'sleep 120', timeout: 3000 } });
+    applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'exec_0', status: 'in_progress',
+      _meta: { 'cognition.ai/background': true, 'cognition.ai/backgroundShellId': '481dbc', 'cognition.ai/backgroundCommand': 'sleep 120' } });
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'kill_shell_3', title: 'Kill shell', rawInput: { shell_id: '481dbc' }, _meta: { 'cognition.ai/inferenceToolName': 'kill_shell' } });
+    const t = s.turns[0];
+    if (t?.role !== 'agent') throw new Error();
+    expect(t.blocks[1]).toMatchObject({ kind: 'other', verbKey: 'verb.kill', verb: 'Stop background command', target: 'sleep 120', targetMono: true });
   });
 
   it('endTurn: cancelled marks running tools cancelled, the rest failed; the stop reason lands on the turn', () => {

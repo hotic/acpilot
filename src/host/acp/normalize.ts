@@ -20,6 +20,8 @@ export interface NormalizeState {
   title?: string;
   // Start time of a thought block; durationSec is computed when it ends
   thoughtStartedAt?: number;
+  // Background shell id → command, so a later wait on that shell (Devin's get_output) can name the command it waits for
+  shells?: Record<string, string>;
 }
 
 export function emptyState(): NormalizeState {
@@ -98,8 +100,8 @@ export function applyUpdate(s: NormalizeState, u: acp.SessionUpdate): boolean {
       const t = currentAgentTurn(s);
       sealStreaming(s, t);
       const existing = findTool(s, u.toolCallId);
-      const block = existing ?? toolBlock(u);
-      if (existing) mergeTool(existing, u);
+      const block = existing ?? toolBlock(u, s);
+      if (existing) mergeTool(existing, u, s);
       else t.blocks.push(block);
       timeTool(block, t.startedAt !== undefined && !t.stop && t.blocks.includes(block));
       return true;
@@ -110,9 +112,9 @@ export function applyUpdate(s: NormalizeState, u: acp.SessionUpdate): boolean {
       const block = existing ?? toolBlock({
         toolCallId: u.toolCallId, title: u.title ?? '', kind: u.kind ?? undefined,
         status: u.status ?? undefined, content: u.content ?? undefined,
-        locations: u.locations ?? undefined, rawInput: u.rawInput,
-      });
-      if (existing) mergeTool(existing, u);
+        locations: u.locations ?? undefined, rawInput: u.rawInput, _meta: u._meta,
+      }, s);
+      if (existing) mergeTool(existing, u, s);
       else { sealStreaming(s, t); t.blocks.push(block); }
       timeTool(block, t.startedAt !== undefined && !t.stop && t.blocks.includes(block));
       return true;
@@ -263,6 +265,21 @@ const verbOf = (kind: ToolKind): string => t(VERB_KEY[kind]);
 const TODO_TITLE = /^todo([_\s-]?(write|update|read|list))?$/i;
 // The ask-user-question tool by its names on the wire: Grok `ask_user_question` / `Ask 2 questions`, Devin `Asked user 2 questions …`, Kimi `AskUserQuestion` / `Asking user questions`
 const ASK_TITLE = /^(ask_?user_?questions?|ask(ed|ing)?\s+(the\s+)?(user\s+)?(\d+\s+)?questions?\b)/i;
+// Background-shell tools (Devin): `get_output` arrives titled `Read shell` and `kill_shell` as `Kill shell`, both without a kind and addressing
+// the parked exec by `rawInput.shell_id`. get_output blocks for up to its timeout — shown as a generic tool call that looks like a hang,
+// so each gets its own verb and the command it acts on as the target (`write_to_process` already comes as kind execute with a usable title)
+const SHELL_TOOLS: Record<string, MsgKey> = { get_output: 'verb.wait', kill_shell: 'verb.kill' };
+const SHELL_TITLES: [RegExp, MsgKey][] = [
+  [/^(get_output|read(ing)?\s+shell(\s+output)?)$/i, 'verb.wait'],
+  [/^(kill_shell|kill(ing)?\s+shell)$/i, 'verb.kill'],
+];
+
+function shellVerb(meta: Record<string, unknown> | undefined, title: string | null | undefined): MsgKey | undefined {
+  const name = meta?.['cognition.ai/inferenceToolName'];
+  if (typeof name === 'string' && SHELL_TOOLS[name]) return SHELL_TOOLS[name];
+  if (!title) return undefined;
+  return SHELL_TITLES.find(([re]) => re.test(title.trim()))?.[1];
+}
 
 // Well-known tool names pin down the kind when the agent omitted it or used a grab-bag kind.
 // Specific kinds (read/edit/…) always win — only "other" and "think" are treated as unreliable.
@@ -288,25 +305,35 @@ function timeTool(b: ToolCallBlock, live: boolean) {
   if (b.startedAt !== undefined && b.status !== 'in_progress' && b.status !== 'pending') b.endedAt ??= Date.now();
 }
 
-function toolBlock(tc: acp.ToolCall): ToolCallBlock {
+function toolBlock(tc: acp.ToolCall, s?: NormalizeState): ToolCallBlock {
   const b: ToolCallBlock = { type: 'tool_call', id: tc.toolCallId, kind: tc.kind ?? 'other', verb: verbOf(tc.kind ?? 'other'), status: tc.status ?? 'pending' };
-  mergeTool(b, tc);
+  mergeTool(b, tc, s);
   return b;
 }
 
 // Fields of tool_call and tool_call_update are all optional; overwrite only the ones provided
-function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
+function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate, s?: NormalizeState) {
+  const meta = (u._meta ?? undefined) as Record<string, unknown> | undefined;
+  const raw = u.rawInput as Record<string, unknown> | undefined;
   if (u.kind) { b.kind = u.kind; b.verb = verbOf(u.kind); }
   if (u.title && TODO_TITLE.test(u.title.trim())) { b.verbKey = 'verb.todo'; b.verb = t('verb.todo'); }
   if (u.title && ASK_TITLE.test(u.title.trim())) { b.verbKey = 'verb.ask'; b.verb = t('verb.ask'); }
+  const shell = shellVerb(meta, u.title);
+  if (shell) { b.verbKey = shell; b.verb = t(shell); }
   if (!b.verbKey && (b.kind === 'other' || b.kind === 'think')) {
     const inferred = inferKind(u.title ?? undefined);
     if (inferred) { b.kind = inferred; b.verb = verbOf(inferred); }
   }
   if (u.status) b.status = u.status;
+  // Devin parks a command past its exec timeout: the call stays in_progress while the process runs, and later waits address it by shell id
+  if (meta?.['cognition.ai/background'] === true) {
+    b.background = true;
+    const shellId = meta['cognition.ai/backgroundShellId'];
+    const command = meta['cognition.ai/backgroundCommand'];
+    if (s && typeof shellId === 'string') (s.shells ??= {})[shellId] = typeof command === 'string' && command ? command : b.target ?? shellId;
+  }
   if (u.locations) b.locations = u.locations.map(l => ({ path: l.path, ...(l.line != null ? { line: l.line } : {}) }));
   // Some ACP tools supply a path in rawInput instead of locations.
-  const raw = u.rawInput as Record<string, unknown> | undefined;
   if (b.kind === 'read' && raw) {
     const range = readRangeFromRaw(raw, b.locations);
     if (range) b.readRange = range;
@@ -316,9 +343,11 @@ function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
     if (path) b.locations = [{ path }];
   }
   // A target inferred from the title is only a fallback while there is no target yet; don't overwrite what rawInput / locations provided.
-  // A todo / ask tool's title is just its own name — redundant next to the verb, so drop it (the question card carries the questions).
-  const target = pickTarget(u, b.kind);
-  if (target && !((b.verbKey === 'verb.todo' || b.verbKey === 'verb.ask') && target.fromTitle) && (!target.fromTitle || !b.target)) { b.target = target.text; b.targetMono = target.mono; }
+  // A todo / ask / shell tool's title is just its own name — redundant next to the verb, so drop it (the question card carries the questions,
+  // a shell tool names the background command it acts on, or its shell id until that command is known).
+  const named = b.verbKey === 'verb.todo' || b.verbKey === 'verb.ask' || b.verbKey === 'verb.wait' || b.verbKey === 'verb.kill';
+  const target = b.verbKey === 'verb.wait' || b.verbKey === 'verb.kill' ? shellTarget(raw, s) : pickTarget(u, b.kind);
+  if (target && !(named && target.fromTitle) && (!target.fromTitle || !b.target)) { b.target = target.text; b.targetMono = target.mono; }
   if (u.content?.length) {
     const c = toolContent(u.content);
     // Kimi sends the edit diff before execution, then a plain success receipt.
@@ -379,6 +408,13 @@ function pickTarget(u: acp.ToolCall | acp.ToolCallUpdate, kind: ToolKind): { tex
   return undefined;
 }
 
+// A shell tool names the background command it acts on (rawInput.shell_id → the parked exec), falling back to the bare shell id
+function shellTarget(raw: Record<string, unknown> | undefined, s?: NormalizeState): { text: string; mono: boolean; fromTitle?: boolean } | undefined {
+  const shellId = [raw?.shell_id, raw?.shellId, raw?.id].find((v): v is string => typeof v === 'string' && !!v);
+  if (!shellId) return undefined;
+  return { text: s?.shells?.[shellId] ?? shellId, mono: true };
+}
+
 // An agent's title is often like "Read file foo.ts"; we supply the verb ourselves, so strip the English verb to avoid duplication
 function stripVerb(title: string): string {
   return title.replace(/^(read(ing)?|edit(ing)?|write|writing|search(ing)?|run(ning)?|execute|executing|fetch(ing)?|delete|deleting|move|moving|list(ing)?)\s+(file|files|directory|command)?\s*/i, '').replace(/^`|`$/g, '').trim() || title;
@@ -400,7 +436,8 @@ export function activityOf(turns: Turn[]): AgentTurn['activity'] {
   if (turn?.role !== 'agent') return { kind: 'think', label: t('host.working') };
   for (let i = turn.blocks.length - 1; i >= 0; i--) {
     const b = turn.blocks[i]!;
-    if (b.type === 'tool_call' && (b.status === 'in_progress' || b.status === 'pending')) return { kind: b.kind, label: t('host.doing', { verb: b.verb, target: b.target ?? '' }).trim() };
+    // A parked background command runs on its own; the agent has moved on, so it never counts as the current action
+    if (b.type === 'tool_call' && !b.background && (b.status === 'in_progress' || b.status === 'pending')) return { kind: b.kind, label: t('host.doing', { verb: b.verb, target: b.target ?? '' }).trim() };
     if (b.type === 'permission') return { kind: 'other', label: t('host.awaitingApproval') };
     if (b.type === 'question' && !b.outcome) return { kind: 'other', label: t('host.awaitingAnswers') };
   }
