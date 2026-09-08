@@ -110,6 +110,8 @@ export interface ToolCallBlock {
   targetMono?: boolean;
   // Preserve ACP file references independently of the compact heading target.
   locations?: { path: string; line?: number }[];
+  // Explicit read parameters; kept separately because later ACP locations omit the range.
+  readRange?: { path: string; start: number; end?: number };
   status: ToolStatus;
   meta?: string;
   diffStat?: { add: number; del: number };

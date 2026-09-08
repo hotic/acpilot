@@ -280,6 +280,10 @@ function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
   if (u.locations) b.locations = u.locations.map(l => ({ path: l.path, ...(l.line != null ? { line: l.line } : {}) }));
   // Some ACP tools supply a path in rawInput instead of locations.
   const raw = u.rawInput as Record<string, unknown> | undefined;
+  if (b.kind === 'read' && raw) {
+    const range = readRangeFromRaw(raw, b.locations);
+    if (range) b.readRange = range;
+  }
   if (!b.locations?.length && (b.kind === 'read' || b.kind === 'edit' || b.kind === 'delete' || b.kind === 'move')) {
     const path = pathFromRaw(raw);
     if (path) b.locations = [{ path }];
@@ -302,6 +306,18 @@ function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate) {
 // What the row shows: execute shows the command; with locations, the file name; otherwise the title
 export function pathFromRaw(raw: Record<string, unknown> | undefined): string | undefined {
   return [raw?.path, raw?.file_path, raw?.filePath].find((v): v is string => typeof v === 'string' && !!v);
+}
+
+// Read tools use either inclusive endpoints or a one-based offset plus a line count.
+function readRangeFromRaw(raw: Record<string, unknown>, locations: ToolCallBlock['locations']): ToolCallBlock['readRange'] {
+  const positive = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  const path = pathFromRaw(raw) ?? (locations?.length === 1 ? locations[0]?.path : undefined);
+  const start = positive(raw.line_offset ?? raw.start_line ?? raw.startLine ?? raw.offset);
+  if (!path || start === undefined) return;
+  const count = positive(raw.n_lines ?? raw.limit ?? raw.line_count);
+  const end = positive(raw.end_line ?? raw.endLine) ?? (count === undefined ? undefined : start + count - 1);
+  return { path, start, ...(end !== undefined && Number.isSafeInteger(end) && end >= start ? { end } : {}) };
 }
 
 export function commandFromRaw(raw: Record<string, unknown> | undefined): string | undefined {

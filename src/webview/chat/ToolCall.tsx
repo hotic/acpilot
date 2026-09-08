@@ -8,7 +8,7 @@ import { TOOL_ICON } from './icons';
 import { CodeSurface, DiffBlock } from './CodeBlock';
 import { TerminalOutput } from './Terminal';
 import { toolVerb } from './folding';
-import { isLineCount, toolFiles } from './toolDetails';
+import { isFileListing, isLineCount, toolFiles } from './toolDetails';
 
 // One tool call = one expandable row, command execution included (Codex-style: the command sits on the row, the output is a card below).
 // Three modes: text only / with icon / icon + meta. No Orb while running: icon mode uses the same static icon as the completed state, with the verb shimmering.
@@ -36,8 +36,14 @@ export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; gro
     <RowLabel className={running ? 'shimmer' : undefined}>{toolVerb(block)}</RowLabel>
     {block.target && !(block.kind === 'read' && files.length) && <RowTarget mono={block.targetMono}>{block.target}</RowTarget>}
   </>;
-  // File references remain visible when the process opens; raw output has its own toggle.
-  // A count-only read response has no content to inspect beyond these references.
+  // Search hits open on demand; read references remain visible inside the process.
+  if (files.length && block.kind === 'search') return (
+    <Disclosure lead={lead} trailing={trailing} indent={false}
+      body={<ResultList items={files} kind={block.kind} detail={block} />}>
+      {label}
+    </Disclosure>
+  );
+  // A count-only read response has no content to inspect beyond its references.
   if (files.length) return (
     <div className="flex flex-col">
       <Row lead={lead} trailing={trailing}>{label}</Row>
@@ -90,7 +96,7 @@ function ResultList({ items, kind, rail = true, detail }: { items: string[]; kin
         const lead = toolLine === 'text' ? undefined : <Icon className="size-icon" strokeWidth={1.5} />;
         const target = <RowTarget mono={kind !== 'fetch'} className="text-fg-2">{main}</RowTarget>;
         // ACP output belongs to the call; expose it once on its first file row.
-        if (index === 0 && detail?.content && detail.content.type !== 'list' && !isLineCount(detail)) {
+        if (index === 0 && detail?.content && detail.content.type !== 'list' && !isLineCount(detail) && !isFileListing(detail)) {
           return <Disclosure key={it} dense lead={lead} title={it} indent={false}
             trailing={<>{aside}<ChevronRight className="file-toggle-chevron size-3 transition-transform" strokeWidth={1.5} /></>}
             body={<ToolBody block={detail} />}>
@@ -108,8 +114,9 @@ function ResultList({ items, kind, rail = true, detail }: { items: string[]; kin
 }
 
 function splitHit(hit: string): { main: string; aside?: string } {
-  const line = /^(.+?):(\d+)(?::\d+)?$/.exec(hit);
-  if (line) return { main: line[1]!, aside: `:${line[2]}` };
+  const line = /^(.+?):(\d+(?:[–-]\d+)?)(?::\d+)?$/.exec(hit);
+  if (line) return { main: line[1]!.split(/[\\/]/).pop()!, aside: `:${line[2]}` };
+  if (/^(?:\.{0,2}\/|[A-Za-z]:[\\/])/.test(hit)) return { main: hit.split(/[\\/]/).pop()! };
   try {
     const u = new URL(hit);
     return { main: u.pathname === '/' ? u.host : `${u.host}${u.pathname}`, aside: u.host };

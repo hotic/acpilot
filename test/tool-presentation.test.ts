@@ -3,7 +3,7 @@ import { applyUpdate, emptyState } from '../src/host/acp/normalize';
 import { setLocale } from '../src/webview/i18n';
 import { foldActivity, toolVerb } from '../src/webview/chat/folding';
 import type { AgentTurn, ToolCallBlock } from '../src/shared/transcript';
-import { groupReadCalls, isLineCount, toolFiles } from '../src/webview/chat/toolDetails';
+import { groupReadCalls, isFileListing, isLineCount, toolFiles } from '../src/webview/chat/toolDetails';
 
 afterEach(() => setLocale('en'));
 
@@ -45,6 +45,38 @@ describe('ACP tool presentation', () => {
       content: [{ type: 'content', content: { type: 'text', text: '90 lines' } }] });
     const turn = s.turns[0] as AgentTurn;
     expect(turn.blocks[0]).toMatchObject({ locations: [{ path: '/repo/a.ts', line: 12 }, { path: '/repo/b.ts' }] });
+  });
+
+  it('renders file URI search results as compact paths without a duplicate raw card', () => {
+    const search: ToolCallBlock = { type: 'tool_call', id: 's', kind: 'search', verb: 'Search', status: 'completed',
+      content: { type: 'text', text: 'file:///repo/AcpSession.ts\nfile:///repo/my%20file.ts\n' } };
+    expect(toolFiles(search)).toEqual(['/repo/AcpSession.ts', '/repo/my file.ts']);
+    expect(isFileListing(search)).toBe(true);
+    expect(isFileListing({ ...search, content: { type: 'text', text: 'src/a.ts:12:const x = 1;' } })).toBe(false);
+    expect(isFileListing({ ...search, content: { type: 'text', text: 'src/a.ts:12:  const x = 1;' } })).toBe(false);
+  });
+
+  it.each([
+    { line_offset: 120, n_lines: 80 },
+    { start_line: 120, end_line: 199 },
+    { offset: 120, limit: 80 },
+  ])('preserves read ranges through later location-only updates: %j', params => {
+    const s = emptyState();
+    applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: 'r', title: 'read_file', kind: 'read',
+      rawInput: { path: '/repo/AcpSession.ts', ...params } });
+    applyUpdate(s, { sessionUpdate: 'tool_call_update', toolCallId: 'r', status: 'completed', locations: [{ path: '/repo/AcpSession.ts' }] });
+    const block = (s.turns[0] as AgentTurn).blocks[0] as ToolCallBlock;
+    expect(toolFiles(block)).toEqual(['/repo/AcpSession.ts:120–199']);
+  });
+
+  it('keeps partial and unknown read ranges honest', () => {
+    const s = emptyState();
+    for (const [id, params] of Object.entries({ start: { line_offset: 120 }, invalid: { start_line: -1, end_line: 20 }, unknown: {} })) {
+      applyUpdate(s, { sessionUpdate: 'tool_call', toolCallId: id, title: 'Read', kind: 'read', rawInput: { path: '/repo/a.ts', ...params } });
+    }
+    expect(((s.turns[0] as AgentTurn).blocks as ToolCallBlock[]).map(toolFiles)).toEqual([
+      ['/repo/a.ts:120'], ['/repo/a.ts'], ['/repo/a.ts'],
+    ]);
   });
 
   it('renders stored verbs in the current UI language', () => {
