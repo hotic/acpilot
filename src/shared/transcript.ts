@@ -124,7 +124,8 @@ export interface ToolCallBlock {
 export interface ThoughtBlock {
   type: 'thought';
   text: string;
-  // Start time (epoch ms); while in progress the webview uses it for live timing; once finished only durationSec matters
+  // Legacy observation interval until the next block, not actual reasoning duration.
+  // Retained for stored transcripts; the UI must not display it as a thought timer.
   startedAt?: number;
   durationSec?: number;
   streaming?: boolean;

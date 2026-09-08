@@ -51,7 +51,8 @@ export function foldActivity(turn: AgentTurn): FoldActivity {
   for (let i = turn.blocks.length - 1; i >= 0; i--) {
     const b = turn.blocks[i]!;
     if (b.type === 'text' && b.streaming) return { kind: 'other', label: t('host.replying'), active: true };
-    if (b.type === 'thought' && b.streaming) return { kind: 'think', label: t('host.thinking'), active: true };
+    // An open thought may already be followed by unreported tool-argument generation.
+    if (b.type === 'thought' && b.streaming) return { kind: 'think', label: t('host.working'), active: true };
     if (b.type === 'tool_call') return { kind: b.kind, label: toolVerb(b), target: b.target, mono: b.targetMono };
   }
   return { kind: 'other', label: t('host.working'), active: true };

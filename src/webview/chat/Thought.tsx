@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { Brain } from 'lucide-react';
 import type { ThoughtBlock } from '@shared/transcript';
 import { useAppearance } from '../appearance';
@@ -8,11 +7,11 @@ import { cn } from '../ui/cn';
 import { useScrollFade } from '../ui/useScrollFade';
 import { StreamText } from './StreamText';
 
-// Thought row: localized verb plus faint seconds. Live seconds tick from startedAt; durationSec freezes them when the block seals.
+// ACP thought chunks have no end boundary: the next event can arrive only after
+// tool arguments finish generating. Keep the text, but never time that gap as thinking.
 // The turn heading owns the Orb; thought rows keep a static icon and shimmer only while streaming.
 export function Thought({ block }: { block: ThoughtBlock }) {
   const { toolLine } = useAppearance();
-  const sec = useThoughtSeconds(block);
   const fade = useScrollFade<HTMLParagraphElement>();
   const lead = toolLine === 'text' ? undefined : <Brain className="size-icon" strokeWidth={1.5} />;
   return (
@@ -20,21 +19,6 @@ export function Thought({ block }: { block: ThoughtBlock }) {
       <span className={cn(block.streaming && 'shimmer')}>
         {block.streaming ? t('host.thinking') : t('thought.label')}
       </span>
-      {sec !== undefined && <span className="text-fg-3 tabular-nums">{t('turns.elapsed.s', { s: sec })}</span>}
     </Disclosure>
   );
-}
-
-// While running, ticks one second at a time from startedAt; once done, uses the host-computed durationSec
-function useThoughtSeconds(block: ThoughtBlock): number | undefined {
-  const live = !!block.streaming && block.startedAt !== undefined;
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!live) return;
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [live]);
-  if (live) return Math.max(1, Math.round((now - block.startedAt!) / 1000));
-  return block.durationSec;
 }

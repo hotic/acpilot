@@ -142,7 +142,7 @@ describe('ACP tool presentation', () => {
     ], activity: { kind: 'think', label: 'Thinking' } };
     expect(foldActivity(turn)).toMatchObject({ kind: 'edit', label: '已编辑', target: 'a.ts' });
     turn.blocks.push({ type: 'thought', text: 'Check the result.', streaming: true });
-    expect(foldActivity(turn)).toMatchObject({ kind: 'think', label: '正在思考' });
+    expect(foldActivity(turn)).toMatchObject({ kind: 'think', label: '正在处理' });
     turn.blocks.push({ type: 'text', markdown: 'Done.', streaming: true });
     expect(foldActivity(turn)).toMatchObject({ kind: 'other', label: '正在回复' });
   });

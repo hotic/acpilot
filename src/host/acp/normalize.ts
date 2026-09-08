@@ -384,7 +384,7 @@ function toolContent(items: acp.ToolCallContent[]): ToolContent | undefined {
 // What's happening right now: feeds the Activity line of Turns
 export function activityOf(turns: Turn[]): AgentTurn['activity'] {
   const turn = turns[turns.length - 1];
-  if (turn?.role !== 'agent') return { kind: 'think', label: t('host.thinking') };
+  if (turn?.role !== 'agent') return { kind: 'think', label: t('host.working') };
   for (let i = turn.blocks.length - 1; i >= 0; i--) {
     const b = turn.blocks[i]!;
     if (b.type === 'tool_call' && (b.status === 'in_progress' || b.status === 'pending')) return { kind: b.kind, label: t('host.doing', { verb: b.verb, target: b.target ?? '' }).trim() };
@@ -392,7 +392,8 @@ export function activityOf(turns: Turn[]): AgentTurn['activity'] {
     if (b.type === 'question' && !b.outcome) return { kind: 'other', label: t('host.awaitingAnswers') };
   }
   const last = turn.blocks[turn.blocks.length - 1];
-  if (last?.type === 'thought' && last.streaming) return { kind: 'think', label: t('host.thinking') };
+  // ACP does not identify the transition from reasoning to tool-argument generation.
+  if (last?.type === 'thought' && last.streaming) return { kind: 'think', label: t('host.working') };
   if (last?.type === 'text' && last.streaming) return { kind: 'other', label: t('host.replying') };
-  return { kind: 'think', label: t('host.thinking') };
+  return { kind: 'think', label: t('host.working') };
 }
