@@ -13,7 +13,7 @@ const STATE_DOT: Record<Exclude<NonNullable<SessionSummary['state']>, 'working'>
 };
 
 function StateMark({ state }: { state: NonNullable<SessionSummary['state']> }) {
-  if (state === 'working') return <LoaderCircle className="size-3 animate-spin text-accent" strokeWidth={2} aria-label={t('session.state.working')} />;
+  if (state === 'working') return <LoaderCircle className="size-3 animate-spin text-fg-2" strokeWidth={2} aria-label={t('session.state.working')} />;
   return <span className={cn('size-1.5 rounded-full', STATE_DOT[state])} />;
 }
 
@@ -86,14 +86,14 @@ export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, o
         ))}
       </div>
       <div className="mt-1 flex min-h-0 flex-col overflow-y-auto border-t border-line pb-1" role="listbox" aria-label={t('session.listAria')}>
-        {!shown.length && <div className="px-2 py-3 text-3 text-fg-3">{q ? t('session.noMatch') : agentFilter ? t('session.noneAgent', { name: nameOf(agentFilter) }) : t('session.none')}</div>}
+        {!shown.length && <div className="px-3 py-3 text-2 text-fg-3">{q ? t('session.noMatch') : agentFilter ? t('session.noneAgent', { name: nameOf(agentFilter) }) : t('session.none')}</div>}
         {pinned.length > 0 && (
           <div className="flex flex-col">
             <div className="px-2 pt-2.5 pb-1 text-3 text-fg-3">{t('session.group.pinned')}</div>
             {pinned.map(renderItem)}
           </div>
         )}
-        <div className="flex flex-col pt-1">{rest.map(renderItem)}</div>
+        {rest.length > 0 && <div className="flex flex-col pt-1">{rest.map(renderItem)}</div>}
       </div>
     </div>
   );
