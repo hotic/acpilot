@@ -188,8 +188,8 @@ export const en = {
 
   'question.title': 'Questions',
   'question.of': '{n} of {total}',
-  'question.prev': 'Previous question',
-  'question.next': 'Next question',
+  'question.prev': 'Previous',
+  'question.next': 'Next',
   'question.collapse': 'Collapse questions',
   'question.expand': 'Expand questions',
   'question.other': 'Other…',
@@ -200,6 +200,7 @@ export const en = {
   'question.no': 'No',
   'question.skip': 'Skip',
   'question.continue': 'Continue',
+  'question.submit': 'Submit answers',
   'question.multiple': 'Pick any that apply',
   'question.answered': 'Answered {n} questions',
   'question.answeredOne': 'Answered a question',

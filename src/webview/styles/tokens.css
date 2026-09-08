@@ -128,8 +128,11 @@
   --term-lines: 12;
   /* Thoughts stay within eight rows or half the viewport. */
   --thought-body-max: min(calc(var(--row) * 8), 45dvh);
-  /* The question card's list of questions scrolls beyond twelve rows or half the viewport, so the composer stays in reach */
+  /* Long options within the current question scroll while its header and actions stay visible. */
   --question-body-max: min(calc(var(--row) * 12), 50dvh);
+  --question-option-pad: 6px;
+  --question-description-gap: 2px;
+  --question-focus-width: 2px;
   /* Only the pinned to-do list has a bounded viewport; historical plans grow naturally. */
   --plan-rows: 7;
   /* Max rows shown in a menu; beyond that it scrolls inside the menu (Devin's 210 models) */
@@ -207,6 +210,48 @@
 }
 .scroll-fade[data-more-above] { --fade-top: var(--scroll-fade-size); }
 .scroll-fade[data-more-below] { --fade-bottom: var(--scroll-fade-size); }
+
+/* Hallmark · component: question card · theme: existing ACPilot tokens.
+   One question per page, compact type, shared row alignment and persistent actions. */
+.question-header { padding: var(--gap) var(--pad) 0; }
+.question-body {
+  --scroll-fade-size: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  max-height: min(calc(var(--row) * 12), 50dvh);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: var(--gap) var(--pad);
+}
+.question-option { align-items: flex-start; padding: var(--question-option-pad); }
+.question-option > .row-lead { margin-top: calc((var(--text-2-lh) - var(--lead)) / 2); }
+.question-option-copy { gap: var(--question-description-gap); }
+.question-option-key {
+  display: flex;
+  width: var(--lead);
+  height: var(--lead);
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  font-size: var(--text-3);
+  line-height: var(--text-3-lh);
+  color: var(--fg-2);
+}
+.question-option[aria-checked="true"] .question-option-key { color: var(--fg-1); }
+.question-other > .row-lead { margin-top: 0; }
+.question-other .question-option-key[aria-checked="true"] { color: var(--fg-1); }
+.question-other:focus-within {
+  background: var(--active);
+  box-shadow: inset 0 0 0 var(--question-focus-width) var(--fg-2);
+}
+.question-option:active { background: var(--active); }
+.question-footer { padding: 0 var(--pad) var(--gap); }
+.question-card button:disabled { opacity: .5; cursor: not-allowed; }
+.question-card button:focus-visible, .question-input:focus-visible {
+  box-shadow: inset 0 0 0 var(--question-focus-width) var(--fg-2);
+}
 
 [data-theme="light"] {
   color-scheme: light;

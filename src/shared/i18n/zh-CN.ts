@@ -213,6 +213,7 @@ export const zhCN = {
   'question.no': '否',
   'question.skip': '跳过',
   'question.continue': '继续',
+  'question.submit': '提交答案',
   'question.multiple': '可多选',
   'question.answered': '回答了 {n} 个问题',
   'question.answeredOne': '回答了一个问题',
