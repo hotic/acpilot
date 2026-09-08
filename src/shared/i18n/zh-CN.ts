@@ -134,14 +134,14 @@ export const zhCN = {
   'notice.method.grok:xai.api_key': '用 XAI_API_KEY',
 
   // Conversation flow
-  'turns.autoCompact': '上下文到阈值，自动发送',
+  'turns.autoCompact': '已达到上下文阈值，自动压缩',
   'turns.readFiles': '读取 {n} 个文件',
   'turns.searched': '搜索 {n} 次',
   'turns.explored': '探索了 {n} 处',
   'turns.elapsed': '用时 {t}',
   'turns.done': '已完成',
   'turns.compacting': '正在压缩上下文',
-  'turns.compacted': '已压缩上下文',
+  'turns.compacted': '上下文已压缩',
   'turns.compactFailed': '压缩上下文失败',
   'turns.compactCancelled': '压缩上下文已取消',
   // The row closing a turn that stopped short / ended with nothing to show

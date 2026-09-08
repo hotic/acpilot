@@ -277,6 +277,8 @@ function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: Thre
   let i = 0;
   const exchanges: { key: number; messages: ReactNode[] }[] = [];
   turns.forEach((turn, ti) => {
+    const previous = turns[ti - 1];
+    const compacting = previous?.role === 'user' && /^\/compact(?:\s|$)/.test(previous.text.trim());
     const index = Math.min(i, STAGGER_CAP);
     i += turn.role === 'agent' ? turn.blocks.length + 1 : 1;
     if (!exchanges.length || (turn.role === 'user' && !turn.auto)) {
@@ -284,7 +286,7 @@ function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: Thre
     }
     exchanges[exchanges.length - 1]!.messages.push(turn.role === 'user'
       ? <HistoryMessage key={turn.id ?? ti} turn={turn} turnIndex={ti} index={index} blobUrl={blobUrl} />
-      : <AgentMessage key={ti} turn={turn} index={index} running={running && ti === turns.length - 1} onPermission={onPermission} />);
+      : <AgentMessage key={ti} turn={turn} index={index} compacting={compacting} running={running && ti === turns.length - 1} onPermission={onPermission} />);
   });
   return (
     <div ref={ref} className="thread-scroll scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto px-page">

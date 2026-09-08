@@ -20,6 +20,7 @@ import { PlanDocument } from './PlanDocument';
 import { TurnAttachments } from './Attachments';
 import { elapsedLabel, foldActivity, splitCodexBlocks } from './folding';
 import { ProcessHistory } from './ProcessHistory';
+import { compactionForDisplay } from './compactionDisplay';
 
 // User message: color block / right-aligned bubble / plain text; ones ACPilot sends automatically (/compact) render as a note line, not a bubble.
 // Attachments (image thumbnails / file pills) sit above the text inside the same bubble.
@@ -29,8 +30,8 @@ export function UserMessage({ turn, index, blobUrl, onEdit }: { turn: UserTurn; 
   const { userMessage } = useAppearance();
   if (turn.auto) {
     return (
-      <div className="enter" style={{ '--i': index } as CSSProperties}>
-        <Row className="text-fg-3"><RowLabel>{t('turns.autoCompact')}</RowLabel><RowTarget mono className="text-fg-2">{turn.text}</RowTarget></Row>
+      <div className="enter px-pad" style={{ '--i': index } as CSSProperties}>
+        <Row className="text-fg-3"><span>{t('turns.autoCompact')}</span></Row>
       </div>
     );
   }
@@ -79,7 +80,8 @@ type OnPermission = (blockId: string, optionId: string) => void;
 
 // Agent message: consecutive "lines" (thought / plan / tool, commands included) are grouped together; prose / permission cards each stand alone as blocks.
 // The activity line only fills a "gap": the turn is running and this message has no in-progress tool line, streaming thought, or streaming text yet
-export function AgentMessage({ turn, index, running, onPermission }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission }) {
+export function AgentMessage({ turn, index, running, onPermission, compacting }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission; compacting?: boolean }) {
+  if (compacting) turn = compactionForDisplay(turn, running);
   const plans = turn.blocks.filter(b => b.type === 'plan_document');
   // Keep pending approvals in the activity input even when their controls live
   // on the plan card; removing them makes the process heading report thinking.
@@ -320,20 +322,12 @@ function LineBlock({ block }: { block: AgentBlock }) {
   return null;
 }
 
-// Context compaction: a status line — shimmer while running, a check on success, a cross on failure; the lead is a static icon in icon mode
+// Context compaction is a localized status aligned with ordinary reply text.
 function Compaction({ block }: { block: CompactionBlock }) {
-  const { toolLine } = useAppearance();
   const running = block.status === 'in_progress';
-  const lead = toolLine === 'text' ? undefined : <FoldVertical className="size-icon" strokeWidth={1.5} />;
-  const trailing = toolLine === 'rich'
-    ? <>
-        {block.status === 'completed' && <Check className="size-3 text-ok" strokeWidth={2} />}
-        {block.status === 'failed' && <X className="size-3 text-danger" strokeWidth={2} />}
-      </>
-    : undefined;
   const label = running ? t('turns.compacting') : block.status === 'completed' ? t('turns.compacted') : block.status === 'failed' ? t('turns.compactFailed') : t('turns.compactCancelled');
   return (
-    <Row lead={lead} trailing={trailing}>
+    <Row className="text-fg-3">
       <span className={running ? 'shimmer' : undefined}>{label}</span>
     </Row>
   );

@@ -123,7 +123,7 @@ export const en = {
   'notice.method.grok:grok.com': 'Sign in with Grok',
   'notice.method.grok:xai.api_key': 'Use XAI_API_KEY',
 
-  'turns.autoCompact': 'Context reached the threshold, sent automatically',
+  'turns.autoCompact': 'Context limit reached, compacting automatically',
   'turns.readFiles': 'Read {n} files',
   'turns.searched': 'Searched {n} times',
   'turns.explored': 'Explored {n} places',
