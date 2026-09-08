@@ -7,12 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- MCP server injection from Acpira settings is planned for 1.1. Agents still read their own CLI MCP config.
-- Steer / interrupt follow-up modes are planned for 1.1. Mid-turn messages stay in the host-side queue.
+- MCP server injection from Acpira settings remains planned. Agents still read their own CLI MCP config.
+- Steer / interrupt follow-up modes remain planned. Mid-turn messages stay in the host-side queue.
+
+## [1.1.0] - 2026-09-09
 
 ### Added
 
 - Activity Bar chat view (primary sidebar), plus **Acpira: Open Chat**. The view can be moved to the secondary sidebar from the icon context menu.
+- User prompts stick to the top of their exchange and fold to a few lines once stuck, so a long message does not wall off the reply. Click the card to edit (and copy from the editor); hover copy actions are gone.
+- Overlay-style scrollbars: the hairline thumb shows while a pane is scrolling or under the pointer, never as a permanent grey bar.
+- Model panels use a searchable command list once a catalog is large; menus, switches, radios, dialogs, and toasts share Base UI primitives.
+
+### Changed
+
+- Chat overlays and settings controls share one primitive set (`DropdownMenu`, `Command`, `Switch`, `RadioGroup`, `Dialog`, `Collapsible`). Stylesheets are split into tokens / base / prose / motion / chat with explicit cascade layers.
+- Tool rows distinguish queued from in-progress (`Read queued` vs `Read…`). Compaction's live label is just Compacting.
+- Context usage caps the ring at the auto-compact threshold when that budget is smaller than the agent's reported window.
+
+### Fixed
+
+- Devin background shells no longer look like a hung generic tool. A parked exec is skipped as current activity; `get_output` / `kill_shell` show as wait/stop on the parked command.
+- Opening an attachment uses `vscode.open`, so images and other binaries preview instead of failing as "the file appears to be binary".
 
 ## [1.0.2] - 2026-09-08
 
