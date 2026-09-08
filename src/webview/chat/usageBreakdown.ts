@@ -23,6 +23,13 @@ export function estTokens(text: string): number {
   return Math.ceil(cjk * 0.7 + (text.length - cjk) / 4);
 }
 
+// Visible context window: auto-compact's threshold is the budget the user set, so it caps the
+// agent-reported size; a smaller model window still wins
+export function usageWindow(size: number, compactAt?: number): number {
+  if (!compactAt || compactAt <= 0) return size;
+  return Math.min(size, compactAt);
+}
+
 // Buckets the transcript into four conversation usage categories by block type, with the remainder derived as "system & other";
 // when the conversation estimate exceeds the total (a post-compaction summary is shorter than the original), scale proportionally to fit the total and zero out the system segment
 export function estimateUsage(turns: Turn[], usage: Usage): UsageSegment[] {

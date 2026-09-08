@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateUsage, estTokens } from '../src/webview/chat/usageBreakdown';
+import { estimateUsage, estTokens, usageWindow } from '../src/webview/chat/usageBreakdown';
 import type { Turn, Usage } from '../src/shared/transcript';
 
 // 100 latin chars ≈ 25 tokens
@@ -16,6 +16,22 @@ describe('estTokens', () => {
 
   it('CJK chars are denser', () => {
     expect(estTokens('你好世界')).toBe(Math.ceil(4 * 0.7));
+  });
+});
+
+describe('usageWindow', () => {
+  it('caps the agent-reported window at the compact threshold', () => {
+    expect(usageWindow(1_000_000, 300_000)).toBe(300_000);
+  });
+
+  it('keeps a smaller model window', () => {
+    expect(usageWindow(200_000, 300_000)).toBe(200_000);
+  });
+
+  it('ignores a missing or non-positive threshold', () => {
+    expect(usageWindow(1_000_000)).toBe(1_000_000);
+    expect(usageWindow(1_000_000, 0)).toBe(1_000_000);
+    expect(usageWindow(1_000_000, -1)).toBe(1_000_000);
   });
 });
 
