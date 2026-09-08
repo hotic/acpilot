@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { composerControls, effortOptions, familyLabel } from '../src/shared/composerControls';
+import { composerControls, effortOptions, familyLabel, presentReasoning, reasoningChip, reasoningVisible, thoughtCorrection } from '../src/shared/composerControls';
 import { groupModels } from '../src/shared/models';
 import type { ConfigControl } from '../src/shared/transcript';
+
+const kimiThink = (value: string, names: string[]): ConfigControl => ({
+  id: 'thinking', name: 'Thinking', category: 'thought_level', value,
+  options: names.map(name => ({ id: name, name: `Thinking ${name[0]!.toUpperCase()}${name.slice(1)}` })),
+});
 
 describe('shared composer controls', () => {
   it('keeps native Kimi reasoning out of model-name grouping', () => {
@@ -41,6 +46,48 @@ describe('shared composer controls', () => {
     const families = groupModels(control.options);
     expect(families.map(f => f.name)).toEqual(['Extra High Effort', 'High Effort', 'Medium Effort', 'Low Effort']);
     expect(families.map(f => familyLabel(control, f))).toEqual(['XHigh', 'High', 'Medium', 'Low']);
+  });
+
+  it('drops a leftover thinking toggle when Kimi appends it onto K3 efforts', () => {
+    const control = kimiThink('on', ['low', 'high', 'max', 'on']);
+    expect(presentReasoning(control)).toMatchObject({
+      value: 'high', off: false, offId: undefined,
+      efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }, { id: 'max', name: 'Max' }],
+    });
+    expect(thoughtCorrection(control)).toBe('high');
+    expect(reasoningChip(control)).toBe('High');
+    expect(reasoningVisible(control)).toBe(true);
+  });
+
+  it('drops a leftover effort when Kimi appends it onto a toggle-only model', () => {
+    const control = kimiThink('high', ['on', 'high']);
+    expect(presentReasoning(control)).toMatchObject({ value: 'on', efforts: [], onId: 'on', off: false });
+    expect(thoughtCorrection(control)).toBe('on');
+    expect(reasoningChip(control)).toBeUndefined();
+    expect(reasoningVisible(control)).toBe(false);
+  });
+
+  it('keeps DeepSeek off beside Low/Medium/High/Max and does not treat off as a pill', () => {
+    const control = kimiThink('off', ['off', 'low', 'medium', 'high', 'max']);
+    const p = presentReasoning(control);
+    expect(p.off).toBe(true);
+    expect(p.offId).toBe('off');
+    expect(p.efforts.map(o => o.name)).toEqual(['Low', 'Medium', 'High', 'Max']);
+    expect(thoughtCorrection(control)).toBeUndefined();
+    expect(reasoningChip(control)).toBeUndefined();
+    expect(reasoningVisible(control)).toBe(true);
+    expect(reasoningChip({ ...control, value: 'high' })).toBe('High');
+  });
+
+  it('leaves a clean K3 effort list alone', () => {
+    const control = kimiThink('max', ['low', 'high', 'max']);
+    expect(presentReasoning(control).value).toBe('max');
+    expect(thoughtCorrection(control)).toBeUndefined();
+    expect(reasoningChip(control)).toBe('Max');
+  });
+
+  it('does not rewrite a model control', () => {
+    expect(thoughtCorrection({ id: 'model', name: 'Model', category: 'model', value: 'asgard/kimi-k3', options: [] })).toBeUndefined();
   });
 
   it('retains legacy Devin model variants and respects explicit custom categories', () => {

@@ -21,6 +21,8 @@ export interface ModelFamily {
   // Namespaced identity keeps equal display names from different providers separate.
   key: string;
   name: string;
+  // Vendor mark key resolved from the options' wire ids (see optionBrand); undefined when unbranded
+  brand?: string;
   source?: string;
   sourceKind?: 'official' | 'custom';
   variants: ModelVariant[];
@@ -75,6 +77,7 @@ export function groupModels(options: SessionOption[]): ModelFamily[] {
     const key = separate ? JSON.stringify([namespace ?? null, p.family, o.id]) : namespace ? JSON.stringify([namespace, p.family]) : p.family;
     let f = map.get(key);
     if (!f) { f = { key, name: p.family, source, sourceKind: o.source?.kind, variants: [], efforts: [], hasFast: false, hasLong: false }; map.set(key, f); }
+    f.brand ??= optionBrand(o);
     f.variants.push({ id: o.id, name: o.name, effort: p.effort, fast: p.fast, long: p.long });
   }
   const rank = (e: string) => { const i = EFFORT_ORDER.indexOf(e); return i < 0 ? EFFORT_ORDER.length : i; };
@@ -122,13 +125,17 @@ export function variantLabel(v: ModelVariant, f: ModelFamily, labels?: { standar
   return parts.join(' ') || standard;
 }
 
-// Model family → vendor brand key (see webview chat/marks.tsx for the matching logos). Purely heuristic: case-insensitive keyword
-// rules on word boundaries, first hit wins. "Adaptive" maps to devin because it is Devin's own routing model; an unknown family
-// yields undefined and the renderer falls back to an initial-letter tile
+// Model → vendor brand key (see webview chat/marks.tsx for the matching logos). Purely heuristic: case-insensitive keyword
+// rules on word boundaries, first hit wins. Ids are slugs like "asgard/kimi-k3", so / and - count as word boundaries.
+// "Adaptive" maps to devin because it is Devin's own routing model; no match yields undefined and the renderer falls
+// back to an initial-letter tile
 const BRAND: [RegExp, string][] = [
   [/\bclaude\b/, 'claude'],
   [/\bglm\b|\bzhipu\b|\bchatglm\b/, 'zhipu'],
   [/\bkimi\b|\bmoonshot\b/, 'kimi'],
+  // Moonshot's bare K-series names (K2.7 Coding, K3, K3-256k) carry no "kimi" keyword — a last resort for
+  // options whose wire id is also opaque (e.g. a gateway alias like "asgard")
+  [/\bk\d+(\.\d+)?\b/, 'kimi'],
   [/\bswe\b|\bwindsurf\b/, 'windsurf'],
   [/\badaptive\b|\bdevin\b/, 'devin'],
   [/\bgpt\b|\bopenai\b|\bcodex\b/, 'openai'],
@@ -144,4 +151,10 @@ export function modelBrand(family: string): string | undefined {
   const t = family.toLowerCase();
   for (const [re, brand] of BRAND) if (re.test(t)) return brand;
   return undefined;
+}
+
+// Brand of a session option: the wire id is the real model identity ("kimi-code/k3", "asgard/kimi-k3") while the
+// display name is only a label ("K3"), so the id is checked first and the name is just a fallback for opaque ids
+export function optionBrand(o: Pick<SessionOption, 'id' | 'name'>): string | undefined {
+  return modelBrand(o.id) ?? modelBrand(o.name);
 }

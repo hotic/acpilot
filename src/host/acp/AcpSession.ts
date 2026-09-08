@@ -11,6 +11,7 @@ import { capturePlan, planDocuments } from './plans';
 import { planExecutionPrompt } from '@shared/planExecution';
 import { CompactionCompletion, isCompactCommand } from './compaction';
 import { applyModelSources, type ModelSources } from '@shared/modelSources';
+import { thoughtCorrection } from '@shared/composerControls';
 import { readModelSources } from './modelSources';
 import { fetchGrokUsage } from './grokUsage';
 import { preparePrompt, type BlobStore } from './attachments';
@@ -99,6 +100,7 @@ export class AcpSession {
   private usageRevision = 0;
   private usageNotifications = false;
   private grokUsageUnavailable = false;
+  private syncingThought = false;
 
   constructor(record: SessionRecord, private deps: SessionDeps) {
     this.id = record.id;
@@ -585,6 +587,7 @@ export class AcpSession {
     if (c.modeConfigId) {
       const r = await this.proc.agent.request(acp.methods.agent.session.setConfigOption, { sessionId: this.acpSessionId!, configId: c.modeConfigId, value: id });
       applyConfigOptions(c, r.configOptions);
+      await this.syncThought();
     } else if (this.syntheticModes()) {
       // Synthetic modes: default / plan go through set_mode; yolo is host-side auto-approval, so the CLI must stay in default (pulled back first when coming from plan)
       const wire = id === 'yolo' ? (c.modeId === 'plan' ? 'default' : undefined) : id;
@@ -606,11 +609,23 @@ export class AcpSession {
     if (!this.proc || this.status !== 'ready' || !c.options.some(o => o.id === configId)) return;
     const r = await this.proc.agent.request(acp.methods.agent.session.setConfigOption, { sessionId: this.acpSessionId!, configId, value });
     applyConfigOptions(c, r.configOptions);
+    if (!this.syncingThought) await this.syncThought();
     if (this.agent === 'grok' && !this.usageNotifications && c.options.find(o => o.id === configId)?.category === 'model') {
       this.state.usage = undefined;
       await this.refreshGrokUsage();
     }
     this.touch();
+  }
+
+  // Kimi appends the previous thinking value when the new model does not offer it; push a native value so the leftover never stays on the wire.
+  private async syncThought() {
+    this.syncingThought = true;
+    try {
+      for (const o of this.state.controls.options) {
+        const next = thoughtCorrection(o);
+        if (next) await this.setConfig(o.id, next);
+      }
+    } finally { this.syncingThought = false; }
   }
 
   // A fresh session opens on the agent's defaults; replay what was chosen last time in this agent (mode + config values), one request per

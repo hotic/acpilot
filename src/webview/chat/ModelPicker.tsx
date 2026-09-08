@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { ConfigControl } from '@shared/transcript';
-import { findVariant, groupModels, modelBrand, variantLabel, visibleOptions, type ModelFamily, type ModelVariant } from '@shared/models';
-import { effortOptions } from '@shared/composerControls';
+import { findVariant, groupModels, optionBrand, variantLabel, visibleOptions, type ModelFamily, type ModelVariant } from '@shared/models';
+import { presentReasoning, reasoningChip, reasoningVisible } from '@shared/composerControls';
 import { t } from '../i18n';
 import { cn } from '../ui/cn';
 import { Chip } from '../ui/Button';
@@ -54,7 +54,7 @@ export function ModelControl({ control, hidden, reasoning = [], onSetReasoning, 
   const cur = families.find(f => f.variants.some(v => v.id === c.value));
   const curVar = cur?.variants.find(v => v.id === c.value);
   const params = cur && curVar && (cur.efforts.length > 1 || curVar.effort || curVar.fast || curVar.long) ? variantLabel(curVar, cur, { standard: t('composer.standard') }) : undefined;
-  const levels = reasoning.map(r => effortOptions(r.options).find(o => o.id === r.value)?.name);
+  const levels = reasoning.map(reasoningChip);
   // Provider identity stays in the expanded list; the chip reads as one model name.
   const meta = [params, ...levels].filter(Boolean).join(' ') || undefined;
   return (
@@ -64,7 +64,7 @@ export function ModelControl({ control, hidden, reasoning = [], onSetReasoning, 
         reasoning={reasoning} onSetReasoning={onSetReasoning} />}
     >
       {({ open, toggle, ref }) => (
-        <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={[cur?.name ?? c.name, meta].filter(Boolean).join(' ')} meta={meta} icon={<ModelMark family={cur?.name ?? c.name} />}>
+        <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={[cur?.name ?? c.name, meta].filter(Boolean).join(' ')} meta={meta} icon={<ModelMark family={cur?.name ?? c.name} brand={cur?.brand} />}>
           {cur?.name ?? c.options.find(o => o.id === c.value)?.name ?? c.name}
         </Chip>
       )}
@@ -74,11 +74,11 @@ export function ModelControl({ control, hidden, reasoning = [], onSetReasoning, 
 
 // Agents without a model selector still use the same reasoning field and labels.
 export function ReasoningControl({ control: c, onSelect, onOpenChange }: OptionMenuProps) {
-  const options = effortOptions(c.options);
+  if (!reasoningVisible(c)) return null;
   return <Popover side="top" align="end" width="md" onOpenChange={onOpenChange}
-    content={() => <EffortField options={options.map(o => ({ value: o.id, label: o.name }))} value={c.value ?? ''} onChange={onSelect} />}>
+    content={() => <ReasoningParams control={c} onChange={onSelect} />}>
     {({ open, toggle, ref }) => <Chip ref={ref} narrow="text" data-open={open || undefined} onClick={toggle} title={t('composer.effort')}>
-      {options.find(o => o.id === c.value)?.name ?? t('composer.effort')}
+      {reasoningChip(c) ?? t('composer.effort')}
     </Chip>}
   </Popover>;
 }
@@ -94,23 +94,23 @@ interface ModelPanelProps {
 }
 
 function ModelPanel({ families, cur, curVar, onSelect, close, reasoning = [], onSetReasoning }: ModelPanelProps) {
-  const items = families.map((f): MenuItem => ({ id: f.key, label: f.name, description: f.source, icon: <ModelMark family={f.name} />, checked: f === cur }));
+  const items = families.map((f): MenuItem => ({ id: f.key, label: f.name, description: f.source, icon: <ModelMark family={f.name} brand={f.brand} />, checked: f === cur }));
   const pickFamily = (key: string) => {
     const f = families.find(x => x.key === key);
     if (f) onSelect(((curVar && findVariant(f, curVar.effort, curVar.fast, curVar.long)) ?? f.variants[0]!).id);
     close();
   };
+  const shown = reasoning.filter(reasoningVisible);
+  const showParams = !!(cur && curVar && cur.variants.length > 1);
   return (
     <MenuList
       items={items}
       searchable={families.length >= SEARCH_FROM}
       onSelect={pickFamily}
-      footer={(cur && curVar && cur.variants.length > 1) || reasoning.length ? (
+      footer={showParams || shown.length ? (
         <div className="mt-1 flex flex-col border-t border-line pt-1">
-          {cur && curVar && cur.variants.length > 1 && <ModelParams family={cur} variant={curVar} onSelect={onSelect} />}
-          {reasoning.map(c => <EffortField key={c.id} label={reasoning.length > 1 ? c.name : undefined}
-            options={effortOptions(c.options).map(o => ({ value: o.id, label: o.name }))} value={c.value ?? ''}
-            onChange={value => onSetReasoning?.(c.id, value)} />)}
+          {showParams && <ModelParams family={cur!} variant={curVar!} onSelect={onSelect} />}
+          {shown.map(c => <ReasoningParams key={c.id} control={c} onChange={value => onSetReasoning?.(c.id, value)} />)}
         </div>
       ) : undefined}
     />
@@ -140,6 +140,20 @@ function ModelParams({ family: f, variant: v, onSelect }: { family: ModelFamily;
   );
 }
 
+// Native thought_level: effort pills, plus a Thinking switch when the agent can turn it off.
+function ReasoningParams({ control, onChange }: { control: ConfigControl; onChange: (value: string) => void }) {
+  const p = presentReasoning(control);
+  const turnOn = p.efforts.find(o => o.id === 'high')?.id ?? p.efforts[0]?.id ?? p.onId;
+  return (
+    <div className="flex flex-col">
+      {p.offId && <SwitchRow label="Thinking" checked={!p.off} onChange={on => { if (on) { if (turnOn) onChange(turnOn); } else onChange(p.offId!); }} />}
+      {p.efforts.length > 1 && (
+        <EffortField options={p.efforts.map(o => ({ value: o.id, label: o.name }))} value={p.off ? '' : (p.value ?? '')} onChange={onChange} />
+      )}
+    </div>
+  );
+}
+
 // Shared segmented field for both embedded variants and native thought_level.
 function EffortField({ options, value, onChange, label = t('composer.effort') }: {
   options: { value: string; label: string }[];
@@ -153,16 +167,16 @@ function EffortField({ options, value, onChange, label = t('composer.effort') }:
   </div>;
 }
 
-// Flat configOption menu; long lists are searchable. Vendor marks only appear when at least one option names a known brand
+// Flat configOption menu; long lists are searchable. Vendor marks only appear when at least one option has a known brand
 // (Grok's monolithic model list) — a thought_level menu of "Low / High" stays text-only instead of earning letter tiles
 function OptionMenu({ control: c, end, onSelect, onOpenChange }: OptionMenuProps) {
-  const branded = c.options.some(o => modelBrand(o.name));
-  const items = c.options.map((o): MenuItem => ({ id: o.id, label: o.name, description: o.description, icon: branded ? <ModelMark family={o.name} /> : undefined, checked: o.id === c.value }));
-  const curName = c.options.find(o => o.id === c.value)?.name;
-  const curIcon = branded && curName && modelBrand(curName) ? <ModelMark family={curName} /> : undefined;
+  const branded = c.options.some(o => optionBrand(o));
+  const items = c.options.map((o): MenuItem => ({ id: o.id, label: o.name, description: o.description, icon: branded ? <ModelMark family={o.name} brand={optionBrand(o)} /> : undefined, checked: o.id === c.value }));
+  const cur = c.options.find(o => o.id === c.value);
+  const curIcon = branded && cur && optionBrand(cur) ? <ModelMark family={cur.name} brand={optionBrand(cur)} /> : undefined;
   return (
     <Menu side="top" align={end ? 'end' : undefined} width="md" items={items} searchable={c.options.length >= SEARCH_FROM} onSelect={onSelect} onOpenChange={onOpenChange}>
-      {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={c.name} icon={curIcon}>{curName ?? c.name}</Chip>}
+      {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} onClick={toggle} narrow="text" title={c.name} icon={curIcon}>{cur?.name ?? c.name}</Chip>}
     </Menu>
   );
 }

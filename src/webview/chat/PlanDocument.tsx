@@ -2,7 +2,7 @@ import { createContext, useContext, useState } from 'react';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
 import type { ConfigControl, PermissionBlock, PlanDocumentBlock, SessionControls } from '@shared/transcript';
 import { groupModels, variantLabel } from '@shared/models';
-import { composerControls, effortOptions } from '@shared/composerControls';
+import { composerControls, reasoningChip } from '@shared/composerControls';
 import { Button, Chip, IconButton } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { t } from '../i18n';
@@ -42,7 +42,7 @@ export function PlanDocument({ block, permission: suppliedPermission, onChoose }
   const variant = family?.variants.find(v => v.id === choice?.value);
   const params = family && variant && (family.efforts.length > 1 || variant.effort || variant.fast || variant.long)
     ? variantLabel(variant, family, { standard: t('composer.standard') }) : undefined;
-  const levels = composerControls(ctx.controls.options).reasoning.map(r => effortOptions(r.options).find(o => o.id === r.value)?.name);
+  const levels = composerControls(ctx.controls.options).reasoning.map(reasoningChip);
   const meta = [params, ...levels].filter(Boolean).join(' ') || undefined;
   // Match the composer chip; source identity remains in the expanded model list.
   const executor = family && variant
@@ -79,7 +79,7 @@ export function PlanDocument({ block, permission: suppliedPermission, onChoose }
               onSelect={value => model && setSelected({ configId: model.id, value })} onChoose={choose} close={close} />}>
             {({ open, toggle, ref }) => <Chip ref={ref} data-open={open || undefined} aria-expanded={open}
               aria-haspopup="menu" aria-label={t('plan.approvalsAria')} title={executor ?? t('plan.moreApprovals')} onClick={toggle}
-              narrow="text" meta={meta} icon={family && <ModelMark family={family.name} />} data-plan-executor>
+              narrow="text" meta={meta} icon={family && <ModelMark family={family.name} brand={family.brand} />} data-plan-executor>
               {family?.name ?? executor ?? t('plan.approvals')}
             </Chip>}
           </Popover>}

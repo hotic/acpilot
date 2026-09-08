@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyModelSources } from '../src/shared/modelSources';
 import type { SessionOption } from '../src/shared/transcript';
-import { familyHidden, findVariant, groupModels, modelBrand, parseModelName, setFamilyVisible, variantLabel, visibleOptions } from '../src/shared/models';
+import { familyHidden, findVariant, groupModels, modelBrand, optionBrand, parseModelName, setFamilyVisible, variantLabel, visibleOptions } from '../src/shared/models';
 
 // Real name samples issued by Devin (measured via pnpm probe devin), covering all suffix combinations
 const DEVIN = [
@@ -141,6 +141,10 @@ describe('modelBrand', () => {
     expect(modelBrand('GPT-5.3-Codex')).toBe('openai');
     expect(modelBrand('Gemini 3.8 Flash')).toBe('gemini');
     expect(modelBrand('Cursor Grok 4.6')).toBe('grok');
+    expect(modelBrand('K3')).toBe('kimi');
+    expect(modelBrand('K3-256k')).toBe('kimi');
+    expect(modelBrand('K2.7 Coding')).toBe('kimi');
+    expect(modelBrand('K2.7 Coding Highspeed')).toBe('kimi');
   });
 
   it('returns undefined for unbranded names', () => {
@@ -152,5 +156,21 @@ describe('modelBrand', () => {
   it('matches on word boundaries only', () => {
     expect(modelBrand('Glmer 1')).toBeUndefined();
     expect(modelBrand('Adaptation X')).toBeUndefined();
+  });
+});
+
+describe('optionBrand', () => {
+  it('prefers the wire id over the display name', () => {
+    expect(optionBrand({ id: 'kimi-code/k3', name: 'K3' })).toBe('kimi');
+    expect(optionBrand({ id: 'asgard/kimi-k3', name: 'K3' })).toBe('kimi');
+    expect(optionBrand({ id: 'asgard/deepseek-v4-flash', name: 'DeepSeek V4 Flash' })).toBe('deepseek');
+    // An opaque id falls back to the display name
+    expect(optionBrand({ id: 'asgard', name: 'K3' })).toBe('kimi');
+    expect(optionBrand({ id: 'custom-1', name: 'Claude Opus 5' })).toBe('claude');
+    expect(optionBrand({ id: 'model-1', name: 'Composer 2.5' })).toBeUndefined();
+  });
+
+  it('groupModels carries the resolved brand on the family', () => {
+    expect(groupModels(KIMI).map(f => f.brand)).toEqual(['kimi', 'kimi', 'deepseek']);
   });
 });

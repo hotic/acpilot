@@ -155,7 +155,7 @@ function ModelsSection({ agent, controls, settings, on }: { agent: AgentInfo; co
               return (
                 <ItemRow
                   key={f.key}
-                  lead={<ModelMark family={name} />}
+                  lead={<ModelMark family={name} brand={f.brand} />}
                   title={name}
                   desc={[f.source, summary(f)].filter(Boolean).join(' · ') || undefined}
                   dim={!shown}
