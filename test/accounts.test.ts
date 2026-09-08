@@ -70,6 +70,21 @@ describe('AccountStore', () => {
     await store2.load();
     expect(store2.list().map(x => x.id)).toEqual([b.id]);
   });
+
+  it('load drops the legacy "· name" tail from stored details and rewrites the file', async () => {
+    const dir = tmp();
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    await mkdir(dir, { recursive: true });
+    const file = join(dir, 'accounts.json');
+    await writeFile(file, JSON.stringify([
+      { id: 'x', agent: 'devin', label: 'a@x.io', detail: 'Devin Max · Someone', addedAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'y', agent: 'devin', label: 'b@x.io', detail: 'Devin Max', addedAt: '2026-01-01T00:00:00.000Z' },
+    ]));
+    const store = new AccountStore(file, new MemoryVault());
+    await store.load();
+    expect(store.list().map(a => a.detail)).toEqual(['Devin Max', 'Devin Max']);
+    expect(readFileSync(file, 'utf8')).not.toContain('Someone');
+  });
 });
 
 describe('Devin terminal login flow', () => {
@@ -102,7 +117,7 @@ describe('Devin terminal login flow', () => {
 });
 
 describe('Devin credentials file and auth status parsing', () => {
-  it('toml write/read round-trip; status output yields email / tier / name', async () => {
+  it('toml write/read round-trip; status output yields the email label and the tier detail', async () => {
     const dir = tmp();
     const cred: AccountCredential = { secret: 'devin-abc', meta: { api_server_url: 'https://server.codeium.com', devin_webapp_host: 'app.devin.ai', devin_api_url: 'https://api.devin.ai' } };
     const { writeFile } = await import('node:fs/promises');
@@ -110,7 +125,7 @@ describe('Devin credentials file and auth status parsing', () => {
     expect(await readCredentials(join(dir, 'credentials.toml'))).toEqual(cred);
     expect(await readCredentials(join(dir, 'nope.toml'))).toBeUndefined();
     const out = 'Logged in (via Devin).\n\nUser:\n  Name:              Someone\n  Email:             someone@example.com\n\nAccount:\n  Tier:              Devin Max\n  Plan:              Max\n';
-    expect(parseStatus(out)).toEqual({ label: 'someone@example.com', detail: 'Devin Max · Someone' });
+    expect(parseStatus(out)).toEqual({ label: 'someone@example.com', detail: 'Devin Max' });
     expect(parseStatus('Not logged in.')).toBeUndefined();
   });
 

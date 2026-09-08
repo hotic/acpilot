@@ -139,13 +139,13 @@ export function tomlOf(cred: AccountCredential): string {
   return lines.join('\n') + '\n';
 }
 
-// `devin auth status` output is indented key-value lines like "  Email:   x@y"
+// `devin auth status` output is indented key-value lines like "  Email:   x@y". The name only falls back as the label
+// when there is no email — the detail line is the plan tier alone
 export function parseStatus(out: string): { label: string; detail?: string } | undefined {
   const field = (name: string) => new RegExp(`^\\s*${name}:\\s+(.+?)\\s*$`, 'm').exec(out)?.[1];
   const email = field('Email'), name = field('Name'), tier = field('Tier') ?? field('Plan');
   if (!email && !name) return undefined;
-  const detail = [tier, name && name !== email ? name : undefined].filter(Boolean).join(' · ') || undefined;
-  return { label: email ?? name!, detail };
+  return { label: email ?? name!, detail: tier };
 }
 
 function run(bin: string, args: string[], env: Record<string, string>, timeout: number): Promise<string> {

@@ -44,6 +44,13 @@ export class AccountStore {
       this.log(`accounts.json unreadable, starting with no accounts (${msg(e)})`);
       this.items = [];
     }
+    // Older drafts stored detail as '{tier} · {name}'; the name says nothing the label doesn't — keep the leading segment
+    let migrated = false;
+    for (const a of this.items) {
+      const detail = a.detail?.split(' · ')[0] || undefined;
+      if (detail !== a.detail) { a.detail = detail; migrated = true; }
+    }
+    if (migrated) await this.persist();
   }
 
   private async persist() {
