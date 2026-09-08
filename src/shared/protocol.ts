@@ -120,7 +120,8 @@ export type WebviewMsg =
   | { type: 'dequeue'; sessionId: string; id: string }
   | { type: 'sendQueued'; sessionId: string; id: string }
   | { type: 'editQueued'; sessionId: string; id: string; text: string; retainedAttachments: number[]; attachments: Draft[] }
-  | { type: 'openInEditor' }
+  // Open an editor tab; each tab is its own viewer with its own active session. The tab starts on this webview's session, or on a fresh one without an id
+  | { type: 'openInEditor'; sessionId?: string }
   // A link inside agent output was clicked; host opens it externally after an isSafeExternalUrl check
   | { type: 'openExternal'; url: string }
   // Settings page: write a setting (host maps it onto acpira.<key> at user scope), open a file / directory from the inventory lists,

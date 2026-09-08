@@ -63,6 +63,54 @@ describe('SessionManager', () => {
     expect(m2.sessions().map(s => s.id)).toEqual([b]);
   }, 20_000);
 
+  // Several webviews (sidebar + editor tabs) each hold their own active session over the shared list; only the viewers showing a session get its updates
+  it('viewers: independent active sessions, session events only to the viewers showing it, deletion / empty-drop respect the other viewers', async () => {
+    const { m } = manager();
+    await m.init();
+    const a = m.attach();
+    const b = m.attach();
+    const seenA: string[] = [];
+    const seenB: string[] = [];
+    a.subscribe(ev => { if (ev.type === 'session') seenA.push(ev.session.id); });
+    b.subscribe(ev => { if (ev.type === 'session') seenB.push(ev.session.id); });
+
+    // a fresh viewer opens a fresh session; a second fresh viewer gets its own, not a's
+    await a.ensureActive();
+    await b.ensureActive();
+    const sa = a.activeId!;
+    const sb = b.activeId!;
+    expect(sa).not.toBe(sb);
+    expect(m.sessions().map(s => s.id).sort()).toEqual([sa, sb].sort());
+    // both viewers can look at the same session; b moving on to a new one leaves a where it was
+    await a.handle({ type: 'send', text: 'hi' });
+    await b.selectSession(sa);
+    expect(b.active()?.turns.length).toBe(2);
+    await b.newSession();
+    expect(m.sessions().map(s => s.id)).toContain(sa);
+    expect(a.activeId).toBe(sa);
+    expect(b.activeId).not.toBe(sa);
+
+    // updates route by active session: a's turn reached a and (while b showed sa) b, but b's fresh session never reached a
+    seenA.length = 0; seenB.length = 0;
+    await a.handle({ type: 'send', text: 'again' });
+    expect(seenA).toContain(sa);
+    expect(seenB).not.toContain(sa);
+
+    // deleting a's session moves only a; b stays where it was
+    const sb2 = b.activeId!;
+    await b.handle({ type: 'deleteSession', id: sa });
+    expect(b.activeId).toBe(sb2);
+    expect(a.activeId).toBeDefined();
+    expect(a.activeId).not.toBe(sa);
+
+    // a disposed viewer no longer hears anything
+    seenB.length = 0;
+    b.dispose();
+    await a.handle({ type: 'send', text: 'quiet' });
+    expect(seenB).toEqual([]);
+    await m.dispose();
+  }, 30_000);
+
   it('after probing binaries, agents() carries available: the fake agent is present, an uninstalled one is not', async () => {
     const { m } = manager();
     expect(m.agents().find(a => a.id === 'fake')?.available).toBeUndefined();

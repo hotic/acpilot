@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import * as vscode from 'vscode';
 import { isSafeExternalUrl, type FileHit, type HostMsg, type WebviewHost, type WebviewMsg } from '@shared/protocol';
 import type { Appearance } from '@shared/appearance';
-import type { SessionManager } from './SessionManager';
+import type { SessionManager, SessionViewer } from './SessionManager';
 import type { SettingsCenter } from './settings';
 import type { WorkspaceFiles } from './files';
 import { msg } from './errors';
@@ -26,8 +26,10 @@ export interface BridgeEnv {
 // Manager events within this window collapse to one post per message type
 const BATCH_WINDOW_MS = 30;
 
-// One bridge per webview: renders the HTML, hands incoming WebviewMsg to the manager, and pushes the manager's changes back after coalescing
+// One bridge per webview: renders the HTML, hands incoming WebviewMsg to its viewer / the manager, and pushes their changes back after coalescing.
+// The viewer is this webview's own active session; `initial` is where it opens (a session id, the most recent session, or nothing → a fresh session)
 export class WebviewBridge implements vscode.Disposable {
+  readonly viewer: SessionViewer;
   private disposables: vscode.Disposable[] = [];
   private pending = new Map<string, HostMsg>();
   private timer?: NodeJS.Timeout;
@@ -38,12 +40,14 @@ export class WebviewBridge implements vscode.Disposable {
     private host: WebviewHost,
     private manager: SessionManager,
     private env: BridgeEnv,
+    initial?: string | { mostRecent: true },
   ) {
+    this.viewer = manager.attach(initial);
     webview.options = { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(env.extensionUri, 'dist', 'webview'), vscode.Uri.file(env.sessionsDir)] };
     webview.html = this.html();
     this.disposables.push(
       webview.onDidReceiveMessage((m: WebviewMsg) => { this.onMessage(m).catch(e => env.log(`webview ${m.type} failed: ${msg(e)}`)); }),
-      { dispose: manager.subscribe(ev => this.queue(ev)) },
+      { dispose: this.viewer.subscribe(ev => this.queue(ev)) },
       { dispose: env.settings.subscribe(ev => this.queue(ev)) },
     );
   }
@@ -51,20 +55,20 @@ export class WebviewBridge implements vscode.Disposable {
   private async onMessage(m: WebviewMsg) {
     if (m.type === 'ready') {
       this.ready = true;
-      await this.manager.ensureActive();
+      await this.viewer.ensureActive();
       this.post({
         type: 'init',
         state: {
           host: this.host, appearance: this.env.appearance(), agents: this.manager.agents(), accounts: this.manager.accounts(), accountActions: this.manager.accountActions(), hidden: this.manager.hidden(),
-          sessions: this.manager.sessions(), active: this.manager.active(), blobBase: this.webview.asWebviewUri(vscode.Uri.file(this.env.sessionsDir)).toString(),
+          sessions: this.manager.sessions(), active: this.viewer.active(), blobBase: this.webview.asWebviewUri(vscode.Uri.file(this.env.sessionsDir)).toString(),
           settings: this.env.settings.view(), locale: this.env.settings.locale(), home: this.env.home(), cwd: this.env.cwd(),
         },
       });
       return;
     }
-    if (m.type === 'openInEditor') { void vscode.commands.executeCommand('acpira.openInEditor'); return; }
+    if (m.type === 'openInEditor') { void vscode.commands.executeCommand('acpira.openInEditor', m.sessionId ?? this.viewer.activeId); return; }
     if (m.type === 'openFile') {
-      const session = this.manager.active();
+      const session = this.viewer.active();
       if (!session || session.id !== m.sessionId) return;
       try {
         const path = m.path.startsWith('file://') ? fileURLToPath(m.path) : resolve(session.cwd, m.path);
@@ -111,7 +115,7 @@ export class WebviewBridge implements vscode.Disposable {
       return;
     }
     if (await this.onSettingsMessage(m)) return;
-    await this.manager.handle(m);
+    await this.viewer.handle(m);
   }
 
   // The settings page's requests; returns true when the message was its business
@@ -177,6 +181,7 @@ export class WebviewBridge implements vscode.Disposable {
   dispose() {
     clearTimeout(this.timer);
     for (const d of this.disposables) d.dispose();
+    this.viewer.dispose();
   }
 }
 

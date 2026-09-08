@@ -74,10 +74,12 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   setHostLocale(settingsCenter.locale());
 
+  // Every webview (the sidebar, each editor tab) is its own bridge with its own viewer, so tabs show different sessions side by side
   const bridges = new Set<WebviewBridge>();
+  let sidebar: WebviewBridge | undefined;
   const env = { extensionUri: context.extensionUri, appearance, sessionsDir, files: new WorkspaceFiles(), settings: settingsCenter, home: homedir, cwd: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? homedir(), log: (line: string) => log.info(line) };
-  const attach = (webview: vscode.Webview, host: 'sidebar' | 'editor') => {
-    const b = new WebviewBridge(webview, host, manager, env);
+  const attach = (webview: vscode.Webview, host: 'sidebar' | 'editor', initial?: string | { mostRecent: true }) => {
+    const b = new WebviewBridge(webview, host, manager, env, initial);
     bridges.add(b);
     return b;
   };
@@ -86,21 +88,23 @@ export async function activate(context: vscode.ExtensionContext) {
     log,
     vscode.window.registerWebviewViewProvider(VIEW_ID, {
       resolveWebviewView(view) {
-        const b = attach(view.webview, 'sidebar');
-        view.onDidDispose(() => { bridges.delete(b); b.dispose(); });
+        const b = sidebar = attach(view.webview, 'sidebar', { mostRecent: true });
+        view.onDidDispose(() => { if (sidebar === b) sidebar = undefined; bridges.delete(b); b.dispose(); });
       },
     }, { webviewOptions: { retainContextWhenHidden: true } }),
 
-    vscode.commands.registerCommand('acpira.newSession', () => manager.newSession()),
+    vscode.commands.registerCommand('acpira.newSession', () => (sidebar?.viewer ?? manager).newSession()),
     vscode.commands.registerCommand('acpira.showLog', () => log.show()),
-    vscode.commands.registerCommand('acpira.openInEditor', () => {
+    // A new tab is a new conversation: without a session id (title bar / command palette) it opens on a fresh session; a webview passing its id opens that one
+    vscode.commands.registerCommand('acpira.openInEditor', (sessionId?: unknown) => {
+      const initial = typeof sessionId === 'string' ? sessionId : undefined;
       const panel = vscode.window.createWebviewPanel('acpira.editor', 'Acpira', vscode.ViewColumn.Active, { retainContextWhenHidden: true });
       panel.iconPath = {
         light: vscode.Uri.joinPath(context.extensionUri, 'media', 'icon-light.svg'),
         dark: vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.svg'),
       };
-      const b = attach(panel.webview, 'editor');
-      const sub = manager.subscribe(ev => { if (ev.type === 'session') panel.title = ev.session.title; });
+      const b = attach(panel.webview, 'editor', initial);
+      const sub = b.viewer.subscribe(ev => { if (ev.type === 'session') panel.title = ev.session.title; });
       panel.onDidDispose(() => { sub(); bridges.delete(b); b.dispose(); });
     }),
 

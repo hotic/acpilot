@@ -37,14 +37,43 @@ export type ManagerEvent =
   | { type: 'accountActions'; actions: AccountAction[] }
   | { type: 'hidden'; hidden: HiddenMap };
 
-// Master of all sessions: live processes, the summary list, the active item; every webview action enters here. No vscode import, so it stays testable
+// Master of all sessions: live processes, the summary list, the viewers; every webview action enters here. No vscode import, so it stays testable
 const TRASH_TTL = 30_000;
+
+// One viewer per webview (sidebar, each editor tab): its own active session over the shared process pool and session list, so several
+// tabs can each show a different conversation. Global events (list, agents, accounts) reach every viewer; `session` events only the viewers showing that session
+export class SessionViewer {
+  activeId?: string;
+  private listeners = new Set<(ev: ManagerEvent) => void>();
+
+  constructor(private manager: SessionManager, initial?: string) {
+    this.activeId = initial;
+  }
+
+  active(): SessionView | undefined { return this.manager.viewOf(this.activeId); }
+
+  subscribe(fn: (ev: ManagerEvent) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  emit(ev: ManagerEvent) { for (const fn of this.listeners) fn(ev); }
+
+  ensureActive() { return this.manager.ensureActiveFor(this); }
+  newSession(agent?: AgentId, accountId?: string) { return this.manager.newSessionFor(this, agent, accountId); }
+  selectSession(id: string) { return this.manager.selectSessionFor(this, id); }
+  handle(m: WebviewMsg) { return this.manager.handleFor(this, m); }
+
+  // The webview is gone: stop receiving events; the session itself keeps running for the other viewers / the list
+  dispose() { this.listeners.clear(); this.manager.detach(this); }
+}
 
 export class SessionManager {
   private live = new Map<string, AcpSession>();
   private index: SessionSummary[] = [];
   private trash = new Map<string, { summary: SessionSummary; timer: NodeJS.Timeout }>();
   private listeners = new Set<(ev: ManagerEvent) => void>();
+  private viewers = new Set<SessionViewer>();
   private accountActionState = new Map<AgentId, AccountAction>();
   private readonly pool: AgentPool;
   // Sessions seen running at the last onChange; a running → idle edge is the moment to re-read the account's quota
@@ -53,7 +82,8 @@ export class SessionManager {
   // "switch to bypass mode", Kimi leaving plan after approval) is still the mode in effect, so it is remembered too
   private modeSeen = new Map<string, string>();
   private prefs: SessionPrefs = { lastSettings: {} };
-  activeId?: string;
+  // The default viewer: what the single-view API (activeId / active / handle / newSession …) operates on, e.g. in tests and scripts
+  private mainViewer?: SessionViewer;
 
   constructor(private deps: ManagerDeps) {
     deps.accounts?.subscribe(accounts => this.emit({ type: 'accounts', accounts }));
@@ -67,7 +97,6 @@ export class SessionManager {
   async init() {
     this.index = await this.deps.store.loadIndex();
     this.prefs = await this.deps.store.loadPrefs();
-    this.activeId = this.index[0]?.id;
     await this.deps.registry.probeAll();
     this.deps.accounts?.refreshQuotas().catch(e => this.deps.log(`quota refresh failed: ${msg(e)}`));
     this.warm(this.deps.defaultAgent());
@@ -161,17 +190,51 @@ export class SessionManager {
     });
   }
 
-  active(): SessionView | undefined {
-    return this.activeId ? this.live.get(this.activeId)?.view() : undefined;
+  viewOf(id: string | undefined): SessionView | undefined {
+    return id ? this.live.get(id)?.view() : undefined;
   }
 
+  // Attach a viewer (one per webview). `initial` is the session it opens on; `mostRecent` starts it on the newest listed session, like the sidebar
+  // after a reload; with neither, ensureActive opens a fresh session
+  attach(initial?: string | { mostRecent: true }): SessionViewer {
+    const id = typeof initial === 'string' ? initial : initial?.mostRecent ? this.index[0]?.id : undefined;
+    const v = new SessionViewer(this, id);
+    this.viewers.add(v);
+    return v;
+  }
+
+  detach(v: SessionViewer) { this.viewers.delete(v); }
+
+  // Single-view API, kept for tests / scripts: the default viewer, created on first use on the most recent session
+  private get main(): SessionViewer { return this.mainViewer ??= this.attach({ mostRecent: true }); }
+  get activeId(): string | undefined { return this.main.activeId; }
+  set activeId(id: string | undefined) { this.main.activeId = id; }
+  active(): SessionView | undefined { return this.main.active(); }
+  ensureActive() { return this.main.ensureActive(); }
+  newSession(agent?: AgentId, accountId?: string) { return this.main.newSession(agent, accountId); }
+  selectSession(id: string) { return this.main.selectSession(id); }
+  handle(m: WebviewMsg) { return this.main.handle(m); }
+
+  // Global events go to the manager's own listeners and to every viewer; a session's own view goes only to the viewers showing it (see emitSession)
   subscribe(fn: (ev: ManagerEvent) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
   }
 
-  private emit(ev: ManagerEvent) { for (const fn of this.listeners) fn(ev); }
+  private emit(ev: ManagerEvent) {
+    for (const fn of this.listeners) fn(ev);
+    for (const v of this.viewers) v.emit(ev);
+  }
+  private emitSession(s: AcpSession) {
+    let view: SessionView | undefined;
+    for (const v of this.viewers) if (v.activeId === s.id) v.emit({ type: 'session', session: view ??= s.view() });
+  }
   private emitSessions() { this.emit({ type: 'sessions', sessions: this.sessions() }); }
+
+  // Viewers other than `except` currently showing this session
+  private viewersOn(id: string, except?: SessionViewer): SessionViewer[] {
+    return [...this.viewers].filter(v => v !== except && v.activeId === id);
+  }
 
   private onChange = (s: AcpSession) => {
     // A deleted session still calls back once while winding down; don't let it write its record back
@@ -182,7 +245,7 @@ export class SessionManager {
     this.sortIndex();
     this.deps.store.save(s.toRecord());
     this.saveIndex();
-    if (s.id === this.activeId) this.emit({ type: 'session', session: s.view() });
+    this.emitSession(s);
     this.emitSessions();
     if (s.isRunning) this.wasRunning.add(s.id);
     else if (this.wasRunning.delete(s.id) && s.accountId) this.deps.accounts?.refreshQuota(s.accountId, true).catch(e => this.deps.log(`quota refresh failed: ${msg(e)}`));
@@ -206,25 +269,25 @@ export class SessionManager {
     };
   }
 
-  // On activation, if there is no session or the current one is gone, start a new one; otherwise bring the current session live (no replay)
-  async ensureActive(): Promise<void> {
-    if (this.activeId && this.live.has(this.activeId)) return;
-    if (this.activeId) { await this.selectSession(this.activeId); return; }
-    await this.newSession();
+  // On activation, if the viewer has no session or its session is gone, start a new one; otherwise bring its session live (no replay)
+  async ensureActiveFor(v: SessionViewer): Promise<void> {
+    if (v.activeId && this.live.has(v.activeId)) return;
+    if (v.activeId) { await this.selectSessionFor(v, v.activeId); return; }
+    await this.newSessionFor(v);
   }
 
   // Agents on the account layer: with no account specified, use that agent's default account (most recently used); if there is none, leave it unbound and let the Notice guide login
-  async newSession(agent?: AgentId, accountId?: string): Promise<void> {
+  async newSessionFor(v: SessionViewer, agent?: AgentId, accountId?: string): Promise<void> {
     const id = agent ?? this.deps.defaultAgent();
     const acc = this.deps.accounts?.supports(id) ? accountId ?? this.deps.accounts.defaultFor(id)?.id : undefined;
     const cwd = this.deps.cwd();
-    const cur = this.current();
+    const cur = this.current(v);
     if (cur && this.keepEmpty(cur, id, acc, cwd)) return;
-    await this.dropEmptyCurrent();
+    await this.dropEmptyCurrent(v);
     const s = AcpSession.fresh(id, cwd, this.sessionDeps(), acc);
     s.previewControls(await this.knownControls(id), this.lastSettings(id));
     this.live.set(s.id, s);
-    this.activeId = s.id;
+    v.activeId = s.id;
     this.onChange(s);
     await s.start();
     const last = this.lastSettings(id);
@@ -239,11 +302,11 @@ export class SessionManager {
     return v.status === 'starting' || v.status === 'ready';
   }
 
-  // If the current session hasn't said a word yet (just opened / stuck on login), replace it directly; don't leave a trail of empty "New session" entries.
-  // A session still staging its first prompt (attachments being written, no turn yet) is not empty
-  private async dropEmptyCurrent() {
-    const cur = this.current();
-    if (!cur || cur.view().turns.length > 0 || cur.isRunning) return;
+  // If the viewer's session hasn't said a word yet (just opened / stuck on login), replace it directly; don't leave a trail of empty "New session" entries.
+  // A session still staging its first prompt (attachments being written, no turn yet) is not empty, and one another viewer is showing is left alone
+  private async dropEmptyCurrent(v: SessionViewer) {
+    const cur = this.current(v);
+    if (!cur || cur.view().turns.length > 0 || cur.isRunning || this.viewersOn(cur.id, v).length) return;
     cur.dispose();
     this.live.delete(cur.id);
     this.index = this.index.filter(x => x.id !== cur.id);
@@ -251,21 +314,21 @@ export class SessionManager {
     await this.deps.store.saveIndex(this.index);
   }
 
-  async selectSession(id: string): Promise<void> {
-    if (this.activeId === id && this.live.has(id)) return;
-    this.activeId = id;
+  async selectSessionFor(v: SessionViewer, id: string): Promise<void> {
+    if (v.activeId === id && this.live.has(id)) return;
+    v.activeId = id;
     const live = this.live.get(id);
-    if (live) { this.emit({ type: 'session', session: live.view() }); this.emitSessions(); return; }
+    if (live) { v.emit({ type: 'session', session: live.view() }); this.emitSessions(); return; }
     const record = await this.deps.store.load(id);
     if (!record) { this.deps.toast('error', t('host.recordLost')); this.index = this.index.filter(s => s.id !== id); this.emitSessions(); return; }
     const s = new AcpSession(record, this.sessionDeps());
     this.live.set(id, s);
-    this.emit({ type: 'session', session: s.view() });
+    this.emitSession(s);
     await s.start();
   }
 
-  private current(): AcpSession | undefined {
-    return this.activeId ? this.live.get(this.activeId) : undefined;
+  private current(v: SessionViewer): AcpSession | undefined {
+    return v.activeId ? this.live.get(v.activeId) : undefined;
   }
 
   async editTurn(edit: EditTurnRequest): Promise<void> {
@@ -279,8 +342,8 @@ export class SessionManager {
       .find(b => b.type === 'plan_document' && b.id === planId);
   }
 
-  async handle(m: WebviewMsg): Promise<void> {
-    const s = this.current();
+  async handleFor(v: SessionViewer, m: WebviewMsg): Promise<void> {
+    const s = this.current(v);
     try {
       switch (m.type) {
         case 'send': await s?.prompt(m.text, m.attachments); break;
@@ -290,15 +353,15 @@ export class SessionManager {
         case 'buildPlan': await this.live.get(m.sessionId)?.buildPlan(m.planId, m.model, m.optionId); break;
         case 'setMode': if (s) { await s.setMode(m.id); this.remember(s); } break;
         case 'setConfig': if (s) { await s.setConfig(m.configId, m.value); this.remember(s); } break;
-        case 'selectAgent': if (s?.agent !== m.id) await this.newSession(m.id); break;
-        case 'selectSession': await this.selectSession(m.id); break;
-        case 'newSession': await this.newSession(m.agent); break;
+        case 'selectAgent': if (s?.agent !== m.id) await this.newSessionFor(v, m.id); break;
+        case 'selectSession': await this.selectSessionFor(v, m.id); break;
+        case 'newSession': await this.newSessionFor(v, m.agent); break;
         case 'renameSession': await this.renameSession(m.id, m.title); break;
         case 'deleteSession': await this.deleteSession(m.id); break;
         case 'restoreSession': await this.restoreSession(m.id); break;
         case 'pinSession': await this.pinSession(m.id, m.pinned); break;
-        case 'selectAccount': await this.selectAccount(m.id); break;
-        case 'addAccount': await this.addAccount(m.agent, m.via); break;
+        case 'selectAccount': await this.selectAccount(v, m.id); break;
+        case 'addAccount': await this.addAccount(v, m.agent, m.via); break;
         case 'removeAccount': await this.deps.accounts?.remove(m.id); break;
         case 'refreshQuota': await this.deps.accounts?.refreshQuotas(m.agent); break;
         case 'compact': await s?.compact(); break;
@@ -349,7 +412,7 @@ export class SessionManager {
   }
 
   // Deletion is soft: kill the process, drop it from the list, keep the record on disk in a "trash bin" with a 30-second undo window; the file is really deleted only after that.
-  // If the deleted one is the current session, switch to the first in the list; if none, open a new one
+  // Every viewer showing the deleted one switches to the first in the list; if none, the first of them opens a new one and the rest follow onto it
   async deleteSession(id: string) {
     const live = this.live.get(id);
     if (live) { await this.deps.store.flush(live.toRecord()); live.dispose(); this.live.delete(id); }
@@ -364,10 +427,10 @@ export class SessionManager {
         this.deps.store.remove(id).catch(e => this.deps.log(`session ${id}: delete failed (${msg(e)})`));
       }, TRASH_TTL) });
     }
-    if (this.activeId === id) {
-      this.activeId = undefined;
+    for (const v of this.viewersOn(id)) {
+      v.activeId = undefined;
       const next = this.index[0]?.id;
-      if (next) await this.selectSession(next); else await this.newSession();
+      if (next) await this.selectSessionFor(v, next); else await this.newSessionFor(v);
     }
     this.emitSessions();
   }
@@ -385,17 +448,17 @@ export class SessionManager {
   }
 
   // Switching accounts = opening a new session with it (an agent process accepts only one credential; a session is bound to one account from start to finish); it also becomes the default account
-  async selectAccount(accountId: string) {
+  async selectAccount(v: SessionViewer, accountId: string) {
     const acc = this.deps.accounts?.get(accountId);
     if (!acc) return;
-    const cur = this.current();
+    const cur = this.current(v);
     if (cur?.agent === acc.agent && cur.accountId === accountId && cur.alive) return;
     await this.deps.accounts!.touch(accountId);
-    await this.newSession(acc.agent, accountId);
+    await this.newSessionFor(v, acc.agent, accountId);
   }
 
-  // Add an account: importing a local login is usable immediately; terminal login waits for the write in the background. If the current session is stuck on login, reopen it with the new account once added
-  async addAccount(agent: AgentId, via: AddAccountVia) {
+  // Add an account: importing a local login is usable immediately; terminal login waits for the write in the background. If the viewer's session is stuck on login, reopen it with the new account once added
+  async addAccount(v: SessionViewer, agent: AgentId, via: AddAccountVia) {
     const accounts = this.deps.accounts;
     if (!accounts || this.accountActionState.get(agent)?.status === 'pending') return;
     this.setAccountAction({ agent, via, status: 'pending' });
@@ -405,8 +468,8 @@ export class SessionManager {
         this.setAccountAction({ agent, via, status: via === 'import' ? 'missing' : 'cancelled' });
         return;
       }
-      const cur = this.current();
-      if (cur?.agent === agent && (cur.view().status === 'auth_required' || !cur.accountId)) await this.newSession(agent, acc.id);
+      const cur = this.current(v);
+      if (cur?.agent === agent && (cur.view().status === 'auth_required' || !cur.accountId)) await this.newSessionFor(v, agent, acc.id);
       this.setAccountAction({ agent, via, status: 'success' });
     } catch (e) {
       this.setAccountAction({ agent, via, status: 'error', error: msg(e) });
