@@ -7,6 +7,7 @@ import { Row, RowLabel, RowTarget } from '../ui/Row';
 import { cn } from '../ui/cn';
 import { IconButton } from '../ui/Button';
 import { Collapse } from '../ui/Collapse';
+import { ConnectedRail } from '../ui/ConnectedRail';
 import { t } from '../i18n';
 import { TOOL_ICON } from './icons';
 import { CodeSurface, DiffBlock } from './CodeBlock';
@@ -50,24 +51,24 @@ export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; gro
   </>;
   // Search hits open on demand; read references remain visible inside the process.
   if (files.length && block.kind === 'search') return (
-    <Disclosure lead={lead} trailing={trailing} indent={false}
+    <Disclosure lead={lead} trailing={trailing} indent={false} rail="rows"
       body={<ResultList items={files} kind={block.kind} detail={block} />}>
       {label}
     </Disclosure>
   );
   // A count-only read response has no content to inspect beyond its references.
   if (files.length) return (
-    <div className="flex flex-col">
+    <ConnectedRail enabled={toolLine !== 'text'} endAtLastRow className="flex flex-col">
       <Row lead={lead} trailing={trailing}>{label}</Row>
       <ResultList items={files} kind={block.kind} detail={block} />
-    </div>
+    </ConnectedRail>
   );
   // A history row without details has no second disclosure to open.
   if (grouped && !block.content) return <Row lead={lead} trailing={trailing}>{label}</Row>;
 
   // Opening a process fold reveals action rows; outputs only expand on an explicit click.
   return (
-    <Disclosure lead={lead} trailing={trailing} indent={false} defaultOpen={!grouped && execute && running} body={<ToolBody block={block} />}>
+    <Disclosure lead={lead} trailing={trailing} indent={false} rail={block.content?.type === 'list' ? 'rows' : false} defaultOpen={!grouped && execute && running} body={<ToolBody block={block} />}>
       {label}
     </Disclosure>
   );
@@ -77,14 +78,14 @@ export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; gro
 export function ReadGroup({ blocks }: { blocks: ToolCallBlock[] }) {
   const { toolLine } = useAppearance();
   const first = blocks[0]!;
-  return <div className="read-group flex flex-col">
+  return <ConnectedRail enabled={toolLine !== 'text'} endAtLastRow className="read-group flex flex-col">
     <Row lead={toolLine === 'text' ? undefined : <FileText className="size-icon" strokeWidth={1.5} />}>
       <RowLabel>{toolVerb(first)}</RowLabel>
     </Row>
-    <div className={cn('flex flex-col', toolLine !== 'text' && 'timeline')}>
+    <div className="tool-results flex flex-col">
       {blocks.map(block => <ResultList key={block.id} items={toolFiles(block)} kind="read" rail={false} detail={block} />)}
     </div>
-  </div>;
+  </ConnectedRail>;
 }
 
 function ToolBody({ block }: { block: ToolCallBlock }) {
@@ -96,13 +97,12 @@ function ToolBody({ block }: { block: ToolCallBlock }) {
   return <CodeSurface className="text-fg-2 whitespace-pre">{c.text}</CodeSurface>;
 }
 
-// Search / fetch hits as a list of dense rows (Kimi-style): lead icon in the same column as the tool rows with a dashed timeline rail
-// threading through them, the hit itself on the left, and a faint right-aligned suffix — the line number for `path:line`, the host for URLs
+// Result rows share the parent's connected icon rail, with a faint line/host suffix.
 function ResultList({ items, kind, rail = true, detail }: { items: string[]; kind: ToolCallBlock['kind']; rail?: boolean; detail?: ToolCallBlock }) {
   const { toolLine } = useAppearance();
   const Icon = kind === 'fetch' ? Globe : FileText;
   return (
-    <div className={cn('flex flex-col', rail && toolLine !== 'text' && 'timeline')}>
+    <div className={cn('flex flex-col', rail && 'tool-results')}>
       {items.map((it, index) => {
         const { main, aside } = splitHit(it);
         const lead = toolLine === 'text' ? undefined : <Icon className="size-icon" strokeWidth={1.5} />;

@@ -3,11 +3,11 @@ import type { Appearance } from '../appearance';
 
 // All parameters for the Libraries.dev trio live here; props exported from Studio get pasted straight in
 
-// Turn-level activity and session initialization share the breathing Orb. Process details keep static icons and shimmer.
+// Reuse the Orb's built-in states: a constellation for connection, a breathing ring for thought.
 export type OrbKind = 'think' | 'fetch';
 export const ORB_STATE: Record<OrbKind, OrbState> = {
   think: 'breathing',
-  fetch: 'breathing',
+  fetch: 'connecting',
 };
 
 export const ORB_SIZE = 20 as const;

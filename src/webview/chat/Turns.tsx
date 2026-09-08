@@ -4,7 +4,7 @@ import { IconButton } from '../ui/Button';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
 import { t } from '../i18n';
-import { Row, RowLabel, RowTarget } from '../ui/Row';
+import { Row, RowLabel, RowTarget, RowEntranceContext } from '../ui/Row';
 import { Disclosure } from '../ui/Disclosure';
 import { Orb } from '../effects/Orb';
 import { cn } from '../ui/cn';
@@ -86,11 +86,11 @@ export function AgentMessage({ turn, index, running, onPermission, compacting }:
   // Keep pending approvals in the activity input even when their controls live
   // on the plan card; removing them makes the process heading report thinking.
   const content = { ...turn, blocks: turn.blocks.filter(b => b.type !== 'plan_document') };
-  return <div className="agent-message flex min-w-0 flex-col gap-gap">
+  return <RowEntranceContext.Provider value={running}><div className="agent-message flex min-w-0 flex-col gap-gap">
     <AgentContent turn={content} index={index} running={running} onPermission={onPermission} />
     {plans.map(plan => <PlanDocument key={plan.id} block={plan}
       permission={turn.blocks.find((b): b is PermissionBlock => b.type === 'permission' && b.planId === plan.id)} onChoose={onPermission} />)}
-  </div>;
+  </div></RowEntranceContext.Provider>;
 }
 
 function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission }) {
@@ -98,19 +98,18 @@ function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn;
   if (fold === 'codex') return <CodexMessage turn={turn} running={running} onPermission={onPermission} />;
   // Plan approvals live on the plan card and the open question card above the composer; neither takes a slot in the message
   const groups = groupBlocks(turn.blocks.filter(b => (b.type !== 'permission' || !b.planId) && (b.type !== 'question' || !!b.outcome)));
-  let i = index;
   return (
     <div className="flex flex-col gap-gap">
       {running && <Activity turn={turn} />}
       {groups.map((g, gi) => (
-        <div key={g.kind === 'block' && 'id' in g.block && g.block.id ? g.block.id : `g${gi}`} className="enter" style={{ '--i': Math.min(i++, 12) } as CSSProperties}>
+        <div key={g.kind === 'block' && 'id' in g.block && g.block.id ? g.block.id : `g${gi}`}>
           {g.kind === 'lines'
             ? <Lines blocks={g.blocks} fold={fold} running={running} />
             : <Block block={g.block} onPermission={onPermission} />}
         </div>
       ))}
       {!running && outcomeOf(turn) && (
-        <div className="enter" style={{ '--i': Math.min(i++, 12) } as CSSProperties}>
+        <div>
           <Outcome turn={turn} />
         </div>
       )}

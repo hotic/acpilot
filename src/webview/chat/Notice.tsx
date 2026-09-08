@@ -2,7 +2,7 @@ import type { AccountInfo, AgentInfo, AuthMethodInfo, SessionStatus } from '@sha
 import type { AccountAction, AddAccountVia } from '@shared/protocol';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { Row } from '../ui/Row';
+import { Row, RowEntranceContext } from '../ui/Row';
 import { Orb } from '../effects/Orb';
 import { t, tOr } from '../i18n';
 
@@ -28,7 +28,16 @@ export interface NoticeProps {
 export function Notice({ status, error, agent, authMethods, accounts, accountId, accountAction, onLogin, onRetry, onNewSession, onSelectAccount, onAddAccount }: NoticeProps) {
   if (status === 'ready') return null;
   if (status === 'starting') {
-    return <Row lead={<Orb kind="fetch" />} className="px-page"><span className="shimmer">{t('notice.connecting', { agent: agent.name })}</span></Row>;
+    const label = t('notice.connecting', { agent: agent.name });
+    // Match the composer's text inset. Only the connection glyph loops;
+    // the complete status fades in together and its label stays still.
+    return <div className="px-page" data-session-connecting>
+      <RowEntranceContext.Provider value={false}>
+        <Row key={agent.id} lead={<span aria-hidden="true"><Orb kind="fetch" /></span>} className="px-pad fade-in" role="status" aria-live="polite" aria-atomic="true" title={label}>
+          <span className="truncate">{label}</span>
+        </Row>
+      </RowEntranceContext.Provider>
+    </div>;
   }
   const withAccounts = !!agent.accounts;
   const action = status === 'auth_required' && accountAction?.agent === agent.id ? accountAction : undefined;

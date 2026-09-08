@@ -1,5 +1,8 @@
-import type { HTMLAttributes, ReactNode } from 'react';
+import { createContext, useContext, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { cn } from './cn';
+
+// Scope entrance effects to live transcript rows; menus and restored history stay still.
+export const RowEntranceContext = createContext(false);
 
 // The one shared "row": thought / plan / tool / status / session items all grow on this row.
 // Row height --row; lead slot --lead (icon 14 or Orb 20 centered); label area gap --gap; trailing meta right-aligned.
@@ -15,11 +18,14 @@ export interface RowProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> 
 
 export function Row({ lead, trailing, children, interactive, as = 'div', className, dense, ...rest }: RowProps) {
   const Tag = as;
+  const live = useContext(RowEntranceContext);
+  const [enter] = useState(live);
   return (
     <Tag
       {...(as === 'button' ? { type: 'button' } : {})}
       className={cn(
         'flex items-center gap-gap text-2 text-fg-2 select-none list-none text-left',
+        enter && 'process-row-enter',
         dense ? 'min-h-row-dense' : 'min-h-row',
         interactive && 'row-interactive cursor-pointer rounded-md hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 transition-colors',
         className,
@@ -27,8 +33,8 @@ export function Row({ lead, trailing, children, interactive, as = 'div', classNa
       {...rest}
     >
       <span className={cn('row-lead size-lead shrink-0 items-center justify-center text-fg-3', lead === undefined ? 'row-lead-empty hidden' : 'flex')}>{lead}</span>
-      <span className="flex min-w-0 flex-1 items-baseline gap-2">{children}</span>
-      {trailing !== undefined && <span className="ml-auto flex shrink-0 items-center gap-2 text-3 text-fg-3 tabular-nums">{trailing}</span>}
+      <span className="row-content flex min-w-0 flex-1 items-baseline gap-2">{children}</span>
+      {trailing !== undefined && <span className="row-trailing ml-auto flex shrink-0 items-center gap-2 text-3 text-fg-3 tabular-nums">{trailing}</span>}
     </Tag>
   );
 }

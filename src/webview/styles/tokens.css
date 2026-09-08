@@ -85,6 +85,16 @@
   --process-row: 22px;
   --process-row-gap: 2px;
   --process-prose-gap: 10px;
+  --stream-char-y: -3px;
+  --stream-char-duration: 380ms;
+  --row-enter-duration: 460ms;
+  --row-enter-part: 65ms;
+  --row-enter-file: 180ms;
+  --rail-width: 1px;
+  --rail-dot-size: 4px;
+  --rail-color: color-mix(in srgb, var(--fg-3) 65%, var(--bg-1));
+  --rail-grow-duration: 220ms;
+  --rail-grow-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --scroll-fade-size: 28px;
   --row-hit-outset: 6px;
   --ctl: 28px;
@@ -339,6 +349,7 @@
 [data-accent="agent"][data-agent="grok"]  { --accent: var(--agent-grok); --accent-fg: var(--agent-grok-fg); }
 
 [data-motion="none"] * { transition: none !important; animation: none !important; }
+[data-motion="none"] *::before, [data-motion="none"] *::after { transition: none !important; animation: none !important; }
 [data-motion="full"] { --dur: 200ms; --dur-open: 300ms; --enter-dur: 480ms; --enter-stagger: 80ms; --enter-y: 10px; }
 
 /* Tailwind theme mapping: class names → the tokens above */
@@ -669,6 +680,29 @@
 @keyframes sd-blurIn { from { opacity: 0; filter: blur(4px); } }
 @keyframes sd-markerIn { from { color: transparent; } }
 
+/* New graphemes enter immediately; incoming chunks are never batched by the UI. */
+[data-sd-animate][style*="sd-acpCharIn"], .stream-glyph { display: inline-block; white-space: pre-wrap; }
+.stream-glyph { animation: sd-acpCharIn var(--stream-char-duration) ease var(--glyph-delay, 0ms) both; }
+@keyframes sd-acpCharIn { from { opacity: 0; transform: translateY(var(--stream-char-y)); } to { opacity: 1; transform: none; } }
+
+/* Row slots enter once, independently of the active verb's continuous shimmer. */
+.process-row-enter { --row-enter-delay: 0ms; }
+.tool-results .process-row-enter { --row-enter-delay: var(--row-enter-file); }
+.process-row-enter > .row-lead { animation: acp-row-part-in var(--row-enter-duration) var(--row-enter-delay) ease-out both; }
+.process-row-enter > .row-content > * { --row-part-delay: calc(var(--row-enter-delay) + var(--row-enter-part)); animation: acp-row-part-in var(--row-enter-duration) var(--row-part-delay) ease-out both; }
+.process-row-enter > .row-content > :nth-child(n + 2), .process-row-enter > .row-trailing { --row-part-delay: calc(var(--row-enter-delay) + var(--row-enter-part) * 2); }
+.process-row-enter > .row-trailing { animation: acp-row-part-in var(--row-enter-duration) var(--row-part-delay) ease-out both; }
+.process-row-enter > .row-content > .shimmer { animation: acp-row-part-in var(--row-enter-duration) var(--row-part-delay) ease-out both, acp-shimmer 2s linear infinite; }
+@keyframes acp-row-part-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* One measured path from the icon to a short solid-dot endpoint. Scaling only
+   the line keeps the dot circular and synchronized during streamed growth. */
+.connected-rail { position: relative; isolation: isolate; }
+.rail-segment { position: absolute; z-index: -1; width: var(--rail-width); transform: translateX(-50%); pointer-events: none; }
+.rail-segment::before { content: ''; position: absolute; inset: 0 auto auto 0; width: 100%; height: 1px; background: var(--rail-color); transform-origin: top; transform: scaleY(var(--rail-length)); transition: transform var(--rail-grow-duration) var(--rail-grow-ease); }
+.rail-segment[data-terminal]::after { content: ''; position: absolute; left: 50%; top: 0; width: var(--rail-dot-size); height: var(--rail-dot-size); border-radius: 50%; background: var(--rail-color); transform: translate(-50%, -50%) translateY(calc(var(--rail-length) * 1px)); transition: transform var(--rail-grow-duration) var(--rail-grow-ease); }
+.connected-rail:has(> .process-row-enter) > .rail-segment { animation: acp-row-part-in var(--row-enter-duration) var(--row-enter-file) ease-out both; }
+
 @keyframes acp-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes acp-enter { from { opacity: 0; transform: translateY(var(--enter-y)); } }
 @keyframes acp-pulse { 50% { opacity: 0.3; } }
@@ -677,6 +711,6 @@
 @keyframes acp-fade-in { from { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .acp-shell * { animation: none !important; transition: none !important; }
+  .acp-shell *, .acp-shell *::before, .acp-shell *::after { animation: none !important; transition: none !important; }
   .acp-shell .shimmer { background: none; color: var(--fg-2); }
 }
