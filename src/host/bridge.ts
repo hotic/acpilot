@@ -72,11 +72,14 @@ export class WebviewBridge implements vscode.Disposable {
       if (!session || session.id !== m.sessionId) return;
       try {
         const path = m.path.startsWith('file://') ? fileURLToPath(m.path) : resolve(session.cwd, m.path);
-        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path));
-        const line = Number.isSafeInteger(m.line) && m.line! > 0 ? Math.min(m.line! - 1, doc.lineCount - 1) : 0;
-        await vscode.window.showTextDocument(doc, {
-          preview: true, viewColumn: vscode.ViewColumn.Beside,
-          selection: new vscode.Range(line, 0, line, 0),
+        const uri = vscode.Uri.file(path);
+        const line = Number.isSafeInteger(m.line) && m.line! > 0 ? m.line! - 1 : undefined;
+        // vscode.open uses the default editor for the resource (image preview, custom editors, text).
+        // openTextDocument rejects binaries ("the file appears to be binary").
+        await vscode.commands.executeCommand('vscode.open', uri, {
+          preview: true,
+          viewColumn: vscode.ViewColumn.Beside,
+          ...(line != null ? { selection: new vscode.Range(line, 0, line, 0) } : {}),
         });
       } catch (e) {
         void vscode.window.showErrorMessage(msg(e));
