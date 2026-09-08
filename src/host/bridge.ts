@@ -6,6 +6,7 @@ import type { Appearance } from '@shared/appearance';
 import type { SessionManager } from './SessionManager';
 import type { SettingsCenter } from './settings';
 import type { WorkspaceFiles } from './files';
+import { msg } from './errors';
 
 export interface BridgeEnv {
   extensionUri: vscode.Uri;
@@ -19,6 +20,9 @@ export interface BridgeEnv {
   cwd: () => string;
   log: (line: string) => void;
 }
+
+// Manager events within this window collapse to one post per message type
+const BATCH_WINDOW_MS = 30;
 
 // One bridge per webview: renders the HTML, hands incoming WebviewMsg to the manager, and pushes the manager's changes back after coalescing
 export class WebviewBridge implements vscode.Disposable {
@@ -36,7 +40,7 @@ export class WebviewBridge implements vscode.Disposable {
     webview.options = { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(env.extensionUri, 'dist', 'webview'), vscode.Uri.file(env.sessionsDir)] };
     webview.html = this.html();
     this.disposables.push(
-      webview.onDidReceiveMessage((m: WebviewMsg) => this.onMessage(m)),
+      webview.onDidReceiveMessage((m: WebviewMsg) => { this.onMessage(m).catch(e => env.log(`webview ${m.type} failed: ${msg(e)}`)); }),
       { dispose: manager.subscribe(ev => this.queue(ev)) },
       { dispose: env.settings.subscribe(ev => this.queue(ev)) },
     );
@@ -75,7 +79,7 @@ export class WebviewBridge implements vscode.Disposable {
     if (m.type === 'searchFiles') {
       // Always answer, even on failure: the webview holds a promise per seq
       let files: FileHit[] = [];
-      try { files = await this.env.files.search(m.query); } catch (e) { this.env.log(`searchFiles failed: ${e instanceof Error ? e.message : String(e)}`); }
+      try { files = await this.env.files.search(m.query); } catch (e) { this.env.log(`searchFiles failed: ${msg(e)}`); }
       this.post({ type: 'files', seq: m.seq, files });
       return;
     }
@@ -84,7 +88,7 @@ export class WebviewBridge implements vscode.Disposable {
         await this.manager.editTurn(m.edit);
         this.post({ type: 'editTurnResult', requestId: m.requestId });
       } catch (e) {
-        this.post({ type: 'editTurnResult', requestId: m.requestId, error: e instanceof Error ? e.message : String(e) });
+        this.post({ type: 'editTurnResult', requestId: m.requestId, error: msg(e) });
       }
       return;
     }
@@ -98,28 +102,25 @@ export class WebviewBridge implements vscode.Disposable {
       switch (m.type) {
         case 'setSetting': await this.env.settings.set(m.key, m.value); return true;
         case 'openPath': await openPath(m.path); return true;
-        case 'openSettingsJson':
-          await vscode.commands.executeCommand(m.key ? 'workbench.action.openSettings' : 'workbench.action.openSettingsJson', ...(m.key ? [m.key] : []));
-          return true;
         case 'inventory': this.post({ type: 'inventory', agent: m.agent, inventory: await this.env.settings.inventory(m.agent) }); return true;
         case 'controls': this.post({ type: 'controls', agent: m.agent, controls: await this.manager.knownControls(m.agent) }); return true;
         default: return false;
       }
     } catch (e) {
-      this.env.log(`settings ${m.type} failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.env.log(`settings ${m.type} failed: ${msg(e)}`);
       return true;
     }
   }
 
-  // Streaming updates are dense; for the same message type within 30ms, keep only the latest
-  private queue(msg: HostMsg) {
+  // Streaming updates are dense; for the same message type within one batch window, keep only the latest
+  private queue(m: HostMsg) {
     if (!this.ready) return;
-    this.pending.set(msg.type, msg);
+    this.pending.set(m.type, m);
     this.timer ??= setTimeout(() => {
       this.timer = undefined;
-      for (const m of this.pending.values()) this.post(m);
+      for (const queued of this.pending.values()) this.post(queued);
       this.pending.clear();
-    }, 30);
+    }, BATCH_WINDOW_MS);
   }
 
   post(msg: HostMsg) { void this.webview.postMessage(msg); }
@@ -139,7 +140,7 @@ export class WebviewBridge implements vscode.Disposable {
       `script-src 'nonce-${nonce}' 'wasm-unsafe-eval'`,
     ].join('; ');
     return `<!doctype html>
-<html lang="zh-CN">
+<html lang="${this.env.settings.locale()}">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">

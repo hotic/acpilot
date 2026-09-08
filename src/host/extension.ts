@@ -9,6 +9,7 @@ import { AccountStore, type SecretVault } from './accounts/AccountStore';
 import { DevinAccountProvider } from './accounts/devin';
 import { SessionManager } from './SessionManager';
 import { SettingsCenter } from './settings';
+import { msg } from './errors';
 import { setHostLocale } from './i18n';
 import { TranscriptStore } from './store/TranscriptStore';
 import { WebviewBridge } from './bridge';
@@ -35,7 +36,7 @@ export async function activate(context: vscode.ExtensionContext) {
     delete: async k => context.secrets.delete(k),
   };
   const storage = context.globalStorageUri.fsPath;
-  const accountStore = new AccountStore(join(storage, 'accounts.json'), vault);
+  const accountStore = new AccountStore(join(storage, 'accounts.json'), vault, line => log.info(line));
   await accountStore.load();
   let activeRegistry = registry();
   const accounts = new AccountManager({
@@ -49,7 +50,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const sessionsDir = join(storage, 'sessions');
   const manager = new SessionManager({
     registry: activeRegistry,
-    store: new TranscriptStore(sessionsDir),
+    store: new TranscriptStore(sessionsDir, line => log.info(line)),
     log: line => log.info(line),
     cwd: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? homedir(),
     defaultAgent: () => cfg().get<string>('defaultAgent') ?? 'grok',
@@ -113,7 +114,7 @@ export async function activate(context: vscode.ExtensionContext) {
         setHostLocale(settingsCenter.locale());
       }
     }),
-    { dispose: () => { void manager.dispose(); for (const b of bridges) b.dispose(); } },
+    { dispose: () => { manager.dispose().catch(e => log.error(`dispose failed: ${msg(e)}`)); for (const b of bridges) b.dispose(); } },
   );
 }
 

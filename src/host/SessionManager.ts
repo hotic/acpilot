@@ -1,5 +1,5 @@
 import type { AccountInfo, AgentId, AgentInfo, ConfigControl, SessionSummary, SessionView } from '@shared/transcript';
-import type { AccountAction, AddAccountVia, WebviewMsg } from '@shared/protocol';
+import type { AccountAction, AddAccountVia, EditTurnRequest, WebviewMsg } from '@shared/protocol';
 import type { HiddenMap } from '@shared/settings';
 import type { AgentRuntimeInfo } from '@shared/inventory';
 import { captureTurnSettings } from '@shared/turnSettings';
@@ -7,7 +7,10 @@ import { AgentRegistry } from './acp/AgentRegistry';
 import { AcpSession, type CompactionPolicy, type SessionRecord } from './acp/AcpSession';
 import type { AccountManager } from './accounts/AccountManager';
 import { TranscriptStore, summarize, type SessionPrefs } from './store/TranscriptStore';
+import { cloneJson } from './clone';
+import { msg } from './errors';
 import { t } from './i18n';
+import { RENAME_MAX } from './limits';
 
 export interface ManagerDeps {
   registry: AgentRegistry;
@@ -59,7 +62,7 @@ export class SessionManager {
     this.prefs = await this.deps.store.loadPrefs();
     this.activeId = this.index[0]?.id;
     await this.deps.registry.probeAll();
-    void this.deps.accounts?.refreshQuotas();
+    this.deps.accounts?.refreshQuotas().catch(e => this.deps.log(`quota refresh failed: ${msg(e)}`));
   }
 
   // The mode / config values last chosen for an agent, replayed onto its next new session
@@ -67,14 +70,23 @@ export class SessionManager {
 
   private remember(s: AcpSession) {
     this.prefs.lastSettings[s.agent] = captureTurnSettings(s.view().controls);
-    void this.deps.store.savePrefs(this.prefs);
+    this.savePrefs();
   }
 
   private rememberMode(agent: AgentId, modeId: string) {
     const cur = this.prefs.lastSettings[agent];
     if (cur?.modeId === modeId) return;
     this.prefs.lastSettings[agent] = { config: {}, ...cur, modeId };
-    void this.deps.store.savePrefs(this.prefs);
+    this.savePrefs();
+  }
+
+  // Fire-and-forget disk writes surface their failures in the log rather than as unhandled rejections
+  private savePrefs() {
+    this.deps.store.savePrefs(this.prefs).catch(e => this.deps.log(`prefs save failed: ${msg(e)}`));
+  }
+
+  private saveIndex() {
+    this.deps.store.saveIndex(this.index).catch(e => this.deps.log(`index save failed: ${msg(e)}`));
   }
 
   get registry(): AgentRegistry { return this.deps.registry; }
@@ -82,7 +94,7 @@ export class SessionManager {
   // Swap the registry (acpilot.agents changed): re-probe the binaries, then push the new list out
   setRegistry(r: AgentRegistry) {
     this.deps.registry = r;
-    void r.probeAll().then(() => this.emit({ type: 'agents', agents: this.agents() }));
+    r.probeAll().then(() => this.emit({ type: 'agents', agents: this.agents() })).catch(e => this.deps.log(`agent probe failed: ${msg(e)}`));
   }
 
   agents(): AgentInfo[] {
@@ -108,8 +120,7 @@ export class SessionManager {
     return undefined;
   }
 
-  // VS Code's getConfiguration().get() returns a read-only Proxy that structuredClone / postMessage can't swallow; a JSON round-trip turns it into a plain object
-  hidden(): HiddenMap { return JSON.parse(JSON.stringify(this.deps.hidden?.() ?? {})) as HiddenMap; }
+  hidden(): HiddenMap { return cloneJson(this.deps.hidden?.() ?? {}); }
 
   // The setting changed (settings page or a hand edit of settings.json): re-push a copy
   emitHidden() { this.emit({ type: 'hidden', hidden: this.hidden() }); }
@@ -157,11 +168,11 @@ export class SessionManager {
     if (i >= 0) this.index[i] = sum; else this.index.unshift(sum);
     this.sortIndex();
     this.deps.store.save(s.toRecord());
-    void this.deps.store.saveIndex(this.index);
+    this.saveIndex();
     if (s.id === this.activeId) this.emit({ type: 'session', session: s.view() });
     this.emitSessions();
     if (s.isRunning) this.wasRunning.add(s.id);
-    else if (this.wasRunning.delete(s.id) && s.accountId) void this.deps.accounts?.refreshQuota(s.accountId, true);
+    else if (this.wasRunning.delete(s.id) && s.accountId) this.deps.accounts?.refreshQuota(s.accountId, true).catch(e => this.deps.log(`quota refresh failed: ${msg(e)}`));
     // Only ready sessions count, and the first ready sighting only records: the mode a session opens with (agent default, or a restored
     // session's own) is not a new choice; a change after that is
     const view = s.view();
@@ -230,7 +241,7 @@ export class SessionManager {
     return this.activeId ? this.live.get(this.activeId) : undefined;
   }
 
-  async editTurn(edit: import('@shared/protocol').EditTurnRequest): Promise<void> {
+  async editTurn(edit: EditTurnRequest): Promise<void> {
     const session = this.live.get(edit.sessionId);
     if (!session) throw new Error(t('history.unavailable'));
     await session.editTurn(edit);
@@ -241,45 +252,45 @@ export class SessionManager {
       .find(b => b.type === 'plan_document' && b.id === planId);
   }
 
-  async handle(msg: WebviewMsg): Promise<void> {
+  async handle(m: WebviewMsg): Promise<void> {
     const s = this.current();
     try {
-      switch (msg.type) {
-        case 'send': await s?.prompt(msg.text, msg.attachments); break;
+      switch (m.type) {
+        case 'send': await s?.prompt(m.text, m.attachments); break;
         case 'stop': await s?.cancel(); break;
-        case 'permission': s?.resolvePermission(msg.blockId, msg.optionId); break;
-        case 'buildPlan': await this.live.get(msg.sessionId)?.buildPlan(msg.planId, msg.model, msg.optionId); break;
-        case 'setMode': if (s) { await s.setMode(msg.id); this.remember(s); } break;
-        case 'setConfig': if (s) { await s.setConfig(msg.configId, msg.value); this.remember(s); } break;
-        case 'selectAgent': if (s?.agent !== msg.id) await this.newSession(msg.id); break;
-        case 'selectSession': await this.selectSession(msg.id); break;
-        case 'newSession': await this.newSession(msg.agent); break;
-        case 'renameSession': await this.renameSession(msg.id, msg.title); break;
-        case 'deleteSession': await this.deleteSession(msg.id); break;
-        case 'restoreSession': await this.restoreSession(msg.id); break;
-        case 'pinSession': await this.pinSession(msg.id, msg.pinned); break;
-        case 'selectAccount': await this.selectAccount(msg.id); break;
-        case 'addAccount': await this.addAccount(msg.agent, msg.via); break;
-        case 'removeAccount': await this.deps.accounts?.remove(msg.id); break;
-        case 'refreshQuota': await this.deps.accounts?.refreshQuotas(msg.agent); break;
+        case 'permission': s?.resolvePermission(m.blockId, m.optionId); break;
+        case 'buildPlan': await this.live.get(m.sessionId)?.buildPlan(m.planId, m.model, m.optionId); break;
+        case 'setMode': if (s) { await s.setMode(m.id); this.remember(s); } break;
+        case 'setConfig': if (s) { await s.setConfig(m.configId, m.value); this.remember(s); } break;
+        case 'selectAgent': if (s?.agent !== m.id) await this.newSession(m.id); break;
+        case 'selectSession': await this.selectSession(m.id); break;
+        case 'newSession': await this.newSession(m.agent); break;
+        case 'renameSession': await this.renameSession(m.id, m.title); break;
+        case 'deleteSession': await this.deleteSession(m.id); break;
+        case 'restoreSession': await this.restoreSession(m.id); break;
+        case 'pinSession': await this.pinSession(m.id, m.pinned); break;
+        case 'selectAccount': await this.selectAccount(m.id); break;
+        case 'addAccount': await this.addAccount(m.agent, m.via); break;
+        case 'removeAccount': await this.deps.accounts?.remove(m.id); break;
+        case 'refreshQuota': await this.deps.accounts?.refreshQuotas(m.agent); break;
         case 'compact': await s?.compact(); break;
         case 'retry': await s?.retry(); break;
         case 'retryTurn': await s?.retryTurn(); break;
-        case 'dequeue': this.live.get(msg.sessionId)?.dequeue(msg.id); break;
-        case 'editQueued': await this.live.get(msg.sessionId)?.editQueued(msg.id, msg.text, msg.retainedAttachments, msg.attachments); break;
-        case 'login': await this.login(s, msg.methodId); break;
+        case 'dequeue': this.live.get(m.sessionId)?.dequeue(m.id); break;
+        case 'editQueued': await this.live.get(m.sessionId)?.editQueued(m.id, m.text, m.retainedAttachments, m.attachments); break;
+        case 'login': await this.login(s, m.methodId); break;
         default: break;
       }
     } catch (e) {
-      const text = e instanceof Error ? e.message : String(e);
-      this.deps.log(`handle ${msg.type} failed: ${text}`);
+      const text = msg(e);
+      this.deps.log(`handle ${m.type} failed: ${text}`);
       this.deps.toast('error', text);
     }
   }
 
   // Rename / pin: for a live session, mutate the object (onChange syncs the index and the disk); for one not loaded, patch the on-disk record directly
   async renameSession(id: string, title: string) {
-    const t = title.trim().slice(0, 80);
+    const t = title.trim().slice(0, RENAME_MAX);
     if (!t) return;
     const live = this.live.get(id);
     if (live) { live.rename(t); return; }
@@ -319,7 +330,10 @@ export class SessionManager {
     this.index = this.index.filter(s => s.id !== id);
     await this.deps.store.saveIndex(this.index);
     if (sum) {
-      this.trash.set(id, { summary: sum, timer: setTimeout(() => { this.trash.delete(id); void this.deps.store.remove(id); }, TRASH_TTL) });
+      this.trash.set(id, { summary: sum, timer: setTimeout(() => {
+        this.trash.delete(id);
+        this.deps.store.remove(id).catch(e => this.deps.log(`session ${id}: delete failed (${msg(e)})`));
+      }, TRASH_TTL) });
     }
     if (this.activeId === id) {
       this.activeId = undefined;
@@ -366,7 +380,7 @@ export class SessionManager {
       if (cur?.agent === agent && (cur.view().status === 'auth_required' || !cur.accountId)) await this.newSession(agent, acc.id);
       this.setAccountAction({ agent, via, status: 'success' });
     } catch (e) {
-      this.setAccountAction({ agent, via, status: 'error', error: e instanceof Error ? e.message : String(e) });
+      this.setAccountAction({ agent, via, status: 'error', error: msg(e) });
       throw e;
     }
   }
@@ -379,7 +393,7 @@ export class SessionManager {
       await s.authenticate(methodId);
       await s.retry();
     } catch (e) {
-      this.deps.log(`authenticate failed: ${e instanceof Error ? e.message : String(e)}`);
+      this.deps.log(`authenticate failed: ${msg(e)}`);
       if (def.login) {
         // When the login command is the same binary as the agent, use the probed absolute path; a GUI process's PATH may not have it
         const bin = def.login.command === def.command ? await this.deps.registry.resolveBinary(s.agent) : null;
@@ -398,5 +412,6 @@ export class SessionManager {
     // Trashed entries are cleaned up when their time comes
     for (const [id, t] of this.trash) { clearTimeout(t.timer); await this.deps.store.remove(id); }
     this.trash.clear();
+    await this.deps.store.dispose();
   }
 }

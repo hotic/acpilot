@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { AccountInfo, AgentId } from '@shared/transcript';
 import type { AccountCredential, AccountDraft } from './types';
+import { msg } from '../errors';
 
 // Secret vault: context.secrets (system keychain) in VS Code, in-memory in tests
 export interface SecretVault {
@@ -28,11 +29,21 @@ const SECRET_PREFIX = 'acpilot.account.';
 export class AccountStore {
   private items: StoredAccount[] = [];
 
-  constructor(private file: string, private vault: SecretVault) {}
+  constructor(private file: string, private vault: SecretVault, private log: (line: string) => void = () => {}) {}
 
+  // No file yet is the normal first run; a file that will not parse is worth a log line, since the UI then shows no accounts while the secrets still exist
   async load() {
-    try { this.items = JSON.parse(await readFile(this.file, 'utf8')) as StoredAccount[]; }
-    catch { this.items = []; }
+    let raw: string;
+    try { raw = await readFile(this.file, 'utf8'); }
+    catch { this.items = []; return; }
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) throw new Error('not an array');
+      this.items = parsed as StoredAccount[];
+    } catch (e) {
+      this.log(`accounts.json unreadable, starting with no accounts (${msg(e)})`);
+      this.items = [];
+    }
   }
 
   private async persist() {
