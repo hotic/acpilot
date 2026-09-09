@@ -2,7 +2,7 @@
   "name": "acpira",
   "displayName": "Acpira",
   "description": "VS Code chat shell for official agent CLIs (Grok Build, Kimi Code, Devin) over ACP",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "publisher": "hotic",
   "icon": "media/icon.png",
   "license": "MIT",

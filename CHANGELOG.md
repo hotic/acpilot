@@ -10,9 +10,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP server injection from Acpira settings remains planned. Agents still read their own CLI MCP config.
 - Steer / interrupt follow-up modes remain planned. Mid-turn messages stay in the host-side queue.
 
+## [1.1.1] - 2026-09-09
+
+### Added
+
+- Settings now has an Appearance page: follow the VS Code theme or pin light/dark, UI and code font sizes, color vs +/- diff markers, font smoothing, and motion.
+- Missing agent CLIs are detected live (poll while missing, re-check on focus) instead of staying grey until a reload. The agent page offers a one-line install, a terminal run, and a docs link; custom agents can declare `acpira.agents.<id>.install`.
+- Official Grok and Kimi CLI quota is shown next to the local login without importing it as a switchable account. Remaining share and reset countdown sit on colored tubes.
+- The session list is scoped to the current workspace by default (`acpira.sessionScope`). Under All, rows from other projects show the folder name and a "move here" action; a running session refuses the move.
+- Workspace paths in markdown and inline code open in the editor, including `file://` links and `#L` line targets.
+- Code diffs keep syntax highlighting, line numbers, and a copy control. Highlighting waits until the output is visible.
+- Confirmed Grok and Kimi todo-tool results render as a plan list in the conversation, without replacing the live to-do dock.
+
 ### Changed
 
-- Sessions, accounts, and secrets now live in `~/.acpira` (override with `ACPIRA_HOME`) instead of VS Code `globalStorage` and SecretStorage. Existing data is copied once on first launch; the previous location is left untouched. Secrets are stored in `secrets.json` (mode 600), not the OS keychain.
+- Sessions, accounts, and secrets now live in `~/.acpira` (override with `ACPIRA_HOME`) instead of VS Code `globalStorage` and SecretStorage. Existing data is copied once on first launch; the previous location is left untouched. Secrets are stored in `secrets.json` (mode 600), not the OS keychain. VS Code and Cursor share the directory, so opening the other IDE still brings its sessions and accounts along.
+- Auto `/compact` now runs after a turn ends and again before the next user-facing prompt when usage is still over the threshold. The context panel shows the agent window, the budget marker, and that compact waits for the next message.
+- Grok context usage refreshes while a turn is running instead of waiting for it to finish.
+- Streaming a turn no longer re-renders unchanged history, so long sessions stay responsive while tokens arrive.
+- README now has a product story, bilingual roadmap, and demo stills/GIFs of the real interface.
+- Process action rows (tools and thoughts) use a quieter verb color until hover.
+
+### Fixed
+
+- Two windows no longer overwrite each other's session list: `index.json` is a cache, record files are the truth, and a deletion in one window wins over a live session in the other. Soft-deleted sessions move to `sessions/trash/` for the undo window. A new session's first write no longer races the index reconcile (that used to toast as if the chat had been deleted elsewhere).
+- Kept and newly pasted attachments share one row in the history and queue inline editors.
+- A trailing thought or to-do update after the last tool call no longer swallows the reply into the process fold. An opened thought stays visible when the first tool call starts a fold, and question records stay at the point they were asked.
+- The send button stays visible if the metal shader never paints a first frame.
+- Stale "running" snapshots no longer keep a finished turn on Working.
+- Menus near the top of the shell (including the history editor) flip down instead of clipping.
+- Hiding the sidebar no longer leaves a still-visible prompt folded as if the history had been compressed.
+- Connected rails grow with an opening panel instead of freezing. The working row fades out instead of dropping, and clicking a prompt opens the history editor without a transition so the click lands in the text.
+- Empty session-list search stays the height of one item row.
 
 ## [1.1.0] - 2026-09-09
 
