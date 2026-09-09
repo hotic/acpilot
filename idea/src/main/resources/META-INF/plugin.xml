@@ -1,0 +1,12 @@
+<idea-plugin>
+    <id>com.github.hotic.acpira</id>
+    <name>Acpira</name>
+    <vendor url="https://github.com/hotic/acpira">hotic</vendor>
+    <description><![CDATA[
+        Chat shell for official agent CLIs (Grok Build, Kimi Code, Devin) over ACP.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <!-- 2026.2 moved JCEF out of the core platform into the bundled Web Browser (JCEF) plugin; the alias exists since 2025.3.1 -->
+    <depends>com.intellij.modules.jcef</depends>
+</idea-plugin>
