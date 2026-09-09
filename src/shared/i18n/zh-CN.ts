@@ -275,6 +275,7 @@ export const zhCN = {
   'host.attachStageFailed': '{label} 没能存盘（{error}），本轮照常发出，历史里不会有预览',
   'host.imageTooBig': '{name} 超过 {mb} MB，已跳过',
   'host.recordLost': '会话记录丢了',
+  'host.deletedElsewhere': '这个会话已在另一个窗口被删除',
   'host.moveWhileRunning': '等这轮回复结束再移动这个会话',
   'host.loginTerminalTitle': '{agent} 登录',
   'host.loginThenRetry': '在终端里完成 {agent} 登录后，点「重试」',

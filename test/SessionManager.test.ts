@@ -328,6 +328,49 @@ describe('SessionManager', () => {
     await c.dispose();
   }, 30_000);
 
+  // The same session open in two windows: a deletion in one used to be undone by the other's next debounced save, which recreated the record
+  it('a session live in two managers: deleting it in one closes it in the other, whose stale save does not bring it back; undo returns it as a stored session', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'acpira-mgr-'));
+    const toasts: string[] = [];
+    const mk = () => new SessionManager({
+      registry: new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE] } }),
+      store: new TranscriptStore(dir), log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'fake', runInTerminal: () => {}, toast: (_l, t) => toasts.push(t),
+    });
+    const a = mk();
+    const b = mk();
+    await a.init();
+    await b.init();
+    await a.newSession();
+    await a.handle({ type: 'send', text: 'shared' });
+    const id = a.activeId!;
+    // A's reconcile lands its debounced record; B picks the session up from the disk and opens it too
+    await a.refreshIndex();
+    await b.refreshIndex();
+    await b.selectSession(id);
+    expect(b.active()?.id).toBe(id);
+    // B changes the record (a save is now debounced) right before A deletes it
+    await b.handle({ type: 'renameSession', id, title: 'renamed in B' });
+    await a.handle({ type: 'deleteSession', id });
+    expect(existsSync(join(dir, `${id}.json`))).toBe(false);
+    // B's next reconcile (the debounce, a window focus): the pending save is dropped, the session closed, the viewer moved on
+    await b.refreshIndex();
+    expect(existsSync(join(dir, `${id}.json`))).toBe(false);
+    expect(existsSync(join(dir, 'trash', `${id}.json`))).toBe(true);
+    expect(b.sessions().map(s => s.id)).not.toContain(id);
+    expect(b.activeId).toBeDefined();
+    expect(b.activeId).not.toBe(id);
+    expect(toasts.some(t => t.includes('another window') || t.includes('另一个窗口'))).toBe(true);
+    // Undo in A: the record is back in both lists as a stored session; B does not reattach to it by itself
+    await a.handle({ type: 'restoreSession', id });
+    await b.refreshIndex();
+    expect(existsSync(join(dir, `${id}.json`))).toBe(true);
+    expect(a.sessions().map(s => s.id)).toContain(id);
+    expect(b.sessions().map(s => s.id)).toContain(id);
+    expect(b.viewOf(id)).toBeUndefined();
+    await a.dispose();
+    await b.dispose();
+  }, 30_000);
+
   // Sessions belong to the workspace folder they were opened in (their cwd). Under the workspace scope a viewer left without a session
   // falls onto one of this folder's, never another project's; moving re-homes a session into the current folder
   it('workspace scope: summaries carry cwd, "most recent" and the post-deletion pick stay inside the folder, moveSession re-homes stored and live sessions', async () => {

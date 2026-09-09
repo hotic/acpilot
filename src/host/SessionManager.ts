@@ -193,7 +193,9 @@ export class SessionManager {
   }
 
   // One run at a time; a request arriving mid-run schedules exactly one more. The result is corrected for what changed during the await:
-  // live sessions keep their current summary, a session trashed meanwhile stays out, one created meanwhile stays in
+  // live sessions keep their current summary, a session trashed meanwhile stays out, one created meanwhile stays in.
+  // A live session whose record has left the directory although the store once had it there was deleted by another window (the store
+  // refuses to write it back, see TranscriptStore.write): this host follows suit, closing it and moving its viewers on
   private syncIndex(): Promise<void> {
     if (this.syncing) { this.syncAgain = true; return this.syncing; }
     this.syncing = (async () => {
@@ -203,6 +205,8 @@ export class SessionManager {
         this.touched.clear();
         try {
           const merged = (await this.deps.store.syncIndex(this.index, own)).filter(s => !this.trash.has(s.id));
+          const gone = [...this.live.keys()].filter(id => this.deps.store.knew(id) && !merged.some(s => s.id === id));
+          for (const id of gone) this.forget(id);
           for (const s of this.live.values()) {
             const sum = summarize(s.toRecord());
             const i = merged.findIndex(x => x.id === s.id);
@@ -210,6 +214,10 @@ export class SessionManager {
           }
           sortIndex(merged);
           if (JSON.stringify(merged) !== JSON.stringify(this.index)) { this.index = merged; this.emitSessions(); }
+          for (const id of gone) {
+            if (this.viewersOn(id).length) this.deps.toast('info', t('host.deletedElsewhere'));
+            await this.rehome(id);
+          }
         } catch (e) { this.deps.log(`index sync failed: ${msg(e)}`); }
       } while (this.syncAgain);
       this.syncing = undefined;
@@ -406,8 +414,7 @@ export class SessionManager {
   private async dropEmptyCurrent(v: SessionViewer) {
     const cur = this.current(v);
     if (!cur || cur.view().turns.length > 0 || cur.isRunning || this.viewersOn(cur.id, v).length) return;
-    cur.dispose();
-    this.live.delete(cur.id);
+    this.forget(cur.id);
     this.index = this.index.filter(x => x.id !== cur.id);
     await this.deps.store.remove(cur.id);
     this.saveIndex();
@@ -510,9 +517,8 @@ export class SessionManager {
   // deleted only after that. Every viewer showing the deleted one switches to the first in the list; if none, the first of them opens a new one and the rest follow onto it
   async deleteSession(id: string) {
     const live = this.live.get(id);
-    if (live) { await this.deps.store.flush(live.toRecord()); live.dispose(); this.live.delete(id); }
-    this.wasRunning.delete(id);
-    this.modeSeen.delete(id);
+    if (live) await this.deps.store.flush(live.toRecord());
+    this.forget(id);
     const sum = this.index.find(s => s.id === id);
     this.index = this.index.filter(s => s.id !== id);
     if (sum) {
@@ -523,12 +529,28 @@ export class SessionManager {
     }
     await this.deps.store.trash(id);
     this.saveIndex();
+    await this.rehome(id);
+    this.emitSessions();
+  }
+
+  // Close a live session and drop every trace of it in memory; the list entry and the files are the caller's business.
+  // Out of the live map first, so the callback dispose triggers cannot write the record back
+  private forget(id: string) {
+    const live = this.live.get(id);
+    this.live.delete(id);
+    live?.dispose();
+    this.wasRunning.delete(id);
+    this.modeSeen.delete(id);
+  }
+
+  // Viewers left on a session that is gone move to the newest one in scope; with none, the first opens a new session and the rest follow onto it
+  private async rehome(id: string) {
+    if (this.disposed) return;
     for (const v of this.viewersOn(id)) {
       v.activeId = undefined;
       const next = this.mostRecent();
       if (next) await this.selectSessionFor(v, next); else await this.newSessionFor(v);
     }
-    this.emitSessions();
   }
 
   // Re-home a session into this window's workspace folder. cwd is what the agent process was spawned with and what session/new / load
@@ -541,11 +563,7 @@ export class SessionManager {
       if (live.cwd === cwd) return;
       if (live.isRunning) throw new Error(t('host.moveWhileRunning'));
       const record = live.toRecord();
-      // Out of the live map first so the callbacks dispose triggers cannot write the old record back
-      this.live.delete(id);
-      live.dispose();
-      this.wasRunning.delete(id);
-      this.modeSeen.delete(id);
+      this.forget(id);
       record.cwd = cwd;
       await this.deps.store.flush(record);
       this.replaceSummary(record);

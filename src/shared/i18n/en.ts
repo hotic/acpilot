@@ -260,6 +260,7 @@ export const en = {
   'host.attachStageFailed': 'Could not save {label} ({error}); the turn still went out, history has no preview',
   'host.imageTooBig': '{name} exceeds {mb} MB, skipped',
   'host.recordLost': 'Session record is missing',
+  'host.deletedElsewhere': 'This session was deleted in another window',
   'host.moveWhileRunning': 'Wait for the current reply to finish before moving this session',
   'host.loginTerminalTitle': '{agent} sign-in',
   'host.loginThenRetry': 'Finish signing in to {agent} in the terminal, then press “Retry”',

@@ -115,6 +115,35 @@ describe('TranscriptStore', () => {
     await store.remove('t');
   });
 
+  // The same session live in two windows: one deletes it, the other's debounced save lands afterwards and used to recreate the record
+  it('a save of a record another store took out of the directory is dropped, a first write and a write after restore go through', async () => {
+    const { dir, logs, store: a } = fixture();
+    const b = new TranscriptStore(dir, l => logs.push(l));
+    await a.flush(record('s', 'v1'));
+    expect((await b.load('s'))?.title).toBe('v1');
+    // B's stale save is pending when A trashes; flushing it must not bring the record back into the live directory
+    b.save(record('s', 'v2 from B'), 10_000);
+    await a.trash('s');
+    await b.dispose();
+    expect(existsSync(join(dir, 's.json'))).toBe(false);
+    expect(JSON.parse(readFileSync(join(dir, 'trash', 's.json'), 'utf8')).title).toBe('v1');
+    expect(logs.some(l => l.includes('not written back'))).toBe(true);
+    expect((await b.syncIndex([summarize(record('s'))], new Set(['s']))).map(s => s.id)).toEqual([]);
+    expect(b.knew('s')).toBe(true);
+    // Removed for good: still refused. Undone instead: the file is back, so B's next save applies again
+    await a.remove('s');
+    await b.flush(record('s', 'v3 from B'));
+    expect(existsSync(join(dir, 's.json'))).toBe(false);
+    await a.flush(record('s', 'v1'));
+    await a.trash('s');
+    await a.restore('s');
+    await b.flush(record('s', 'v4 from B'));
+    expect(JSON.parse(readFileSync(join(dir, 's.json'), 'utf8')).title).toBe('v4 from B');
+    // A record the store never had on disk is created as usual
+    await b.flush(record('fresh'));
+    expect(existsSync(join(dir, 'fresh.json'))).toBe(true);
+  });
+
   it('a record still debounced is readable through load, and writing the index lands it first so the index never names a missing file', async () => {
     const { dir, store } = fixture();
     store.save(record('p', 'pending'), 10_000);

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentId, SessionSummary, TurnSettings } from '@shared/transcript';
 import type { SessionRecord } from '../acp/AcpSession';
@@ -28,9 +28,12 @@ interface PendingWrite {
 //
 // The directory is shared by every extension host (each VS Code / Cursor window runs its own), so the index is never trusted blindly:
 // syncIndex re-reads it and reconciles it with the record files on disk before writing, and every file is written atomically
-// (tmp + rename) so another window can never read a half-written record
+// (tmp + rename) so another window can never read a half-written record. A record that leaves the live directory under this store's
+// feet was deleted by another window: write refuses to put it back (see knew)
 export class TranscriptStore implements BlobStore {
   private pending = new Map<string, PendingWrite>();
+  // Ids whose record this store has read from or written to the live directory
+  private known = new Set<string>();
 
   constructor(private dir: string, private log: (line: string) => void = () => {}) {}
 
@@ -97,6 +100,7 @@ export class TranscriptStore implements BlobStore {
     try {
       const r = JSON.parse(raw) as unknown;
       if (!isRecord(r)) throw new Error('not a session record');
+      this.known.add(id);
       return r;
     } catch (e) {
       this.log(`session ${id}: record unreadable (${msg(e)})`);
@@ -118,9 +122,14 @@ export class TranscriptStore implements BlobStore {
     await this.write(record);
   }
 
+  // Whether this store has had the record on disk. A live session whose id this store knew but whose file is gone from the directory
+  // (absent from the list syncIndex returns) was deleted by another window; a fresh session whose first write failed is not
+  knew(id: string) { return this.known.has(id); }
+
   // Removes the record and its blob directory for good, wherever they are (live or trash)
   async remove(id: string) {
     this.cancelPending(id);
+    this.known.delete(id);
     for (const dir of [this.dir, join(this.dir, TRASH_DIR)]) {
       await rm(join(dir, `${id}.json`), { force: true });
       await rm(join(dir, id), { recursive: true, force: true });
@@ -183,9 +192,17 @@ export class TranscriptStore implements BlobStore {
     this.pending.delete(id);
   }
 
+  // Creates the file or replaces it while it is still there. A record this store once had on disk and that is gone now was trashed or
+  // removed by another window; writing it back would undo that deletion, so the save is dropped (the manager learns of it from syncIndex)
   private async write(record: SessionRecord) {
     await this.ensure();
-    await this.writeAtomic(join(this.dir, `${record.id}.json`), JSON.stringify(record));
+    const path = join(this.dir, `${record.id}.json`);
+    if (this.known.has(record.id) && !(await exists(path))) {
+      this.log(`session ${record.id}: deleted by another window, not written back`);
+      return;
+    }
+    await this.writeAtomic(path, JSON.stringify(record));
+    this.known.add(record.id);
   }
 
   // Write next to the target and rename over it: readers in other windows see the old file or the new one, never a torn one
@@ -221,6 +238,8 @@ export function summarize(r: SessionRecord): SessionSummary {
 export function sortIndex(list: SessionSummary[]) {
   list.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt.localeCompare(a.updatedAt));
 }
+
+function exists(path: string) { return access(path).then(() => true, () => false); }
 
 // The minimum shape the manager and the session constructor dereference without checks
 function isRecord(v: unknown): v is SessionRecord {
