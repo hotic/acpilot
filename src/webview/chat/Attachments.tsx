@@ -13,11 +13,13 @@ interface Preview {
 }
 
 // Composer images use individual thumbnails; other attachments keep compact file labels.
-export function DraftChips({ drafts, onRemove }: { drafts: Draft[]; onRemove?: (index: number) => void }) {
+// An inline editor's retained attachments (`before`) share this one wrapping row, so a newly pasted image lands beside them instead of on a second row.
+export function DraftChips({ drafts, before, onRemove }: { drafts: Draft[]; before?: ReactNode; onRemove?: (index: number) => void }) {
   const [preview, setPreview] = useState<Preview | null>(null);
-  if (!drafts.length) return null;
+  if (!drafts.length && !before) return null;
   return (
     <div className="flex flex-wrap items-start gap-gap px-pad pt-gap">
+      {before}
       {drafts.map((d, i) => (
         <Removable key={d.kind === 'file' ? d.uri : `${d.name ?? d.kind}-${i}`} label={t('common.removeNamed', { name: d.name ?? t('common.image') })} onRemove={onRemove ? () => onRemove(i) : undefined}>
           <AttachmentTag
@@ -77,13 +79,14 @@ export function AttachmentTiles({ attachments, blobUrl }: { attachments: Attachm
 }
 
 // Retained attachments share the draft thumbnails, including the corner removal button.
+// Renders bare items: the Composer places them at the head of the `DraftChips` row, so kept and new attachments wrap together.
 export function EditAttachments({ attachments, retained, blobUrl, disabled, onRemove }: {
   attachments: Attachment[]; retained: number[]; blobUrl?: (blob: string) => string; disabled?: boolean; onRemove: (index: number) => void;
 }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   if (!retained.length) return null;
   return (
-    <div className="flex flex-wrap gap-gap px-pad pt-gap">
+    <>
       {retained.map(i => {
         const attachment = attachments[i]!;
         const src = attachment.kind === 'image' && blobUrl && attachment.blob ? blobUrl(attachment.blob) : undefined;
@@ -95,7 +98,7 @@ export function EditAttachments({ attachments, retained, blobUrl, disabled, onRe
         </Removable>;
       })}
       {preview && <Lightbox src={preview.src} name={preview.name} onClose={() => setPreview(null)} />}
-    </div>
+    </>
   );
 }
 

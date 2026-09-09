@@ -39,7 +39,8 @@ export interface ComposerProps {
   cwd: string;
   onSend: (text: string, attachments: Draft[]) => void | Promise<void>;
   // Inline history editors keep their draft until the host accepts the resend.
-  // Outside-dismiss editors omit the cancel button; attachments retain their own removal controls.
+  // Outside-dismiss editors omit the cancel button; `attachments` are bare chip items (with their own removal controls)
+  // that open the draft row, `hasAttachments` says whether any are still retained.
   edit?: { text: string; attachments?: ReactNode; hasAttachments: boolean; onCancel: () => void; dismissOnOutside?: boolean };
   // Where the unsent draft (text + attachments) is parked while another session is shown; the session id. Absent: nothing is kept across remounts
   draftKey?: string;
@@ -174,8 +175,8 @@ export function Composer(p: ComposerProps) {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      {p.edit?.attachments}
-      <DraftChips drafts={drafts} onRemove={i => setDrafts(d => d.filter((_, j) => j !== i))} />
+      {/* Kept attachments of an edited prompt lead the same wrapping row as freshly pasted ones */}
+      <DraftChips drafts={drafts} before={p.edit?.hasAttachments ? p.edit.attachments : undefined} onRemove={i => setDrafts(d => d.filter((_, j) => j !== i))} />
       <textarea
         ref={textarea}
         rows={1}
