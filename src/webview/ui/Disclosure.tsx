@@ -1,8 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { cn } from './cn';
 import { Collapsible } from './Collapsible';
 import { Row, type RowProps } from './Row';
 import { ConnectedRail } from './ConnectedRail';
+
+// Lets an enclosing fold learn that a nested row was toggled by hand, without owning its state.
+export const DisclosureObserverContext = createContext<((open: boolean) => void) | undefined>(undefined);
 
 // An expandable row: the summary is just a Row (button), the body expands with a height animation, indented to align with the lead slot.
 // The parent container is a flex column so the button spans the full row
@@ -18,8 +21,9 @@ export interface DisclosureProps extends Omit<RowProps, 'as' | 'interactive' | '
 // Rule: a body that is indented past the lead slot (i.e. not full width) gets a rail down that slot; full-width bodies (cards, lists) get none
 export function Disclosure({ body, open: controlled, defaultOpen = false, indent = true, rail = indent ? 'body' : false, onToggle, className, ...row }: DisclosureProps) {
   const [inner, setInner] = useState(defaultOpen);
+  const observe = useContext(DisclosureObserverContext);
   const open = controlled ?? inner;
-  const toggle = (next: boolean) => { setInner(next); onToggle?.(next); };
+  const toggle = (next: boolean) => { setInner(next); onToggle?.(next); observe?.(next); };
   return (
     <Collapsible.Root open={open} onOpenChange={toggle} render={<ConnectedRail enabled={!!rail && open && row.lead !== undefined}
       endAtLastRow={rail === 'rows'}

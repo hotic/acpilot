@@ -1,10 +1,11 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Check, ChevronRight, Compass, Hand, MessageCircleQuestion, TriangleAlert, X } from 'lucide-react';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
 import { t } from '../i18n';
 import { Row, RowLabel, RowTarget, RowEntranceContext } from '../ui/Row';
-import { Disclosure } from '../ui/Disclosure';
+import { Disclosure, DisclosureObserverContext } from '../ui/Disclosure';
+import { Collapsible } from '../ui/Collapsible';
 import { Orb } from '../effects/Orb';
 import { cn } from '../ui/cn';
 import { useScrollFade } from '../ui/useScrollFade';
@@ -279,23 +280,16 @@ function CursorFold({ blocks }: { blocks: ToolCallBlock[] }) {
   );
 }
 
-// One fold per turn. New chunks update its heading and history without resetting the manual toggle.
-// Permission cards stay outside; the latest reply remains visible while it streams.
+// One process area per turn. Thoughts keep their normal disclosure under the activity row until the
+// first tool call makes the area foldable; the same panel stays mounted across that change so a row
+// the user opened is never rebuilt. Permission cards stay outside; the latest reply remains visible while it streams.
 function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; running: boolean; onPermission: OnPermission }) {
-  // Thoughts keep their normal disclosure. A turn without tools needs no enclosing process fold.
-  if (!turn.blocks.some(block => block.type === 'tool_call')) {
-    return (
-      <div className="flex flex-col gap-gap">
-        <Activity turn={turn} running={running} />
-        {detailBlocks(turn, running).map((block, i) => <Block key={'id' in block ? block.id : i} block={block} onPermission={onPermission} />)}
-        {!running && outcomeOf(turn) && <Outcome turn={turn} />}
-      </div>
-    );
-  }
   const { process, reply, permissions } = splitCodexBlocks(detailBlocks(turn, running));
+  const foldable = turn.blocks.some(block => block.type === 'tool_call');
   return (
     <div className="flex flex-col gap-gap">
-      {(process.length > 0 || (running && reply.length === 0)) && <CodexFold turn={turn} blocks={process} running={running} />}
+      {!foldable && <Activity turn={turn} running={running} />}
+      <CodexFold turn={turn} blocks={process} running={running} foldable={foldable} />
       {reply.map((block, i) => <Prose key={i} block={block} />)}
       {permissions.filter(block => !block.planId).map(block => <Permission key={block.id} block={block} onChoose={id => onPermission(block.id, id)} />)}
       {!running && outcomeOf(turn) && <Outcome turn={turn} />}
@@ -303,37 +297,58 @@ function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; runnin
   );
 }
 
-function CodexFold({ turn, blocks, running }: { turn: AgentTurn; blocks: AgentBlock[]; running: boolean }) {
-  const [open, setOpen] = useState(false);
+// The fold latches its initial state the moment it becomes foldable: closed unless a nested row is open by hand,
+// which keeps that row on screen. Afterwards only the user's toggle moves it; new chunks never reset it.
+function CodexFold({ turn, blocks, running, foldable }: { turn: AgentTurn; blocks: AgentBlock[]; running: boolean; foldable: boolean }) {
+  const [manual, setManual] = useState<boolean>();
+  const openedInside = useRef(0);
+  const latched = useRef<boolean | undefined>(undefined);
+  if (!foldable) latched.current = undefined;
+  else latched.current ??= openedInside.current > 0;
+  const observe = useCallback((next: boolean) => { openedInside.current += next ? 1 : -1; }, []);
+  const open = !foldable || (manual ?? latched.current);
   const activity = liveActivity(turn);
   const CompletionIcon = turn.stop === 'cancelled' ? X : outcomeOf(turn) ? TriangleAlert : Check;
   const lead = running ? activity.lead : <CompletionIcon className="size-icon" strokeWidth={1.5} />;
   const label = running ? activity.label : outcomeOf(turn) ?? t('turns.done');
   const elapsed = !running && turn.startedAt !== undefined && turn.endedAt !== undefined ? elapsedLabel(turn) : undefined;
-  const heading = <>
-    <RowLabel className={running && activity.active ? 'shimmer' : undefined}>{label}</RowLabel>
-    {elapsed && <span className="min-w-0 truncate text-fg-3" title={elapsed}>{elapsed}</span>}
-  </>;
-  if (blocks.length === 0) return <Row lead={lead}>{heading}</Row>;
+  if (!foldable && blocks.length === 0) return null;
   return (
-    <Disclosure
-      lead={lead} indent={false} open={open} onToggle={setOpen}
-      title={label}
-      body={<ProcessHistory><ProcessBlocks blocks={blocks} /></ProcessHistory>}
-    >
-      {heading}
-      <ChevronRight className={cn('size-3 shrink-0 self-center transition-transform', open && 'rotate-90')} strokeWidth={1.75} />
-    </Disclosure>
+    <Collapsible.Root open={open} onOpenChange={setManual} className="group flex min-w-0 flex-col" data-open={open || undefined}>
+      {foldable && (
+        <Collapsible.Trigger render={<Row as="button" interactive lead={lead} title={label} />}>
+          <RowLabel className={running && activity.active ? 'shimmer' : undefined}>{label}</RowLabel>
+          {elapsed && <span className="min-w-0 truncate text-fg-3" title={elapsed}>{elapsed}</span>}
+          <ChevronRight className={cn('size-3 shrink-0 self-center transition-transform', open && 'rotate-90')} strokeWidth={1.75} />
+        </Collapsible.Trigger>
+      )}
+      {blocks.length > 0 && (
+        // Nested rows extend their hit area beyond the text column; reserve it inside the clip so its edges cannot cut off row corners.
+        <Collapsible.Panel className="-mx-hit [&>div]:px-hit">
+          <div className={cn(foldable && 'pt-1 pb-1.5')}>
+            <DisclosureObserverContext.Provider value={observe}>
+              <ProcessHistory><ProcessBlocks blocks={blocks} /></ProcessHistory>
+            </DisclosureObserverContext.Provider>
+          </div>
+        </Collapsible.Panel>
+      )}
+    </Collapsible.Root>
   );
 }
 
 // Process details retain static icons; only the currently running verb shimmers.
+// Unkeyed blocks take their transcript position, so a read group forming ahead of them does not remount them.
 function ProcessBlocks({ blocks }: { blocks: AgentBlock[] }) {
-  return groupReadCalls(blocks).map((item, i) => Array.isArray(item)
-    ? <ReadGroup key={item[0]!.id} blocks={item} />
-    : item.type === 'tool_call' ? <ToolCall key={item.id} block={item} grouped />
-    : item.type === 'text' ? <Prose key={i} block={item} />
-    : <LineBlock key={'id' in item ? item.id : i} block={item} />);
+  let position = 0;
+  return groupReadCalls(blocks).map(item => {
+    const at = position;
+    position += Array.isArray(item) ? item.length : 1;
+    return Array.isArray(item)
+      ? <ReadGroup key={item[0]!.id} blocks={item} />
+      : item.type === 'tool_call' ? <ToolCall key={item.id} block={item} grouped />
+      : item.type === 'text' ? <Prose key={at} block={item} />
+      : <LineBlock key={'id' in item ? item.id : at} block={item} />;
+  });
 }
 
 function LineBlock({ block }: { block: AgentBlock }) {
