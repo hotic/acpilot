@@ -55,8 +55,10 @@ export class WebviewBridge implements vscode.Disposable {
   private async onMessage(m: WebviewMsg) {
     if (m.type === 'ready') {
       this.ready = true;
-      // A webview (re)opening is a cheap moment to re-check the executables; a change arrives as an `agents` event after init
+      // A webview (re)opening is a cheap moment to re-check the executables (a change arrives as an `agents` event after init) and to pick up
+      // sessions another window created since; the list is reconciled before ensureActive so a sidebar starting on "most recent" sees them
       void this.manager.reprobe();
+      await this.manager.refreshIndex();
       await this.viewer.ensureActive();
       this.post({
         type: 'init',

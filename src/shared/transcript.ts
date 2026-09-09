@@ -318,6 +318,8 @@ export interface SessionSummary {
   title: string;
   agent: AgentId;
   accountId?: string;
+  // The project the session belongs to: the workspace folder it was opened in (also the agent's working directory)
+  cwd: string;
   // ISO timestamp; the webview formats it itself
   updatedAt: string;
   pinned?: boolean;

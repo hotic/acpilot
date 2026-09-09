@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentId, SessionSummary, TurnSettings } from '@shared/transcript';
 import type { SessionRecord } from '../acp/AcpSession';
@@ -13,6 +13,7 @@ export interface SessionPrefs {
 }
 
 const META_FILES = new Set(['index.json', 'prefs.json']);
+const TRASH_DIR = 'trash';
 
 // Streamed updates call save() every few milliseconds; one write per session this often is plenty
 const SAVE_DEBOUNCE_MS = 400;
@@ -22,8 +23,12 @@ interface PendingWrite {
   record: SessionRecord;
 }
 
-// Session persistence: <dir>/index.json holds the summary list, <dir>/prefs.json the per-agent memory, <dir>/<id>.json the full record,
-// <dir>/<id>/ its attachment blobs. Record writes are debounced per session
+// Session persistence: <dir>/index.json caches the summary list, <dir>/prefs.json the per-agent memory, <dir>/<id>.json the full record,
+// <dir>/<id>/ its attachment blobs, <dir>/trash/ the soft-deleted ones during their undo window. Record writes are debounced per session.
+//
+// The directory is shared by every extension host (each VS Code / Cursor window runs its own), so the index is never trusted blindly:
+// syncIndex re-reads it and reconciles it with the record files on disk before writing, and every file is written atomically
+// (tmp + rename) so another window can never read a half-written record
 export class TranscriptStore implements BlobStore {
   private pending = new Map<string, PendingWrite>();
 
@@ -31,10 +36,8 @@ export class TranscriptStore implements BlobStore {
 
   private async ensure() { await mkdir(this.dir, { recursive: true }); }
 
-  async loadIndex(): Promise<SessionSummary[]> {
-    try { return JSON.parse(await readFile(join(this.dir, 'index.json'), 'utf8')) as SessionSummary[]; }
-    catch { return this.rebuildIndex(); }
-  }
+  // The list as the disk knows it: the cached index reconciled with the record files (see syncIndex)
+  loadIndex(): Promise<SessionSummary[]> { return this.syncIndex([], new Set()); }
 
   async loadPrefs(): Promise<SessionPrefs> {
     try { return { lastSettings: {}, ...(JSON.parse(await readFile(join(this.dir, 'prefs.json'), 'utf8')) as Partial<SessionPrefs>) }; }
@@ -43,28 +46,51 @@ export class TranscriptStore implements BlobStore {
 
   async savePrefs(prefs: SessionPrefs) {
     await this.ensure();
-    await writeFile(join(this.dir, 'prefs.json'), JSON.stringify(prefs, null, 2));
+    await this.writeAtomic(join(this.dir, 'prefs.json'), JSON.stringify(prefs, null, 2));
   }
 
-  // If the index is lost, rebuild it by scanning the directory
-  private async rebuildIndex(): Promise<SessionSummary[]> {
+  // Merge this host's view of the list with what is on disk, write the result, and return it.
+  // The record files are the truth: an id whose file is gone (deleted or trashed by another window) drops out, a file no index knows
+  // (created by another window, or left behind by a lost index) is loaded and summarized. Where the disk index and `mine` both have an
+  // entry, `mine` wins only for the ids in `own` (sessions this host has live or has just patched); for the rest the disk is fresher,
+  // since another window may have renamed or pinned them. Entries from older builds lacking cwd are backfilled from their record once.
+  // Debounced records are written first: an index must never name a record another window cannot find on disk
+  async syncIndex(mine: SessionSummary[], own: Set<string>): Promise<SessionSummary[]> {
     await this.ensure();
+    await this.flushPending();
+    const disk = new Map((await this.readIndex()).map(s => [s.id, s]));
+    const local = new Map(mine.map(s => [s.id, s]));
     const out: SessionSummary[] = [];
-    for (const f of await readdir(this.dir)) {
-      if (!f.endsWith('.json') || META_FILES.has(f)) continue;
-      const r = await this.load(f.slice(0, -5));
-      if (r) out.push(summarize(r));
+    for (const id of await this.recordIds()) {
+      let s = own.has(id) ? local.get(id) ?? disk.get(id) : disk.get(id) ?? local.get(id);
+      if (!s || !s.cwd) {
+        const r = await this.load(id);
+        if (!r) continue;
+        s = { ...s, ...summarize(r) };
+      }
+      out.push(s);
     }
-    return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    sortIndex(out);
+    await this.writeAtomic(join(this.dir, 'index.json'), JSON.stringify(out, null, 2));
+    return out;
   }
 
-  async saveIndex(list: SessionSummary[]) {
-    await this.ensure();
-    await writeFile(join(this.dir, 'index.json'), JSON.stringify(list, null, 2));
+  private async readIndex(): Promise<SessionSummary[]> {
+    try {
+      const v = JSON.parse(await readFile(join(this.dir, 'index.json'), 'utf8')) as unknown;
+      return Array.isArray(v) ? v.filter((s): s is SessionSummary => !!s && typeof s === 'object' && typeof (s as SessionSummary).id === 'string') : [];
+    } catch { return []; }
+  }
+
+  // Ids with a record file in the live directory (not the trash)
+  private async recordIds(): Promise<string[]> {
+    return (await readdir(this.dir)).filter(f => f.endsWith('.json') && !META_FILES.has(f)).map(f => f.slice(0, -5));
   }
 
   // A record that fails to parse, or lacks the fields every reader relies on, counts as missing: better an empty entry than a crash mid-restore
   async load(id: string): Promise<SessionRecord | null> {
+    const pending = this.pending.get(id);
+    if (pending) return pending.record;
     let raw: string;
     try { raw = await readFile(join(this.dir, `${id}.json`), 'utf8'); }
     catch { return null; }
@@ -92,19 +118,62 @@ export class TranscriptStore implements BlobStore {
     await this.write(record);
   }
 
-  // Removes the record and its blob directory
+  // Removes the record and its blob directory for good, wherever they are (live or trash)
   async remove(id: string) {
     this.cancelPending(id);
-    await rm(join(this.dir, `${id}.json`), { force: true });
-    await rm(join(this.dir, id), { recursive: true, force: true });
+    for (const dir of [this.dir, join(this.dir, TRASH_DIR)]) {
+      await rm(join(dir, `${id}.json`), { force: true });
+      await rm(join(dir, id), { recursive: true, force: true });
+    }
+  }
+
+  // Soft deletion: move the record and its blobs into trash/ so the live directory (what syncIndex trusts) no longer lists it, while an
+  // undo can still bring it back. Unlike an in-memory trash, this survives a crash: sweepTrash cleans up whatever is left on the next start
+  async trash(id: string) {
+    this.cancelPending(id);
+    const trash = join(this.dir, TRASH_DIR);
+    await mkdir(trash, { recursive: true });
+    await this.move(this.dir, trash, id);
+    // rename keeps the record's mtime; stamp the moment it was trashed so sweepTrash can tell a fresh undo window from a leftover
+    const now = new Date();
+    await utimes(join(trash, `${id}.json`), now, now).catch(() => {});
+  }
+
+  async restore(id: string) {
+    await this.move(join(this.dir, TRASH_DIR), this.dir, id);
+  }
+
+  // Remove what was trashed more than `olderThanMs` ago: its undo window closed with the host that trashed it. Anything younger may still
+  // be undone in another window and is left alone
+  async sweepTrash(olderThanMs = 0) {
+    const trash = join(this.dir, TRASH_DIR);
+    let files: string[];
+    try { files = await readdir(trash); } catch { return; }
+    const cutoff = Date.now() - olderThanMs;
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      const id = f.slice(0, -5);
+      const mtime = await stat(join(trash, f)).then(s => s.mtimeMs).catch(() => 0);
+      if (mtime > cutoff) continue;
+      await rm(join(trash, f), { force: true });
+      await rm(join(trash, id), { recursive: true, force: true });
+    }
+  }
+
+  private async move(from: string, to: string, id: string) {
+    await rename(join(from, `${id}.json`), join(to, `${id}.json`)).catch(() => {});
+    await rename(join(from, id), join(to, id)).catch(() => {});
   }
 
   // Writes whatever is still debounced; called when the extension host goes down so the last few seconds of a transcript are not lost
-  async dispose() {
+  async dispose() { await this.flushPending(); }
+
+  private async flushPending() {
+    if (!this.pending.size) return;
     const writes = [...this.pending.values()].map(p => { clearTimeout(p.timer); return this.write(p.record); });
     this.pending.clear();
     const results = await Promise.allSettled(writes);
-    for (const r of results) if (r.status === 'rejected') this.log(`final save failed (${msg(r.reason)})`);
+    for (const r of results) if (r.status === 'rejected') this.log(`save failed (${msg(r.reason)})`);
   }
 
   private cancelPending(id: string) {
@@ -116,7 +185,14 @@ export class TranscriptStore implements BlobStore {
 
   private async write(record: SessionRecord) {
     await this.ensure();
-    await writeFile(join(this.dir, `${record.id}.json`), JSON.stringify(record));
+    await this.writeAtomic(join(this.dir, `${record.id}.json`), JSON.stringify(record));
+  }
+
+  // Write next to the target and rename over it: readers in other windows see the old file or the new one, never a torn one
+  private async writeAtomic(path: string, data: string) {
+    const tmp = `${path}.${process.pid}.tmp`;
+    await writeFile(tmp, data);
+    await rename(tmp, path);
   }
 
   // Blob names are content hashes, so pasting the same image twice yields one file. The session id names the directory, so it must be a plain token
@@ -138,7 +214,12 @@ export class TranscriptStore implements BlobStore {
 }
 
 export function summarize(r: SessionRecord): SessionSummary {
-  return { id: r.id, title: r.title, agent: r.agent, accountId: r.accountId, updatedAt: r.updatedAt, pinned: r.pinned };
+  return { id: r.id, title: r.title, agent: r.agent, accountId: r.accountId, cwd: r.cwd, updatedAt: r.updatedAt, pinned: r.pinned };
+}
+
+// Pinned first, then newest first: the order the list shows
+export function sortIndex(list: SessionSummary[]) {
+  list.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt.localeCompare(a.updatedAt));
 }
 
 // The minimum shape the manager and the session constructor dereference without checks

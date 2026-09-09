@@ -72,21 +72,24 @@ describe('SessionManager', () => {
     await m.handle({ type: 'pinSession', id: a, pinned: true });
     expect(m.sessions()[0]).toMatchObject({ id: a, title: '第一条', pinned: true });
 
-    // delete the current session b → active switches to a, b's file is still there (in the trash)
+    // delete the current session b → active switches to a, b's file moved to the trash (out of the live directory, so no other window lists it)
     await m.handle({ type: 'deleteSession', id: b });
     expect(m.sessions().map(s => s.id)).toEqual([a]);
     expect(m.activeId).toBe(a);
     expect(m.active()?.title).toBe('第一条');
-    expect(existsSync(join(dir, `${b}.json`))).toBe(true);
+    expect(existsSync(join(dir, `${b}.json`))).toBe(false);
+    expect(existsSync(join(dir, 'trash', `${b}.json`))).toBe(true);
 
     await m.handle({ type: 'restoreSession', id: b });
     expect(m.sessions().map(s => s.id).sort()).toEqual([a, b].sort());
+    expect(existsSync(join(dir, `${b}.json`))).toBe(true);
 
     // delete a again, then reopen the manager: only b left in the index
     await m.handle({ type: 'deleteSession', id: a });
     expect(m.activeId).toBe(b);
     await m.dispose();
     expect(existsSync(join(dir, `${a}.json`))).toBe(false);
+    expect(existsSync(join(dir, 'trash', `${a}.json`))).toBe(false);
     const m2 = new SessionManager({
       registry: new AgentRegistry(), store: new TranscriptStore(dir), log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'fake', runInTerminal: () => {}, toast: () => {},
     });
@@ -279,6 +282,51 @@ describe('SessionManager', () => {
     expect(m.sessions().map(s => s.id)).toEqual([a]);
     await m.dispose();
   }, 20_000);
+
+  // Two extension hosts (two windows, or VS Code + Cursor) share ~/.acpira/sessions. Each used to rewrite index.json from its own memory,
+  // so whichever streamed last erased the other's new sessions from the list while their records stayed on disk
+  it('two managers over one directory: sessions created in one show up in the other on refresh, neither erases the other’s, deletion is honored across', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'acpira-mgr-'));
+    const mk = () => new SessionManager({
+      registry: new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE] } }),
+      store: new TranscriptStore(dir), log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'fake', runInTerminal: () => {}, toast: () => {},
+    });
+    const a = mk();
+    const b = mk();
+    await a.init();
+    await b.init();
+    await a.newSession();
+    await a.handle({ type: 'send', text: 'from A' });
+    const sa = a.activeId!;
+    await b.newSession();
+    await b.handle({ type: 'send', text: 'from B' });
+    const sb = b.activeId!;
+    // Each keeps streaming (index writes on both sides) — nothing is lost; a refresh (window focus) is when the other's work shows up
+    await a.handle({ type: 'send', text: 'A again' });
+    await b.handle({ type: 'send', text: 'B again' });
+    await b.refreshIndex();
+    await a.refreshIndex();
+    await b.refreshIndex();
+    expect(a.sessions().map(s => s.id).sort()).toEqual([sa, sb].sort());
+    expect(b.sessions().map(s => s.id).sort()).toEqual([sa, sb].sort());
+    // A renames its own session: B sees the new title after its refresh, not its stale copy
+    await a.handle({ type: 'renameSession', id: sa, title: 'A 的会话' });
+    await a.refreshIndex();
+    await b.refreshIndex();
+    expect(b.sessions().find(s => s.id === sa)?.title).toBe('A 的会话');
+    // A's window closes; B deletes A's session (live nowhere now): a host starting meanwhile does not list it, B's undo brings it back for everyone
+    await a.dispose();
+    const c = mk();
+    await b.handle({ type: 'deleteSession', id: sa });
+    await c.init();
+    expect(c.sessions().map(s => s.id)).toEqual([sb]);
+    await b.handle({ type: 'restoreSession', id: sa });
+    await c.refreshIndex();
+    expect(c.sessions().map(s => s.id).sort()).toEqual([sa, sb].sort());
+    expect(c.sessions().find(s => s.id === sa)?.title).toBe('A 的会话');
+    await b.dispose();
+    await c.dispose();
+  }, 30_000);
 
   it('the first session takes the warm process started at init', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'acpira-mgr-'));

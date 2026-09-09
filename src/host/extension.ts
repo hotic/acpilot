@@ -120,8 +120,9 @@ export async function activate(context: vscode.ExtensionContext) {
       panel.onDidDispose(() => { sub(); bridges.delete(b); b.dispose(); });
     }),
 
-    // Coming back from an external terminal where a CLI was installed or removed: re-check the executables right away
-    vscode.window.onDidChangeWindowState(e => { if (e.focused) void manager.reprobe(); }),
+    // Coming back from an external terminal where a CLI was installed or removed: re-check the executables right away; coming back from
+    // another window (VS Code or Cursor, same ~/.acpira): pick up the sessions it created or deleted
+    vscode.window.onDidChangeWindowState(e => { if (e.focused) { void manager.reprobe(); void manager.refreshIndex(); } }),
 
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('acpira.appearance')) for (const b of bridges) b.pushAppearance();

@@ -8,7 +8,7 @@ import { AgentPool } from './acp/AgentPool';
 import { AcpSession, type CompactionPolicy, type SessionRecord } from './acp/AcpSession';
 import type { AccountManager } from './accounts/AccountManager';
 import type { LocalAccounts } from './accounts/local';
-import { TranscriptStore, summarize, type SessionPrefs } from './store/TranscriptStore';
+import { TranscriptStore, sortIndex, summarize, type SessionPrefs } from './store/TranscriptStore';
 import { cloneJson } from './clone';
 import { msg } from './errors';
 import { t } from './i18n';
@@ -43,6 +43,8 @@ export type ManagerEvent =
 const TRASH_TTL = 30_000;
 // While some agent has no executable, look again this often (a handful of stat calls) so a CLI installed in a terminal lights up without a reload
 const PROBE_INTERVAL = 10_000;
+// Streamed updates change the in-memory list every few milliseconds; the disk index (a readdir + merge) follows at this pace
+const INDEX_DEBOUNCE = 400;
 
 // One viewer per webview (sidebar, each editor tab): its own active session over the shared process pool and session list, so several
 // tabs can each show a different conversation. Global events (list, agents, accounts) reach every viewer; `session` events only the viewers showing that session
@@ -91,6 +93,12 @@ export class SessionManager {
   private unwatchRegistry?: () => void;
   private unwatchLocalAccounts?: () => void;
   private probeTimer?: NodeJS.Timeout;
+  // Disk index reconciliation (see syncIndex): one debounced run at a time, re-run once more if something changed meanwhile.
+  // `touched` holds the ids of records this host patched on disk without loading them, so its summaries beat the disk index for them
+  private syncTimer?: NodeJS.Timeout;
+  private syncing?: Promise<void>;
+  private syncAgain = false;
+  private touched = new Set<string>();
   private disposed = false;
 
   constructor(private deps: ManagerDeps) {
@@ -105,6 +113,8 @@ export class SessionManager {
   }
 
   async init() {
+    // Whatever a crashed host left in the trash had its undo window closed with it (a window still open in another host keeps its entries)
+    await this.deps.store.sweepTrash(TRASH_TTL).catch(e => this.deps.log(`trash sweep failed: ${msg(e)}`));
     this.index = await this.deps.store.loadIndex();
     this.prefs = await this.deps.store.loadPrefs();
     await this.deps.registry.probeAll();
@@ -164,8 +174,44 @@ export class SessionManager {
     this.deps.store.savePrefs(this.prefs).catch(e => this.deps.log(`prefs save failed: ${msg(e)}`));
   }
 
+  // The in-memory list changed: bring the disk index along shortly (debounced, since streaming touches it constantly)
   private saveIndex() {
-    this.deps.store.saveIndex(this.index).catch(e => this.deps.log(`index save failed: ${msg(e)}`));
+    clearTimeout(this.syncTimer);
+    this.syncTimer = setTimeout(() => { this.syncTimer = undefined; void this.syncIndex(); }, INDEX_DEBOUNCE);
+    this.syncTimer.unref?.();
+  }
+
+  // Reconcile the list with the sessions directory now: sessions another window created (or that a clobbered index forgot) appear, ones it
+  // deleted disappear. Called on the debounce, when a webview comes up and when the window regains focus, so two windows converge without a reload
+  async refreshIndex(): Promise<void> {
+    clearTimeout(this.syncTimer);
+    this.syncTimer = undefined;
+    await this.syncIndex();
+  }
+
+  // One run at a time; a request arriving mid-run schedules exactly one more. The result is corrected for what changed during the await:
+  // live sessions keep their current summary, a session trashed meanwhile stays out, one created meanwhile stays in
+  private syncIndex(): Promise<void> {
+    if (this.syncing) { this.syncAgain = true; return this.syncing; }
+    this.syncing = (async () => {
+      do {
+        this.syncAgain = false;
+        const own = new Set([...this.live.keys(), ...this.touched]);
+        this.touched.clear();
+        try {
+          const merged = (await this.deps.store.syncIndex(this.index, own)).filter(s => !this.trash.has(s.id));
+          for (const s of this.live.values()) {
+            const sum = summarize(s.toRecord());
+            const i = merged.findIndex(x => x.id === s.id);
+            if (i >= 0) merged[i] = sum; else merged.push(sum);
+          }
+          sortIndex(merged);
+          if (JSON.stringify(merged) !== JSON.stringify(this.index)) { this.index = merged; this.emitSessions(); }
+        } catch (e) { this.deps.log(`index sync failed: ${msg(e)}`); }
+      } while (this.syncAgain);
+      this.syncing = undefined;
+    })();
+    return this.syncing;
   }
 
   get registry(): AgentRegistry { return this.deps.registry; }
@@ -282,7 +328,7 @@ export class SessionManager {
     const i = this.index.findIndex(x => x.id === s.id);
     const sum = summarize(s.toRecord());
     if (i >= 0) this.index[i] = sum; else this.index.unshift(sum);
-    this.sortIndex();
+    sortIndex(this.index);
     this.deps.store.save(s.toRecord());
     this.saveIndex();
     this.emitSession(s);
@@ -354,7 +400,7 @@ export class SessionManager {
     this.live.delete(cur.id);
     this.index = this.index.filter(x => x.id !== cur.id);
     await this.deps.store.remove(cur.id);
-    await this.deps.store.saveIndex(this.index);
+    this.saveIndex();
   }
 
   async selectSessionFor(v: SessionViewer, id: string): Promise<void> {
@@ -363,7 +409,7 @@ export class SessionManager {
     const live = this.live.get(id);
     if (live) { v.emit({ type: 'session', session: live.view() }); this.emitSessions(); return; }
     const record = await this.deps.store.load(id);
-    if (!record) { this.deps.toast('error', t('host.recordLost')); this.index = this.index.filter(s => s.id !== id); this.emitSessions(); return; }
+    if (!record) { this.deps.toast('error', t('host.recordLost')); this.index = this.index.filter(s => s.id !== id); this.emitSessions(); this.saveIndex(); return; }
     const s = new AcpSession(record, this.sessionDeps());
     this.live.set(id, s);
     this.emitSession(s);
@@ -448,17 +494,14 @@ export class SessionManager {
     await this.deps.store.flush(r);
     const i = this.index.findIndex(s => s.id === id);
     if (i >= 0) this.index[i] = summarize(r);
-    this.sortIndex();
-    await this.deps.store.saveIndex(this.index);
+    sortIndex(this.index);
+    this.touched.add(id);
+    this.saveIndex();
     this.emitSessions();
   }
 
-  private sortIndex() {
-    this.index.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt.localeCompare(a.updatedAt));
-  }
-
-  // Deletion is soft: kill the process, drop it from the list, keep the record on disk in a "trash bin" with a 30-second undo window; the file is really deleted only after that.
-  // Every viewer showing the deleted one switches to the first in the list; if none, the first of them opens a new one and the rest follow onto it
+  // Deletion is soft: kill the process, drop it from the list, move the record into the store's trash with a 30-second undo window; the files are really
+  // deleted only after that. Every viewer showing the deleted one switches to the first in the list; if none, the first of them opens a new one and the rest follow onto it
   async deleteSession(id: string) {
     const live = this.live.get(id);
     if (live) { await this.deps.store.flush(live.toRecord()); live.dispose(); this.live.delete(id); }
@@ -466,13 +509,14 @@ export class SessionManager {
     this.modeSeen.delete(id);
     const sum = this.index.find(s => s.id === id);
     this.index = this.index.filter(s => s.id !== id);
-    await this.deps.store.saveIndex(this.index);
     if (sum) {
       this.trash.set(id, { summary: sum, timer: setTimeout(() => {
         this.trash.delete(id);
         this.deps.store.remove(id).catch(e => this.deps.log(`session ${id}: delete failed (${msg(e)})`));
       }, TRASH_TTL) });
     }
+    await this.deps.store.trash(id);
+    this.saveIndex();
     for (const v of this.viewersOn(id)) {
       v.activeId = undefined;
       const next = this.index[0]?.id;
@@ -481,15 +525,17 @@ export class SessionManager {
     this.emitSessions();
   }
 
-  // Undo deletion: pull it back from the trash into the list; the record stayed on disk the whole time and restores as usual when opened
+  // Undo deletion: move it back out of the trash into the list; the record stayed on disk the whole time and restores as usual when opened
   async restoreSession(id: string) {
     const t = this.trash.get(id);
     if (!t) return;
     clearTimeout(t.timer);
     this.trash.delete(id);
+    await this.deps.store.restore(id);
     this.index.push(t.summary);
-    this.sortIndex();
-    await this.deps.store.saveIndex(this.index);
+    sortIndex(this.index);
+    this.touched.add(id);
+    this.saveIndex();
     this.emitSessions();
   }
 
@@ -568,6 +614,10 @@ export class SessionManager {
     // Trashed entries are cleaned up when their time comes
     for (const [id, t] of this.trash) { clearTimeout(t.timer); await this.deps.store.remove(id); }
     this.trash.clear();
+    // A pending reconcile still lands, so the index the next host reads has this one's last few seconds
+    clearTimeout(this.syncTimer);
+    this.syncTimer = undefined;
     await this.deps.store.dispose();
+    await this.syncIndex();
   }
 }
