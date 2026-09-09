@@ -1,8 +1,59 @@
 # Acpira
 
-面向 VS Code / Cursor 的 ACP 编程 Agent 聊天界面。
+**原生的编程 Agent，讲究的交互体验。**
+
+在 VS Code 与 Cursor 中使用 Grok、Devin、Kimi Code 及其他 ACP Agent。保留各自的执行引擎，清晰查看执行过程、审批操作，在任务进行时继续安排下一步。
 
 [English](README.md) · **简体中文**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hotic/acpira/main/media/readme/hero-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/hotic/acpira/main/media/readme/hero-light.png">
+  <img src="media/readme/hero-light.png" alt="Acpira 编程对话：展开的执行过程、文件修改对比和模型控制。" width="960">
+</picture>
+
+- **执行记录。** 在对话中查看文件读取、代码修改和命令输出。
+- **消息队列与审批。** Agent 工作时可追加排队消息，计划审阅和权限审批在对话中完成。
+- **切换 Agent，保留熟悉的操作。** 支持 Grok、Devin、Kimi Code 及其他兼容 ACP 的 CLI，共用会话管理与模型控制界面。
+
+### 看看实际交互
+
+**查看任务进展。** 先查看执行过程和代码修改，再展开与收起待办。
+
+![先查看执行过程和代码修改，再展开与收起待办。](media/readme/inspect.gif)
+
+**发送下一步。** 输入并排队后续请求，点击直接发送，查看完整回复。
+
+![输入后续请求，从队列中直接发送，再查看完整回复。](media/readme/follow-up.gif)
+
+*使用示例对话录制，画面来自 Acpira 实际界面，镜头聚焦为后期效果。*
+
+## 为什么保留原生 Agent
+
+Harness 会影响模型在实际任务中能发挥到什么程度。它负责驱动 agentic loop：调用模型、执行工具、回传结果，再组织上下文继续下一步。同一个模型，这套循环的实现不同，任务通过率、成本与速度都可能发生变化。
+
+Acpira 通过 ACP 连接 Agent CLI，把模型调用与执行留在所选 Agent 中。Kimi Code 运行 `kimi acp`，Devin 运行 `devin acp`，Grok 运行 `grok agent stdio`。工具与上下文压缩继续由各自的 CLI 负责。
+
+Acpira 负责这套执行流程周围的界面：代码差异、可展开的执行细节、待办、审批和排队消息。切换 Agent 后，这些操作保持一致。
+
+<details>
+<summary>相关评测</summary>
+
+以下评测从不同任务出发，比较模型与 Harness 的组合。各项分数的定义不同，适合在同一评测内对照。
+
+| 评测 | 范围 | 结果或方法 |
+| --- | --- | --- |
+| [Artificial Analysis Coding Agent Index](https://artificialanalysis.ai/agents/coding-agents) | 独立评测；覆盖 DeepSWE、Terminal-Bench 2.1 和 SWE-Atlas-QnA | 包含固定 **Claude Opus 4.7、比较不同 Harness** 的视图，同时报告成本、Token 和耗时；每题运行三次。 |
+| [FrontierHarness Eval v1.0](https://frontierharness.org/) | Kimi K3；30 道软件工程任务；9 个 Harness、12 种配置 | 通过率介于 **50.0%–66.7%**。[公开数据与方法](https://github.com/frontier-harness-eval/eval)。 |
+| [Composio 八种 Harness 对比](https://composio.dev/content/best-ai-agent-harnesses) | 通过 OpenRouter 使用 Kimi K3；25 道业务应用任务；共用 MCP 工具 | 通过率介于 **68%–88%**。在共有用量数据的 24 道任务上，估算 API 总成本介于 **$9.28–$35.37**。 |
+| [PawBench v1.0](https://github.com/agentscope-ai/PawBench) | AgentScope/OpenJudge 团队评测；9 个模型 × 3 个 Harness × 150 道任务 | 固定 Qwen3.6-35B-A3B，综合分数介于 **56.7–68.3**。采用自动检查与模型裁判，参评对象包含该团队的 QwenPaw。 |
+| [Harness-Bench](https://arxiv.org/html/2605.27922v1) | 研究预印本；106 道离线任务；8 个模型后端 × 6 个可配置 Harness | 在相同模型池上取平均，综合分数介于 **52.4–76.2**。分数含完成情况与过程质量，衡量完整配置差异。 |
+
+来源、指标与更多对比见[评测说明](HARNESS-EVALUATIONS.md)。
+
+</details>
+
+## 工作原理
 
 Acpira 位于活动栏，通过 [ACP](https://agentclientprotocol.com)（JSON-RPC over stdio）驱动官方 Agent CLI：
 
@@ -13,10 +64,7 @@ Acpira 位于活动栏，通过 [ACP](https://agentclientprotocol.com)（JSON-RP
 
 界面、会话、权限审批、账号与上下文预算由扩展管理；模型调用、Agent 执行与上下文压缩仍由各 CLI 完成。
 
-- **接入已有 Agent：** 从输入框下方的工具栏驱动 Grok、Devin、Kimi Code，或任何兼容 ACP 的命令。
-- **会话与权限：** 在侧栏中组织对话，并在工具运行前审批权限。
-- **多账号：** 为每个 Agent 保存多份登录，切换账号即创建新会话。
-- **图片、文件与队列：** 粘贴或拖入图片，用 `@` 附加工作区文件。当前回合进行中发送的消息会进入队列。
+支持为每个 Agent 保存多个账号、粘贴或拖入图片，以及通过 `@` 附加工作区文件。对话可在侧栏或编辑器标签页中打开。
 
 ## 安装
 
@@ -50,6 +98,17 @@ Acpira 可为每个 Agent 保存多份登录，并在创建会话时注入凭据
 - 每个会话自始至终绑定一个账号。登录提示上的「仅本次」选项（例如 Devin 的「浏览器登录」）只认证当前进程，不会保存。
 
 尚未提供账号列表的 Agent，仍使用各自 CLI 的登录。
+
+## 路线图
+
+- 更多 Agent 接入：通过 ACP 或适配器支持 Antigravity、Claude Code、OpenCode、Cursor CLI、Pi 等。
+- 统一模型配置入口，自动同步到不同 Agent。
+- 统一管理 Skills 与 MCP。
+- 跨 Harness 共享提示词与项目指令。
+- IntelliJ IDEA 插件。
+- 长期方向：独立桌面端。
+
+具体方向见 [ROADMAP.md](ROADMAP.md#简体中文)。
 
 ## 开发
 
