@@ -1,7 +1,7 @@
 import type { AccountQuota, AgentId } from '@shared/transcript';
 import type { AgentProcess } from '../acp/AgentProcess';
 
-// Credential = secret + non-secret companion fields (service URL, etc.). The secret appears only in SecretStorage and in the ACP authenticate request
+// Credential = secret + non-secret companion fields (service URL, etc.). The secret appears only in the host vault and in the ACP authenticate request
 export interface AccountCredential {
   secret: string;
   meta?: Record<string, string>;

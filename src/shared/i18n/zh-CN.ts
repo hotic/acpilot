@@ -116,7 +116,7 @@ export const zhCN = {
   // Notice bar above the composer
   'notice.connecting': '正在启动 {agent}…',
   'notice.login.title': '需要登录 {agent}',
-  'notice.login.accounts': '导入本机 CLI 已有的登录，或在终端登录一个新账号；凭据只存在本机钥匙串里',
+  'notice.login.accounts': '导入本机 CLI 已有的登录，或在终端登录一个新账号；凭据保存在 ~/.acpira',
   'notice.login.methods': '选一种方式登录，完成后重试',
   'notice.login.terminal': '在终端完成登录后重试',
   'notice.readonly.title': '只读历史',
@@ -364,7 +364,7 @@ export const zhCN = {
   'settings.fact.version': '版本',
   'settings.fact.noLive': '新建会话后显示',
   'settings.agent.accounts': '账号',
-  'settings.agent.accounts.desc': '登录信息保存在本机钥匙串。切换账号将新建会话。',
+  'settings.agent.accounts.desc': '登录信息保存在 ~/.acpira。切换账号将新建会话。',
   'settings.agent.accounts.none': '尚未添加账号',
   'settings.agent.addAccount': '添加账号',
   'settings.tab.models': '模型',

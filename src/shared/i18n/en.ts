@@ -107,7 +107,7 @@ export const en = {
 
   'notice.connecting': 'Starting {agent}…',
   'notice.login.title': 'Sign in to {agent}',
-  'notice.login.accounts': 'Import the CLI’s existing login, or sign in to a new account in the terminal; credentials stay in the local keychain',
+  'notice.login.accounts': 'Import the CLI’s existing login, or sign in to a new account in the terminal; credentials stay in ~/.acpira',
   'notice.login.methods': 'Pick a sign-in method, then retry',
   'notice.login.terminal': 'Finish signing in in the terminal, then retry',
   'notice.readonly.title': 'Read-only history',
@@ -346,7 +346,7 @@ export const en = {
   'settings.fact.version': 'Version',
   'settings.fact.noLive': 'Shown after a session starts',
   'settings.agent.accounts': 'Accounts',
-  'settings.agent.accounts.desc': 'Logins are stored in the local keychain. Switching accounts starts a new session.',
+  'settings.agent.accounts.desc': 'Logins are stored in ~/.acpira. Switching accounts starts a new session.',
   'settings.agent.accounts.none': 'No accounts yet',
   'settings.agent.addAccount': 'Add account',
   'settings.tab.models': 'Models',

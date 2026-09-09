@@ -102,14 +102,14 @@ Store multiple accounts per agent, paste or drop images, and attach workspace fi
 - Drag files from Explorer into the composer, or type `@` to search the workspace. The agent reads those files itself. Image files dropped from Explorer are sent as images.
 - Text files dropped from the system file manager (up to 256 KB) are embedded in the message. Binary files are not supported.
 
-Sessions are stored in the extension's global storage. After a restart, Acpira resumes the session when the agent allows it; otherwise the transcript remains available as read-only history. When context usage is high, Acpira can send `/compact` automatically; you can also compact from the context panel.
+Sessions, accounts, and secrets live in `~/.acpira` (set `ACPIRA_HOME` to override). Cursor and VS Code share this directory; running both at once may overwrite the session list. After a restart, Acpira resumes the session when the agent allows it; otherwise the transcript remains available as read-only history. When context usage is high, Acpira can send `/compact` automatically; you can also compact from the context panel.
 
 ### Accounts
 
 Acpira can store several logins per agent and bind one account to each session. Credentials are supplied when a session starts, so picking a different account starts a new session.
 
 - The lower half of the agent menu lists saved accounts. Pick one to start a new session with it. **Import CLI login** reads the CLI’s existing local login (for Devin, `~/.local/share/devin/credentials.toml`). **Sign in in terminal** runs the agent’s login command in an isolated directory and does not change your existing local login. This also works on remote servers: copy the link and paste the code.
-- Secrets are stored in the OS keychain (VS Code SecretStorage). `accounts.json` keeps metadata such as email and plan. Transcripts store only the account id.
+- Secrets are stored in `secrets.json` (file mode 600), not the OS keychain. `accounts.json` keeps metadata such as email and plan. Transcripts store only the account id.
 - Each session is bound to one account. A **this session only** option on the sign-in notice (for example Devin’s **Sign in with browser**) authenticates the current process only and is not saved.
 
 Agents without an account list still use their own CLI login.

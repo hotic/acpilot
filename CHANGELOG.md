@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP server injection from Acpira settings remains planned. Agents still read their own CLI MCP config.
 - Steer / interrupt follow-up modes remain planned. Mid-turn messages stay in the host-side queue.
 
+### Changed
+
+- Sessions, accounts, and secrets now live in `~/.acpira` (override with `ACPIRA_HOME`) instead of VS Code `globalStorage` and SecretStorage. Existing data is copied once on first launch; the previous location is left untouched. Secrets are stored in `secrets.json` (mode 600), not the OS keychain.
+
 ## [1.1.0] - 2026-09-09
 
 ### Added

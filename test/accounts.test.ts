@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +8,7 @@ import { AgentRegistry } from '../src/host/acp/AgentRegistry';
 import { AcpSession } from '../src/host/acp/AcpSession';
 import type { AgentProcess } from '../src/host/acp/AgentProcess';
 import { AccountManager } from '../src/host/accounts/AccountManager';
-import { AccountStore, MemoryVault } from '../src/host/accounts/AccountStore';
+import { AccountStore, FileVault, MemoryVault, accountSecretKey } from '../src/host/accounts/AccountStore';
 import type { AccountCredential, AccountDraft, AccountProvider, LoginFlow } from '../src/host/accounts/types';
 import { DevinAccountProvider, parseStatus, parseUserStatus, readCredentials, tomlOf } from '../src/host/accounts/devin';
 import { SessionManager } from '../src/host/SessionManager';
@@ -84,6 +84,41 @@ describe('AccountStore', () => {
     await store.load();
     expect(store.list().map(a => a.detail)).toEqual(['Devin Max', 'Devin Max']);
     expect(readFileSync(file, 'utf8')).not.toContain('Someone');
+  });
+});
+
+describe('FileVault', () => {
+  it('round-trips secrets to secrets.json with mode 600', async () => {
+    const dir = tmp();
+    const file = join(dir, 'secrets.json');
+    const vault = new FileVault(file);
+    await vault.store(accountSecretKey('a'), 's1');
+    expect(await vault.get(accountSecretKey('a'))).toBe('s1');
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ [accountSecretKey('a')]: 's1' });
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    await vault.delete(accountSecretKey('a'));
+    expect(await vault.get(accountSecretKey('a'))).toBeUndefined();
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({});
+    const again = new FileVault(file);
+    await again.store(accountSecretKey('b'), 's2');
+    expect(await again.get(accountSecretKey('b'))).toBe('s2');
+  });
+
+  it('a missing file is an empty table', async () => {
+    const vault = new FileVault(join(tmp(), 'secrets.json'));
+    expect(await vault.get('k')).toBeUndefined();
+  });
+
+  it('corrupt JSON is logged and never overwritten', async () => {
+    const dir = tmp();
+    const file = join(dir, 'secrets.json');
+    writeFileSync(file, '{ nope');
+    const logs: string[] = [];
+    const vault = new FileVault(file, l => logs.push(l));
+    await vault.store('k', 'v');
+    expect(readFileSync(file, 'utf8')).toBe('{ nope');
+    expect(await vault.get('k')).toBeUndefined();
+    expect(logs.some(l => l.includes('unreadable'))).toBe(true);
   });
 });
 
