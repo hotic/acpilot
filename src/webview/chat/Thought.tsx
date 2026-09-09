@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Brain } from 'lucide-react';
 import type { ThoughtBlock } from '@shared/transcript';
 import { useAppearance } from '../appearance';
@@ -11,7 +12,7 @@ import { StreamText } from './StreamText';
 // tool arguments finish generating. Keep the text, but never time that gap as thinking.
 // The turn heading owns the Orb; thought rows keep a static icon and shimmer only while streaming.
 // Models close a thought with blank lines; pre-wrap would render them and push the rail's end dot below the text.
-export function Thought({ block }: { block: ThoughtBlock }) {
+export const Thought = memo(function Thought({ block }: { block: ThoughtBlock }) {
   const { toolLine } = useAppearance();
   const fade = useScrollFade<HTMLParagraphElement>();
   const lead = toolLine === 'text' ? undefined : <Brain className="size-icon" strokeWidth={1.5} />;
@@ -22,4 +23,4 @@ export function Thought({ block }: { block: ThoughtBlock }) {
       </span>
     </Disclosure>
   );
-}
+});

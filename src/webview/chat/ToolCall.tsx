@@ -1,5 +1,5 @@
 import { Check, ChevronRight, FileText, Globe, X } from 'lucide-react';
-import { useContext, useState, type ReactNode } from 'react';
+import { memo, useContext, useState, type ReactNode } from 'react';
 import type { ToolCallBlock } from '@shared/transcript';
 import { useAppearance } from '../appearance';
 import { Disclosure } from '../ui/Disclosure';
@@ -22,7 +22,8 @@ export { OpenToolFileContext } from './fileLinks';
 // One tool call = one expandable row, command execution included (Codex-style: the command sits on the row, the output is a card below).
 // Three modes: text only / with icon / icon + meta. No Orb while running: icon mode uses the same static icon as the completed state, with the verb shimmering.
 // Bodies (diff / output / list) are not indented — they align with the row's left edge, like Codex
-export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; grouped?: boolean }) {
+// Memoized on the block reference: a live turn re-renders on every chunk, and only the tool that changed should pay for it
+export const ToolCall = memo(function ToolCall({ block, grouped = false }: { block: ToolCallBlock; grouped?: boolean }) {
   const { toolLine } = useAppearance();
   // Announced calls can wait behind another tool; only execution shimmers.
   const running = block.status === 'in_progress';
@@ -74,10 +75,11 @@ export function ToolCall({ block, grouped = false }: { block: ToolCallBlock; gro
       {label}
     </Disclosure>
   );
-}
+});
 
 // Several ACP read calls form one visible list, retaining each call's full output.
-export function ReadGroup({ blocks }: { blocks: ToolCallBlock[] }) {
+// The grouping array is rebuilt on every render, so compare its members rather than the array itself.
+export const ReadGroup = memo(function ReadGroup({ blocks }: { blocks: ToolCallBlock[] }) {
   const { toolLine } = useAppearance();
   const first = blocks[0]!;
   return <ConnectedRail enabled={toolLine !== 'text'} endAtLastRow className="read-group flex flex-col">
@@ -88,7 +90,7 @@ export function ReadGroup({ blocks }: { blocks: ToolCallBlock[] }) {
       {blocks.map(block => <ResultList key={block.id} items={toolFiles(block)} kind="read" rail={false} detail={block} />)}
     </div>
   </ConnectedRail>;
-}
+}, (a, b) => a.blocks.length === b.blocks.length && a.blocks.every((block, i) => block === b.blocks[i]));
 
 function ToolBody({ block }: { block: ToolCallBlock }) {
   const c = block.content;

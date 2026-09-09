@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { memo, useState, type ReactNode } from 'react';
 import { Check, ChevronDown, ChevronsDown, ChevronsUp, ListTodo } from 'lucide-react';
 import type { PlanBlock, PlanEntry, PlanStatus } from '@shared/transcript';
 import { useAppearance } from '../appearance';
@@ -48,7 +48,7 @@ export function PlanCard({ entries, live }: { entries: PlanEntry[]; live?: boole
 
 // Historical plans are a single disclosure row. Expanded entries keep their
 // natural height and participate in the conversation's normal scroll flow.
-export function Plan({ block }: { block: PlanBlock }) {
+export const Plan = memo(function Plan({ block }: { block: PlanBlock }) {
   const { toolLine } = useAppearance();
   const [open, setOpen] = useState(false);
   const done = block.entries.filter(entry => entry.status === 'completed').length;
@@ -63,7 +63,7 @@ export function Plan({ block }: { block: PlanBlock }) {
       <PlanCaret open={open} />
     </Disclosure>
   );
-}
+});
 
 function PlanCaret({ open }: { open: boolean }) {
   return <ChevronDown className={cn('size-icon shrink-0 self-center transition-transform', open && 'rotate-180')} strokeWidth={1.5} />;

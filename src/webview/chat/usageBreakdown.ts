@@ -30,17 +30,21 @@ export function usageWindow(size: number, compactAt?: number): number {
   return Math.min(size, compactAt);
 }
 
-// Buckets the transcript into four conversation usage categories by block type, with the remainder derived as "system & other";
-// when the conversation estimate exceeds the total (a post-compaction summary is shorter than the original), scale proportionally to fit the total and zero out the system segment
-export function estimateUsage(turns: Turn[], usage: Usage): UsageSegment[] {
-  const raw: Record<Exclude<UsageSegmentId, 'system'>, number> = { user: 0, agent: 0, tool: 0, thought: 0 };
-  for (const t of turns) {
-    if (t.role === 'user') {
-      // auto turns are automatic /compact, just a few tokens, folded into the user segment
-      raw.user += estTokens(t.text);
-      continue;
-    }
-    for (const b of t.blocks) {
+type RawUsage = Record<Exclude<UsageSegmentId, 'system'>, number>;
+
+// The estimate runs on every stream push; finished turns keep their identity (App reuses deep-equal
+// subtrees), so scanning each turn once and caching by object keeps the cost at the live turn
+const turnCache = new WeakMap<Turn, RawUsage>();
+
+function turnTokens(turn: Turn): RawUsage {
+  let raw = turnCache.get(turn);
+  if (raw) return raw;
+  raw = { user: 0, agent: 0, tool: 0, thought: 0 };
+  if (turn.role === 'user') {
+    // auto turns are automatic /compact, just a few tokens, folded into the user segment
+    raw.user += estTokens(turn.text);
+  } else {
+    for (const b of turn.blocks) {
       switch (b.type) {
         case 'text':
           raw.agent += estTokens(b.markdown);
@@ -65,6 +69,18 @@ export function estimateUsage(turns: Turn[], usage: Usage): UsageSegment[] {
         // compaction status lines themselves don't enter the model context
       }
     }
+  }
+  turnCache.set(turn, raw);
+  return raw;
+}
+
+// Buckets the transcript into four conversation usage categories by block type, with the remainder derived as "system & other";
+// when the conversation estimate exceeds the total (a post-compaction summary is shorter than the original), scale proportionally to fit the total and zero out the system segment
+export function estimateUsage(turns: Turn[], usage: Usage): UsageSegment[] {
+  const raw: RawUsage = { user: 0, agent: 0, tool: 0, thought: 0 };
+  for (const turn of turns) {
+    const part = turnTokens(turn);
+    raw.user += part.user; raw.agent += part.agent; raw.tool += part.tool; raw.thought += part.thought;
   }
 
   const convSum = raw.user + raw.agent + raw.tool + raw.thought;

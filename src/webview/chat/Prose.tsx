@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement, useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, memo, useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import { Streamdown, defaultRehypePlugins, type Components } from 'streamdown';
 import { createMathPlugin } from '@streamdown/math';
 import { mermaid as mermaidDiagram } from '@streamdown/mermaid';
@@ -20,7 +20,7 @@ const { raw: rehypeRaw, sanitize: rehypeSanitize, harden: rehypeHarden } = defau
 if (!rehypeRaw || !rehypeSanitize || !rehypeHarden) throw new Error('streamdown default rehype plugins missing');
 // Rewrite file:// before sanitize/harden; urlTransform runs too late and harden would paint ` [blocked]`.
 const REHYPE = [rehypeRaw, rewriteFileHrefs, rehypeSanitize, rehypeHarden];
-export function Prose({ block }: { block: TextBlock }) {
+export const Prose = memo(function Prose({ block }: { block: TextBlock }) {
   const streaming = !!block.streaming;
   const { animated, animating } = useStreamMotion(streaming);
   // The turn heading already indicates waiting before the first visible words.
@@ -43,7 +43,7 @@ export function Prose({ block }: { block: TextBlock }) {
       {block.markdown}
     </Streamdown>
   );
-}
+});
 
 // streamdown routes fenced code through `code` and inline through `inlineCode`, telling them apart by a `data-block`
 // marker that its default `pre` cloneElements onto the code child — so the `pre` override below must replicate that

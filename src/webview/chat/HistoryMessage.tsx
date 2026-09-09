@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { EditTurnRequest } from '@shared/protocol';
 import type { UserTurn } from '@shared/transcript';
 import { captureTurnSettings, controlsForTurn } from '@shared/turnSettings';
@@ -8,15 +8,18 @@ import { EditAttachments } from './Attachments';
 import { UserMessage } from './Turns';
 import { cn } from '../ui/cn';
 
+// Every prompt card reads this, so it must stay stable across stream pushes: editability is a flag,
+// and the composer props (which change with each chunk) travel in HistoryComposerContext for the mounted editor alone
 interface HistoryContextValue {
   sessionId: string;
-  composer: ComposerProps;
   edit: (request: EditTurnRequest) => Promise<void>;
   editing?: number;
   select: (index?: number) => void;
+  editable: boolean;
 }
 
 export const HistoryContext = createContext<HistoryContextValue | undefined>(undefined);
+export const HistoryComposerContext = createContext<ComposerProps | undefined>(undefined);
 
 // One frame per prompt, kept mounted while the card and its inline editor swap inside it: it carries the sticky positioning
 // (so a card stuck at the top opens its editor right there instead of jumping back to its natural place). Opening the editor is
@@ -26,7 +29,7 @@ export const HistoryContext = createContext<HistoryContextValue | undefined>(und
 // A stuck card folds to a few lines: the sentinel at the exchange's top leaving the scroller marks the stuck state, and the frame
 // keeps its natural flow height meanwhile so the fold never moves the conversation under the reader; the freed area is transparent
 // and lets pointer events through to the reply scrolling beneath it.
-export function HistoryMessage(p: { turn: UserTurn; index: number; turnIndex: number; blobUrl?: (blob: string) => string }) {
+export const HistoryMessage = memo(function HistoryMessage(p: { turn: UserTurn; index: number; turnIndex: number; blobUrl?: (blob: string) => string }) {
   const context = useContext(HistoryContext);
   const { motion } = useAppearance();
   const frame = useRef<HTMLDivElement>(null);
@@ -72,7 +75,7 @@ export function HistoryMessage(p: { turn: UserTurn; index: number; turnIndex: nu
     return () => animation.cancel();
   }, [editing, motion]);
   if (p.turn.auto) return <UserMessage {...p} />;
-  const editable = !!context && !context.composer.disabled && !context.composer.running;
+  const editable = !!context?.editable;
   return (
     <>
       <div ref={sentinel} aria-hidden="true" className="pointer-events-none absolute top-0 left-0 size-px" />
@@ -87,14 +90,16 @@ export function HistoryMessage(p: { turn: UserTurn; index: number; turnIndex: nu
       </div>
     </>
   );
-}
+});
 
 function HistoryEditor({ turn, turnIndex, blobUrl, context: c, onClose }: {
   turn: UserTurn; turnIndex: number; blobUrl?: (blob: string) => string; context: HistoryContextValue; onClose: () => void;
 }) {
-  const [controls, setControls] = useState(() => controlsForTurn(c.composer.controls, turn.settings));
+  // Provided together with HistoryContext by the shell; the editor is the only reader
+  const composer = useContext(HistoryComposerContext)!;
+  const [controls, setControls] = useState(() => controlsForTurn(composer.controls, turn.settings));
   const [retained, setRetained] = useState(() => (turn.attachments ?? []).map((_, i) => i));
-  const [turnCount] = useState(c.composer.turns.length);
+  const [turnCount] = useState(composer.turns.length);
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
   const insidePointer = useRef(false);
@@ -109,7 +114,7 @@ function HistoryEditor({ turn, turnIndex, blobUrl, context: c, onClose }: {
     return () => document.removeEventListener('pointerdown', outside);
   }, [onClose, pending]);
   return <div className="flex min-w-0 flex-col gap-gap" onPointerDownCapture={() => { insidePointer.current = true; }}>
-    <Composer {...c.composer} running={false} disabled={pending || c.composer.disabled || c.composer.running}
+    <Composer {...composer} running={false} disabled={pending || composer.disabled || composer.running}
       controls={controls} usage={undefined} canCompact={false}
       onNotice={setError}
       onSetMode={modeId => setControls(c => ({ ...c, modeId }))}

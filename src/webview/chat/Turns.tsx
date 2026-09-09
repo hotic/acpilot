@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { memo, useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Check, ChevronRight, Compass, Hand, MessageCircleQuestion, TriangleAlert, X } from 'lucide-react';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
@@ -71,7 +71,8 @@ type OnPermission = (blockId: string, optionId: string) => void;
 
 // Agent message: consecutive "lines" (thought / plan / tool, commands included) are grouped together; prose / permission cards each stand alone as blocks.
 // The top-level activity owns the only Orb; detailed rows show their own verbs with static icons.
-export function AgentMessage({ turn, index, running, onPermission, compacting }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission; compacting?: boolean }) {
+// Memoized: the host pushes the whole view on every stream chunk and `reuse` keeps finished turns by reference, so only the live turn renders.
+export const AgentMessage = memo(function AgentMessage({ turn, index, running, onPermission, compacting }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission; compacting?: boolean }) {
   if (compacting) turn = compactionForDisplay(turn, running);
   const plans = turn.blocks.filter(b => b.type === 'plan_document');
   // Keep pending approvals in the activity input even when their controls live
@@ -84,7 +85,7 @@ export function AgentMessage({ turn, index, running, onPermission, compacting }:
     {plans.map(plan => <PlanDocument key={plan.id} block={plan}
       permission={turn.blocks.find((b): b is PermissionBlock => b.type === 'permission' && b.planId === plan.id)} onChoose={onPermission} />)}
   </div></RowEntranceContext.Provider>;
-}
+});
 
 function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission }) {
   const { fold } = useAppearance();

@@ -9,10 +9,11 @@ import { t } from '../i18n';
 import { ShellLayerContext } from '../ui/Popover';
 import { cn } from '../ui/cn';
 import { useScrollReveal } from '../ui/useScrollReveal';
+import { useStableList } from '../ui/useStableList';
 import { Header } from './Header';
 import { SessionList } from './SessionList';
 import { AgentMessage } from './Turns';
-import { HistoryContext, HistoryMessage } from './HistoryMessage';
+import { HistoryComposerContext, HistoryContext, HistoryMessage } from './HistoryMessage';
 import { Composer, type ComposerProps } from './Composer';
 import { Notice } from './Notice';
 import { Toast } from '../ui/Toast';
@@ -179,19 +180,24 @@ export function Shell(p: ShellProps) {
     onSend: on.send, onSearchFiles: on.searchFiles, onNotice: notice, onStop: on.stop,
     onSetMode: on.setMode, onSetConfig: on.setConfig, onCompact: on.compact,
   }), [p.running, p.status, p.theme, p.turns, p.controls, p.hidden, p.agent.id, p.usage, p.canCompact, p.compactAt, p.cwd, on.send, on.searchFiles, notice, on.stop, on.setMode, on.setConfig, on.compact]);
+  // Context values above the transcript must not change on every stream push: React walks the whole memoized tree for consumers each time
+  const permissions = useStableList(useMemo(() => p.turns.flatMap(t => t.role === 'agent' ? t.blocks.filter((b): b is PermissionBlock => b.type === 'permission') : []), [p.turns]));
   const planDoc = useMemo(() => ({
-    controls: p.controls, hidden: p.hidden?.[p.agent.id], running: p.running, ready: p.status === 'ready', theme: p.theme,
-    permissions: p.turns.flatMap(t => t.role === 'agent' ? t.blocks.filter((b): b is PermissionBlock => b.type === 'permission') : []),
+    controls: p.controls, hidden: p.hidden?.[p.agent.id], running: p.running, ready: p.status === 'ready', theme: p.theme, permissions,
     build: p.activeSessionId && on.buildPlan ? (id: string, model?: { configId: string; value: string }, optionId?: string) => on.buildPlan!(p.activeSessionId!, id, model, optionId) : undefined,
     open: p.activeSessionId && on.openPlan ? (id: string) => on.openPlan!(p.activeSessionId!, id) : undefined,
-  }), [p.controls, p.hidden, p.agent.id, p.running, p.status, p.theme, p.turns, p.activeSessionId, on.buildPlan, on.openPlan]);
+  }), [p.controls, p.hidden, p.agent.id, p.running, p.status, p.theme, permissions, p.activeSessionId, on.buildPlan, on.openPlan]);
+  // Stable across stream pushes (every prompt card subscribes); the composer props go through their own context to the open editor
+  const editable = !composerProps.disabled && !composerProps.running;
   const history = useMemo(() => on.editTurn && p.activeSessionId ? {
-    sessionId: p.activeSessionId, composer: composerProps, edit: on.editTurn,
+    sessionId: p.activeSessionId, edit: on.editTurn, editable,
     editing: editing?.sessionId === p.activeSessionId ? editing.index : undefined,
     select: (index: number | undefined) => setEditing(current => index === undefined
       ? current?.sessionId === p.activeSessionId ? undefined : current
       : { sessionId: p.activeSessionId!, index }),
-  } : undefined, [on.editTurn, p.activeSessionId, composerProps, editing]);
+  } : undefined, [on.editTurn, p.activeSessionId, editable, editing]);
+  const openToolFile = useMemo(() => p.activeSessionId && on.openFile
+    ? (path: string, line?: number) => on.openFile!(p.activeSessionId!, path, line) : undefined, [p.activeSessionId, on.openFile]);
 
   return (
     <AppearanceContext.Provider value={a}>
@@ -234,9 +240,11 @@ export function Shell(p: ShellProps) {
             <div className="relative flex min-h-0 flex-1 flex-col">
               <PlanDocumentContext.Provider value={planDoc}>
                 <HistoryContext.Provider value={history}>
-                  <OpenToolFileContext.Provider value={p.activeSessionId && on.openFile ? (path, line) => on.openFile!(p.activeSessionId!, path, line) : undefined}>
+                <HistoryComposerContext.Provider value={history?.editing !== undefined ? composerProps : undefined}>
+                  <OpenToolFileContext.Provider value={openToolFile}>
                     <Thread key={p.activeSessionId} turns={p.turns} running={p.running} wide={wide} replayKey={p.replayKey} blobUrl={blobUrl} onPermission={on.permission} />
                   </OpenToolFileContext.Provider>
+                </HistoryComposerContext.Provider>
                 </HistoryContext.Provider>
               </PlanDocumentContext.Provider>
               {toasts.length > 0 && (
