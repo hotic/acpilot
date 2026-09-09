@@ -9,6 +9,24 @@
   --ctl-sm: var(--process-row);
 }
 
+/* Dim action slots only; prose, syntax tokens and success/error colors retain
+   their own ink. The shimmer reads its baseline from the same action token. */
+@utility action-row {
+  --fg-2: var(--action-fg);
+  color: var(--action-fg);
+  & > :is(.row-content, .row-lead, .row-trailing) { color: inherit; }
+  & > .row-content > :not(.shimmer), & .row-target { color: inherit; }
+  &:is(:hover, :focus-visible, :focus-within) { color: var(--fg-1); }
+}
+@utility action-details {
+  --rail-color: color-mix(in srgb, var(--action-fg) 50%, var(--bg-0));
+}
+
+/* Diffs and terminal output share the same frame. */
+@utility code-output {
+  @apply relative min-w-0 overflow-hidden rounded-md border border-line bg-code;
+}
+
 /* Pair with items-start on a row whose text may wrap: the lead slot centres on the first line. */
 @utility lead-top {
   & > .row-lead { margin-top: calc((var(--text-2-lh) - var(--lead)) / 2); }
@@ -34,11 +52,6 @@
   /* Something attachable is being dragged over it */
   &[data-drag] { background: var(--cmp-bg-lift); outline: 1px dashed var(--fg-3); outline-offset: -1px; }
 }
-/* Diffs and terminal output share the same frame. */
-@utility code-output {
-  @apply relative min-w-0 overflow-hidden rounded-md border border-line bg-code;
-}
-
 @utility send-btn {
   background: var(--send-bg);
   box-shadow: var(--send-ring);

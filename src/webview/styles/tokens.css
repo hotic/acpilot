@@ -18,6 +18,7 @@
   --fg-2: rgba(202, 202, 202, 0.7);
   --fg-3: #767676;
   --fg-strong: #f5f5f5;
+  --action-fg: #858585;
 
   /* Three surface levels: base / raised / overlay, plus the code background */
   --bg-0: var(--host-bg, #181818);
@@ -186,6 +187,7 @@
 [data-theme="light"] {
   --fg-1: var(--host-fg, #0d0d0d);
   --fg-2: #6c6c6c;
+  --action-fg: #707070;
   --fg-3: #767676;
   --fg-strong: #000000;
   --bg-0: var(--host-bg, #f8f8f8);

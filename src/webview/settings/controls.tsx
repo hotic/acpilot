@@ -166,12 +166,13 @@ export function Segmented<V extends string>({ options, value, onChange, label }:
   );
 }
 
-// Dropdown select: a bordered Chip that opens the shared Menu; radio semantics, the current value gets the check
+// Dropdown select: a bordered Chip that opens the shared Menu; radio semantics, the current value gets the check.
+// Sized like NumberField (--ctl tall, --r-md) so the two form controls line up in a column; the label grows so the caret stays at the right edge with or without an icon
 export function Select<V extends string>({ options, value, onChange, label, className }: { options: Option<V>[]; value: V; onChange: (v: V) => void; label: string; className?: string }) {
   const cur = options.find(o => o.value === value);
   return <DropdownMenu.Root>
     <DropdownMenu.Trigger render={<Chip aria-label={label} icon={cur?.icon}
-      className={cn('min-w-(--ctl-w) justify-between border border-line bg-hover px-3 text-2 text-fg-1 hover:bg-active data-[open]:bg-active data-[popup-open]:bg-active', className)}>
+      className={cn('h-ctl min-w-(--ctl-w) gap-2 rounded-md border border-line bg-hover px-3 text-2 text-fg-1 hover:bg-active data-[open]:bg-active data-[popup-open]:bg-active', className)}>
       {cur?.label ?? value}
     </Chip>} />
     <DropdownMenu.Portal><DropdownMenu.Positioner side="bottom" align="end" width="md"><DropdownMenu.Popup>

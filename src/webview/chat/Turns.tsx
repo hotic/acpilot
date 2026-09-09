@@ -258,7 +258,7 @@ function FoldRow({ icon, children, body, open, onToggle }: { icon: ReactNode; ch
   const [innerOpen, setInnerOpen] = useState(false);
   const expanded = open ?? innerOpen;
   return (
-    <Disclosure
+    <Disclosure tone="action" className="action-details"
       lead={toolLine === 'text' ? undefined : icon}
       indent={false}
       open={expanded}

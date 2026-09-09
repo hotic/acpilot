@@ -16,17 +16,19 @@ export interface RowProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> 
   as?: 'div' | 'button';
   className?: string;
   dense?: boolean;
+  tone?: 'action';
 }
 
 const rowVariants = cva('flex items-center gap-gap text-2 text-fg-2 select-none list-none text-left', {
   variants: {
+    tone: { action: 'action-row' },
     dense: { true: 'min-h-row-dense', false: 'min-h-row' },
     interactive: { true: '-mx-hit px-hit cursor-pointer rounded-md hover:bg-hover hover:text-fg-1 focus-visible:bg-hover focus-visible:text-fg-1 transition-colors' },
     enter: { true: 'process-row-enter' },
   },
 });
 
-export function Row({ lead, trailing, children, interactive, as = 'div', className, dense, ref, ...rest }: RowProps) {
+export function Row({ lead, trailing, children, interactive, as = 'div', className, dense, tone, ref, ...rest }: RowProps) {
   const Tag = as;
   const live = useContext(RowEntranceContext);
   const [enter] = useState(live);
@@ -35,7 +37,7 @@ export function Row({ lead, trailing, children, interactive, as = 'div', classNa
       ref={ref as Ref<HTMLButtonElement & HTMLDivElement>}
       {...(as === 'button' ? { type: 'button' } : {})}
       className={cn(
-        rowVariants({ dense: !!dense, interactive, enter }),
+        rowVariants({ dense: !!dense, interactive, enter, tone }),
         className,
       )}
       {...rest}
@@ -54,5 +56,5 @@ export function RowLabel({ children, className }: { children: ReactNode; classNa
 
 // Target text within a row (file name / command), one step brighter than the verb
 export function RowTarget({ children, mono, className }: { children: ReactNode; mono?: boolean; className?: string }) {
-  return <span className={cn('truncate text-fg-1/85', mono && 'font-mono text-mono', className)}>{children}</span>;
+  return <span className={cn('row-target truncate text-fg-1/85', mono && 'font-mono text-mono', className)}>{children}</span>;
 }

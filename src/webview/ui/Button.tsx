@@ -91,7 +91,7 @@ export function Chip({ className, children, variant = 'quiet', caret = true, ico
       {...rest}
     >
       {icon && <span className={cn('flex shrink-0 items-center [&_svg]:size-icon', variant === 'quiet' && 'text-fg-3')}>{icon}</span>}
-      <span className={cn('truncate', narrow === 'icon' && '@max-sm:hidden')}>
+      <span className={cn('grow truncate text-left', narrow === 'icon' && '@max-sm:hidden')}>
         {children}
         {meta && <span className="text-fg-3"> {meta}</span>}
       </span>
