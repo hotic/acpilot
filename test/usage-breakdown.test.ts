@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactBudget, estimateUsage, estTokens, overCompactBudget, usageWindow } from '../src/webview/chat/usageBreakdown';
+import { compactBudget, conversationTokens, estimateUsage, estTokens, liveUsage, overCompactBudget, usageWindow } from '../src/webview/chat/usageBreakdown';
 import type { Turn, Usage } from '../src/shared/transcript';
 
 // 100 latin chars ≈ 25 tokens
@@ -96,5 +96,28 @@ describe('estimateUsage', () => {
     const segs = estimateUsage([], usage);
     expect(segs.find(s => s.id === 'system')!.tokens).toBe(usage.used);
     expect(segs.filter(s => s.id !== 'system').every(s => s.tokens === 0)).toBe(true);
+  });
+});
+
+describe('liveUsage', () => {
+  const usage: Usage = { used: 100, size: 10_000 };
+  const turns: Turn[] = [
+    { role: 'user', text: latin(400) },
+    { role: 'agent', blocks: [{ type: 'text', markdown: latin(400) }] },
+  ];
+
+  it('keeps the agent total when idle even if the transcript estimate is larger', () => {
+    expect(conversationTokens(turns)).toBeGreaterThan(usage.used);
+    expect(liveUsage(usage, turns)).toBe(usage);
+    expect(liveUsage(usage, turns, false)).toBe(usage);
+  });
+
+  it('raises used to the transcript estimate while a turn is running', () => {
+    const local = conversationTokens(turns);
+    expect(liveUsage(usage, turns, true)).toEqual({ used: local, size: 10_000 });
+  });
+
+  it('does not drop below the agent snapshot', () => {
+    expect(liveUsage({ used: 50_000, size: 10_000 }, turns, true)).toEqual({ used: 50_000, size: 10_000 });
   });
 });

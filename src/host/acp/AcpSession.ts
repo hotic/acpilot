@@ -26,6 +26,8 @@ import { cloneJson } from '../clone';
 import { t, tOr } from '../i18n';
 import { RENAME_MAX, TITLE_MAX } from '../limits';
 
+const GROK_USAGE_INTERVAL_MS = 800;
+
 // The persisted session record: view fields plus the acpSessionId needed for resuming
 export interface SessionRecord {
   id: string;
@@ -102,6 +104,7 @@ export class AcpSession {
   private usageRevision = 0;
   private usageNotifications = false;
   private grokUsageUnavailable = false;
+  private grokUsageTimer?: ReturnType<typeof setTimeout>;
   private syncingThought = false;
   private rev = 0;
 
@@ -240,6 +243,7 @@ export class AcpSession {
   private async connect() {
     this.usageNotifications = false;
     this.grokUsageUnavailable = false;
+    this.clearGrokUsageTimer();
     const def = this.deps.registry.get(this.agent);
     this.modelSources = await readModelSources(this.agent, this.cwd);
     const handlers = this.clientHandlers();
@@ -375,7 +379,10 @@ export class AcpSession {
 
   // Refresh before settling a turn so auto-compaction sees the current window.
   // Standard notifications take precedence, including ones arriving in flight.
+  // Grok only fills context.used after a model round; poll while the prompt is
+  // on the wire so the ring is not stuck on the session-start snapshot.
   private async refreshGrokUsage() {
+    this.clearGrokUsageTimer();
     if (this.agent !== 'grok' || !this.proc || !this.acpSessionId || this.status !== 'ready'
       || this.usageNotifications || this.grokUsageUnavailable) return;
     const proc = this.proc, sessionId = this.acpSessionId, state = this.state;
@@ -385,9 +392,27 @@ export class AcpSession {
     catch (e) {
       if (e instanceof acp.RequestError && e.code === -32601) this.grokUsageUnavailable = true;
       this.log(`context unavailable: ${msg(e)}`);
+      return;
     }
-    if (this.proc === proc && this.acpSessionId === sessionId && this.state === state
-      && this.status === 'ready' && this.usageRevision === revision) this.state.usage = usage;
+    if (this.proc !== proc || this.acpSessionId !== sessionId || this.state !== state
+      || this.status !== 'ready' || this.usageRevision !== revision) return;
+    const prev = this.state.usage;
+    this.state.usage = usage;
+    if (prev?.used !== usage?.used || prev?.size !== usage?.size || prev?.cost !== usage?.cost) this.touch();
+  }
+
+  private scheduleGrokUsage() {
+    if (this.agent !== 'grok' || this.usageNotifications || this.grokUsageUnavailable || this.grokUsageTimer) return;
+    this.grokUsageTimer = setTimeout(() => {
+      this.grokUsageTimer = undefined;
+      void this.refreshGrokUsage();
+    }, GROK_USAGE_INTERVAL_MS);
+  }
+
+  private clearGrokUsageTimer() {
+    if (!this.grokUsageTimer) return;
+    clearTimeout(this.grokUsageTimer);
+    this.grokUsageTimer = undefined;
   }
 
   private fail(e: unknown) {
@@ -736,6 +761,7 @@ export class AcpSession {
   }
 
   dispose() {
+    this.clearGrokUsageTimer();
     this.perms.bumpEpoch();
     this.status = 'closed';
     this.queue.clear();
@@ -763,6 +789,9 @@ export class AcpSession {
     if (u.sessionUpdate === 'usage_update') {
       this.usageNotifications = true;
       this.usageRevision++;
+      this.clearGrokUsageTimer();
+    } else if (this.phase.running) {
+      this.scheduleGrokUsage();
     }
     if (u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update') {
       this.questions.rememberToolInput(u);

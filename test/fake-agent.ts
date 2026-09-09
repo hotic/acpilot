@@ -215,6 +215,7 @@ const app = acp.agent({ name: 'fake-agent' })
     if (text.includes('slow')) {
       for (let i = 0; i < 50; i++) {
         if (cancelled.has(sid)) return { stopReason: 'cancelled' };
+        if (grokUsage) usedTokens += 1000;
         await send({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `${i} ` } });
         await new Promise(r => setTimeout(r, 40));
       }

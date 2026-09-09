@@ -73,6 +73,20 @@ describe('Grok context snapshots', () => {
     } finally { s.dispose(); }
   });
 
+  it('refreshes context while a turn is still on the wire', async () => {
+    const { session: s } = fixture();
+    try {
+      await s.start();
+      expect(s.view().usage).toEqual({ used: 1234, size: 1_000_000 });
+      const prompt = s.prompt('slow');
+      await expect.poll(() => (s.view().usage?.used ?? 0) > 1234, { timeout: 4_000 }).toBe(true);
+      expect(s.isRunning).toBe(true);
+      await prompt;
+      expect(s.view().usage?.used).toBeGreaterThan(1234);
+      expect(s.view().usage?.size).toBe(1_000_000);
+    } finally { s.dispose(); }
+  });
+
   it('preserves standard usage notifications over the Grok fallback', async () => {
     const { session: s } = fixture();
     try {

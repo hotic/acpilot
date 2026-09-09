@@ -5,7 +5,7 @@ import { t } from '../i18n';
 import { cn } from '../ui/cn';
 import { IconButton } from '../ui/Button';
 import { Popover } from '../ui/Popover';
-import { compactBudget, estimateUsage, overCompactBudget, usageWindow, type UsageSegment } from './usageBreakdown';
+import { compactBudget, estimateUsage, liveUsage, overCompactBudget, usageWindow, type UsageSegment } from './usageBreakdown';
 
 // Context usage: a --icon-sized ring inside a --ctl-square button; hovering shows the breakdown card (Cursor-style), and agents with /compact can be compacted from its title row
 export function ContextRing({ usage, turns, canCompact, compactAt, running, onCompact, onOpenChange }: {
@@ -13,11 +13,12 @@ export function ContextRing({ usage, turns, canCompact, compactAt, running, onCo
   onCompact: () => void; onOpenChange: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ringSize = useMemo(() => usageWindow(usage.size, compactAt), [usage.size, compactAt]);
-  const pct = Math.min(1, usage.used / ringSize);
-  const budget = compactBudget(usage.size, compactAt);
-  const over = overCompactBudget(usage.used, compactAt);
-  const segments = useMemo(() => estimateUsage(turns, usage), [turns, usage]);
+  const shown = useMemo(() => liveUsage(usage, turns, running), [usage, turns, running]);
+  const ringSize = useMemo(() => usageWindow(shown.size, compactAt), [shown.size, compactAt]);
+  const pct = Math.min(1, shown.used / ringSize);
+  const budget = compactBudget(shown.size, compactAt);
+  const over = overCompactBudget(shown.used, compactAt);
+  const segments = useMemo(() => estimateUsage(turns, shown), [turns, shown]);
   const r = 6, c = 2 * Math.PI * r;
   return (
     <Popover.Root open={open} onOpenChange={setOpen} onOpenLifecycle={onOpenChange}>
@@ -33,8 +34,8 @@ export function ContextRing({ usage, turns, canCompact, compactAt, running, onCo
         </button>} />
       <Popover.Portal><Popover.Positioner side="top" align="end" width="lg"><Popover.Popup>
         <UsagePanel
-          usage={usage}
-          pct={Math.min(1, usage.used / usage.size)}
+          usage={shown}
+          pct={Math.min(1, shown.used / shown.size)}
           segments={segments}
           budget={budget}
           overAt={over && compactAt ? compactAt : undefined}

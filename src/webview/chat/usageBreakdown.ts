@@ -84,6 +84,24 @@ function turnTokens(turn: Turn): RawUsage {
   return raw;
 }
 
+export function conversationTokens(turns: Turn[]): number {
+  let n = 0;
+  for (const turn of turns) {
+    const part = turnTokens(turn);
+    n += part.user + part.agent + part.tool + part.thought;
+  }
+  return n;
+}
+
+// While a turn is in flight the transcript estimate is a live floor, so a stale agent snapshot
+// cannot pin the ring. Idle and compacted turns keep the agent total.
+export function liveUsage(usage: Usage, turns: Turn[], running?: boolean): Usage {
+  if (!running) return usage;
+  const local = conversationTokens(turns);
+  if (local <= usage.used) return usage;
+  return { ...usage, used: local };
+}
+
 // Buckets the transcript into four conversation usage categories by block type, with the remainder derived as "system & other";
 // when the conversation estimate exceeds the total (a post-compaction summary is shorter than the original), scale proportionally to fit the total and zero out the system segment
 export function estimateUsage(turns: Turn[], usage: Usage): UsageSegment[] {
