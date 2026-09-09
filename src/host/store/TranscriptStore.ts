@@ -32,6 +32,9 @@ interface PendingWrite {
 // feet was deleted by another window: write refuses to put it back (see knew)
 export class TranscriptStore implements BlobStore {
   private pending = new Map<string, PendingWrite>();
+  // Writes that have left the debounce but not yet reached the directory, one chain per id: concurrent writes of a record would share
+  // its temp file, and a directory listing taken while a first write is mid-flight would report the record missing
+  private inflight = new Map<string, Promise<void>>();
   // Ids whose record this store has read from or written to the live directory
   private known = new Set<string>();
 
@@ -129,6 +132,7 @@ export class TranscriptStore implements BlobStore {
   // Removes the record and its blob directory for good, wherever they are (live or trash)
   async remove(id: string) {
     this.cancelPending(id);
+    await this.settleInflight(id);
     this.known.delete(id);
     for (const dir of [this.dir, join(this.dir, TRASH_DIR)]) {
       await rm(join(dir, `${id}.json`), { force: true });
@@ -140,6 +144,7 @@ export class TranscriptStore implements BlobStore {
   // undo can still bring it back. Unlike an in-memory trash, this survives a crash: sweepTrash cleans up whatever is left on the next start
   async trash(id: string) {
     this.cancelPending(id);
+    await this.settleInflight(id);
     const trash = join(this.dir, TRASH_DIR);
     await mkdir(trash, { recursive: true });
     await this.move(this.dir, trash, id);
@@ -177,12 +182,18 @@ export class TranscriptStore implements BlobStore {
   // Writes whatever is still debounced; called when the extension host goes down so the last few seconds of a transcript are not lost
   async dispose() { await this.flushPending(); }
 
+  // Every debounced record is on its way and every write already on its way has landed (or failed, logged) when this resolves
   private async flushPending() {
-    if (!this.pending.size) return;
     const writes = [...this.pending.values()].map(p => { clearTimeout(p.timer); return this.write(p.record); });
     this.pending.clear();
     const results = await Promise.allSettled(writes);
     for (const r of results) if (r.status === 'rejected') this.log(`save failed (${msg(r.reason)})`);
+    await Promise.allSettled([...this.inflight.values()]);
+  }
+
+  // Wait for the write of one record that is already on its way; its failure is the writer's to log
+  private async settleInflight(id: string) {
+    await this.inflight.get(id)?.catch(() => {});
   }
 
   private cancelPending(id: string) {
@@ -194,7 +205,16 @@ export class TranscriptStore implements BlobStore {
 
   // Creates the file or replaces it while it is still there. A record this store once had on disk and that is gone now was trashed or
   // removed by another window; writing it back would undo that deletion, so the save is dropped (the manager learns of it from syncIndex)
-  private async write(record: SessionRecord) {
+  private write(record: SessionRecord): Promise<void> {
+    const prev = this.inflight.get(record.id)?.catch(() => {}) ?? Promise.resolve();
+    const run: Promise<void> = prev.then(() => this.writeNow(record)).finally(() => {
+      if (this.inflight.get(record.id) === run) this.inflight.delete(record.id);
+    });
+    this.inflight.set(record.id, run);
+    return run;
+  }
+
+  private async writeNow(record: SessionRecord) {
     await this.ensure();
     const path = join(this.dir, `${record.id}.json`);
     if (this.known.has(record.id) && !(await exists(path))) {

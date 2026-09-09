@@ -144,6 +144,33 @@ describe('TranscriptStore', () => {
     expect(existsSync(join(dir, 'fresh.json'))).toBe(true);
   });
 
+  // The save and index debounces are equal, so a fresh session's first write is often still in flight (timer fired, file not yet renamed
+  // into place) when the index reconcile lists the directory. The list must wait for it: a live id missing from the list reads as
+  // "deleted by another window" to the manager, which closed the brand-new session and toasted about it
+  it('syncIndex waits for writes already in flight, so a fresh record never reads as deleted', async () => {
+    const { dir, store } = fixture();
+    for (let i = 0; i < 20; i++) {
+      const id = `fresh-${i}`;
+      store.save(record(id), 0);
+      // Let the timer fire: the write has started but has not reached the directory yet
+      await new Promise(r => setTimeout(r, 0));
+      expect((await store.syncIndex([summarize(record(id))], new Set([id]))).map(s => s.id)).toContain(id);
+      expect(existsSync(join(dir, `${id}.json`))).toBe(true);
+    }
+  });
+
+  it('concurrent writes of one record are serialized: the last one wins and no write fails on the shared temp file', async () => {
+    const { dir, logs, store } = fixture();
+    await Promise.all([store.flush(record('c', 'v1')), store.flush(record('c', 'v2')), store.flush(record('c', 'v3'))]);
+    expect(JSON.parse(readFileSync(join(dir, 'c.json'), 'utf8')).title).toBe('v3');
+    expect(logs).toEqual([]);
+    // remove waits for an in-flight write instead of letting it recreate the file afterwards
+    const w = store.flush(record('c', 'v4'));
+    await store.remove('c');
+    await w;
+    expect(existsSync(join(dir, 'c.json'))).toBe(false);
+  });
+
   it('a record still debounced is readable through load, and writing the index lands it first so the index never names a missing file', async () => {
     const { dir, store } = fixture();
     store.save(record('p', 'pending'), 10_000);
