@@ -126,6 +126,7 @@ export class WebviewBridge implements vscode.Disposable {
     try {
       switch (m.type) {
         case 'setSetting': await this.env.settings.set(m.key, m.value); return true;
+        case 'setAppearance': await this.env.settings.setAppearance(m.axis, m.value); return true;
         case 'openPath': await openPath(m.path); return true;
         case 'inventory': this.post({ type: 'inventory', agent: m.agent, inventory: await this.env.settings.inventory(m.agent) }); return true;
         case 'controls': this.post({ type: 'controls', agent: m.agent, controls: await this.manager.knownControls(m.agent) }); return true;

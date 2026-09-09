@@ -1,15 +1,19 @@
 import type { ReactNode } from 'react';
-import { ArrowLeft, Settings2 } from 'lucide-react';
+import { ArrowLeft, Palette, Settings2 } from 'lucide-react';
 import type { AgentInfo } from '@shared/transcript';
 import { cn } from '../ui/cn';
 import { AgentMark } from '../chat/AgentMark';
 import { t } from '../i18n';
 
-export type SettingsPage = { kind: 'general' } | { kind: 'agent'; id: AgentInfo['id'] };
+export type SettingsPage = { kind: 'general' } | { kind: 'appearance' } | { kind: 'agent'; id: AgentInfo['id'] };
 
-type PageId = 'general' | AgentInfo['id'];
-const pageId = (p: SettingsPage): PageId => (p.kind === 'agent' ? p.id : 'general');
-const toPage = (id: PageId): SettingsPage => (id === 'general' ? { kind: 'general' } : { kind: 'agent', id });
+// Fixed pages first, then one page per agent; agent ids never collide with the fixed names
+const FIXED = ['general', 'appearance'] as const;
+type FixedId = (typeof FIXED)[number];
+type PageId = FixedId | AgentInfo['id'];
+const isFixed = (id: PageId): id is FixedId => (FIXED as readonly string[]).includes(id);
+const pageId = (p: SettingsPage): PageId => (p.kind === 'agent' ? p.id : p.kind);
+const toPage = (id: PageId): SettingsPage => (isFixed(id) ? { kind: id } : { kind: 'agent', id });
 
 export interface PageRailProps {
   agents: AgentInfo[];
@@ -50,6 +54,7 @@ export function PageRail({ agents, page, onPage, onBack }: PageRailProps) {
       </button>
       <nav aria-label={t('settings.title')} className="flex min-h-0 flex-col gap-1 overflow-y-auto">
         {item('general', t('settings.nav.general'), <Settings2 strokeWidth={1.5} />)}
+        {item('appearance', t('settings.nav.appearance'), <Palette strokeWidth={1.5} />)}
         {agents.map(a => item(a.id, a.name, <AgentMark id={a.id} name={a.name} />, a.available === false))}
       </nav>
     </aside>

@@ -7,6 +7,7 @@ import type { Locale } from '@shared/i18n';
 import { BASE_APPEARANCE, type Appearance } from './appearance';
 import { LocaleContext, setLocale, t } from './i18n';
 import { Shell, type ShellHandlers } from './chat/Shell';
+import { lookFromSettings, resolveTheme } from './look';
 import { useVsCodeTheme } from './useVsCodeTheme';
 import { vscodeApi } from './vscodeApi';
 import { SettingsShell, type SettingsHandlers } from './settings/SettingsShell';
@@ -58,9 +59,13 @@ export function App() {
   const [inventories, setInventories] = useState<Partial<Record<AgentId, AgentInventory>>>({});
   const [controls, setControls] = useState<Partial<Record<AgentId, ConfigControl[]>>>({});
   const [page, setPage] = useState<SettingsPage>({ kind: 'general' });
-  const theme = useVsCodeTheme();
+  const hostTheme = useVsCodeTheme();
+  // The theme setting resolved against the host; the document carries it too so color-scheme reaches native controls outside the shell
+  const { theme } = resolveTheme(settings?.theme ?? 'auto', hostTheme);
+  const look = useMemo(() => settings && lookFromSettings(settings), [settings]);
 
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
+  useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
 
   useEffect(() => {
     const onMsg = (e: MessageEvent<HostMsg>) => {
@@ -130,6 +135,7 @@ export function App() {
 
   const settingsOn = useMemo<SettingsHandlers>(() => ({
     setSetting: (key, value) => post({ type: 'setSetting', key, value }),
+    setAppearance: (axis, value) => post({ type: 'setAppearance', axis, value }),
     openPath: path => post({ type: 'openPath', path }),
     // Drop the cached copy first so the page shows the scanning shimmer until the reply lands
     refreshInventory: agent => { setInventories(inv => { const { [agent]: _drop, ...rest } = inv; return rest; }); post({ type: 'inventory', agent }); },
@@ -149,6 +155,7 @@ export function App() {
         key={locale}
         appearance={appearance}
         theme={theme}
+        look={look}
         host={init.host}
         locale={locale}
         settings={settings}
@@ -170,6 +177,7 @@ export function App() {
       key={locale}
       appearance={appearance}
       theme={theme}
+      look={look}
       host={init.host}
       agent={agent}
       agents={agents}

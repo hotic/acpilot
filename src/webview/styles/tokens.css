@@ -2,14 +2,21 @@
    Color roles prefer the host's --vscode-* values; with no host (LAB) they fall back to Dark / Light Modern values. */
 
 :root {
+  /* Host palette: the roles that follow the VS Code theme go through these, so a fixed theme (acpira.theme = light / dark,
+     data-theme-fixed on the shell) can blank them and let the fallbacks paint the whole scheme */
+  --host-fg: var(--vscode-foreground);
+  --host-bg: var(--vscode-sideBar-background);
+  --host-border: var(--vscode-widget-border);
+  --host-focus: var(--vscode-focusBorder);
+
   /* Three text levels: primary / secondary / faint */
-  --fg-1: var(--vscode-foreground, #ededed);
+  --fg-1: var(--host-fg, #ededed);
   --fg-2: rgba(202, 202, 202, 0.7);
   --fg-3: #767676;
   --fg-strong: #f5f5f5;
 
   /* Three surface levels: base / raised / overlay, plus the code background */
-  --bg-0: var(--vscode-sideBar-background, #181818);
+  --bg-0: var(--host-bg, #181818);
   --bg-1: #1f1f1f;
   --bg-2: #262626;
   --bg-code: #1f1f1f;
@@ -30,10 +37,10 @@
   --send-ink: rgba(255, 255, 255, 0.5);
   --send-bg-on: var(--btn-1-bg);
   --send-ink-on: var(--btn-1-fg);
-  --line-strong: var(--vscode-widget-border, #3c3c3c);
+  --line-strong: var(--host-border, #3c3c3c);
   --hover: rgba(255, 255, 255, 0.05);
   --active: rgba(255, 255, 255, 0.08);
-  --focus: var(--vscode-focusBorder, #0078d4);
+  --focus: var(--host-focus, #0078d4);
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
   /* Full-shell dim behind the image lightbox */
   --scrim: rgba(0, 0, 0, 0.72);
@@ -65,15 +72,9 @@
   --font: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, sans-serif;
   --font-mono: var(--vscode-editor-font-family, "SF Mono", Menlo, Monaco, monospace);
 
-  /* Type scale: body 13/20 · line 13/18 · caption 12/16 · mono 12/18 */
-  --text-1: 13px;
-  --text-1-lh: 20px;
-  --text-2: 13px;
-  --text-2-lh: 18px;
-  --text-3: 12px;
-  --text-3-lh: 16px;
-  --text-mono: 12px;
-  --text-mono-lh: 18px;
+  /* Base sizes (acpira.uiFontSize / acpira.codeFontSize); the shell root overrides them inline */
+  --ui-font-size: 13px;
+  --code-font-size: 12px;
 
   /* Sizes: 4px grid. Row height = control height = 28; lead slot 20, icon in slot 14; icon in controls 16.
      Chips (menu selectors) sit one tier below full controls, Cursor-style: snug around their text instead of filling the row */
@@ -157,12 +158,26 @@
   --enter-y: 4px;
 }
 
+/* Type scale: body 13/20 · line 13/18 · caption 12/16 · mono 12/18 at the default sizes; line heights keep their offset as the base grows.
+   Declared on the shell as well: a custom property resolves where it is declared, so the shell's inline --ui-font-size only reaches
+   tokens declared on that same element (the :root copy serves LAB widgets outside a shell) */
+:root, .acp-shell {
+  --text-1: var(--ui-font-size);
+  --text-1-lh: calc(var(--ui-font-size) + 7px);
+  --text-2: var(--ui-font-size);
+  --text-2-lh: calc(var(--ui-font-size) + 5px);
+  --text-3: calc(var(--ui-font-size) - 1px);
+  --text-3-lh: calc(var(--ui-font-size) + 3px);
+  --text-mono: var(--code-font-size);
+  --text-mono-lh: calc(var(--code-font-size) + 6px);
+}
+
 [data-theme="light"] {
-  --fg-1: var(--vscode-foreground, #0d0d0d);
+  --fg-1: var(--host-fg, #0d0d0d);
   --fg-2: #6c6c6c;
   --fg-3: #767676;
   --fg-strong: #000000;
-  --bg-0: var(--vscode-sideBar-background, #f8f8f8);
+  --bg-0: var(--host-bg, #f8f8f8);
   --bg-1: #ffffff;
   --bg-2: #f1f1f1;
   --bg-code: #efefef;
@@ -178,10 +193,10 @@
   --send-ink: rgba(0, 0, 0, 0.5);
   --btn-1-bg: #151515;
   --btn-1-fg: #ffffff;
-  --line-strong: var(--vscode-widget-border, #cecece);
+  --line-strong: var(--host-border, #cecece);
   --hover: rgba(0, 0, 0, 0.04);
   --active: rgba(0, 0, 0, 0.07);
-  --focus: var(--vscode-focusBorder, #005fb8);
+  --focus: var(--host-focus, #005fb8);
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
   --scrim: rgba(0, 0, 0, 0.45);
   --ok: #1f883d;
@@ -206,22 +221,35 @@
 
 /* Container the shell lives in: sidebar base #181818 / editor base #1f1f1f, each raised two levels */
 [data-surface-host="editor"] {
-  --bg-0: var(--vscode-editor-background, #1f1f1f);
+  --host-bg: var(--vscode-editor-background);
+  --bg-0: var(--host-bg, #1f1f1f);
   --bg-1: #262626;
   --bg-2: #2c2c2c;
   --bg-code: #262626;
 }
 [data-theme="light"][data-surface-host="editor"],
 [data-theme="light"] [data-surface-host="editor"] {
-  --bg-0: var(--vscode-editor-background, #ffffff);
+  --bg-0: var(--host-bg, #ffffff);
   --bg-1: #f6f6f7;
   --bg-2: #ececee;
   --bg-code: #f3f3f3;
 }
 
+/* A fixed theme (acpira.theme = light / dark) ignores the host palette: `initial` makes the host roles guaranteed-invalid,
+   so every var(--host-*, fallback) above paints its fallback and the scheme is complete on its own */
+[data-theme-fixed], [data-theme-fixed] [data-surface-host] {
+  --host-fg: initial;
+  --host-bg: initial;
+  --host-border: initial;
+  --host-focus: initial;
+}
+
+/* Diff markers (acpira.diffMarkers = signs): the +/− prefixes carry the change alone, no tinted lines */
+[data-diff="signs"] { --diff-add: transparent; --diff-del: transparent; }
+
 /* Appearance axes (acpira.appearance.*): change tokens only, never structure */
-[data-density="compact"] { --row: 24px; --ctl: 24px; --ctl-sm: 20px; --pad: 12px; --pad-y: 12px; --page: 16px; --gap: 6px; --msg-gap: 12px; --hdr: 44px; --text-1-lh: 18px; }
-[data-density="airy"]    { --row: 32px; --ctl: 32px; --ctl-sm: 26px; --pad: 16px; --pad-y: 22px; --page: 24px; --gap: 12px; --msg-gap: 24px; --hdr: 60px; --text-1-lh: 22px; }
+[data-density="compact"] { --row: 24px; --ctl: 24px; --ctl-sm: 20px; --pad: 12px; --pad-y: 12px; --page: 16px; --gap: 6px; --msg-gap: 12px; --hdr: 44px; --text-1-lh: calc(var(--ui-font-size) + 5px); }
+[data-density="airy"]    { --row: 32px; --ctl: 32px; --ctl-sm: 26px; --pad: 16px; --pad-y: 22px; --page: 24px; --gap: 12px; --msg-gap: 24px; --hdr: 60px; --text-1-lh: calc(var(--ui-font-size) + 9px); }
 [data-density="compact"] { --row-dense: 20px; --chat-row: 24px; --process-row: 22px; }
 [data-density="airy"] { --row-dense: 28px; --chat-row: 30px; --process-row: 24px; }
 [data-density="compact"] { --process-prose-gap: 8px; }
@@ -249,13 +277,13 @@
   --settings-nav-w: 184px;
   --settings-rail-w: 52px;
   --section-gap: calc(var(--pad) + var(--gap));
-  --text-2-lh: 20px;
+  --text-2-lh: calc(var(--ui-font-size) + 7px);
   --setting-row: 48px;
   --setting-row-detail: 64px;
   --setting-row-pad: 12px;
   --setting-header-copy: 200px;
-  --text-h: 15px;
-  --text-h-lh: 22px;
+  --text-h: calc(var(--ui-font-size) + 2px);
+  --text-h-lh: calc(var(--ui-font-size) + 9px);
   --content-w: 720px;
   --ctl-w: 168px;
   --num-w: 64px;

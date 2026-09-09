@@ -188,13 +188,14 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
   return <SwitchPrimitive checked={checked} aria-label={label} disabled={disabled} onCheckedChange={onChange} />;
 }
 
-// Numeric field committing on blur / Enter; shows `unit` after the box. Local text state so half-typed values don't round-trip through the host
-export function NumberField({ value, onCommit, min, step, unit, label }: { value: number; onCommit: (v: number) => void; min?: number; step?: number; unit?: string; label: string }) {
+// Numeric field committing on blur / Enter; shows `unit` after the box. Local text state so half-typed values don't round-trip through the host.
+// Out-of-range input snaps back to the current value rather than being clamped, so a typo never silently lands on a bound
+export function NumberField({ value, onCommit, min, max, step, unit, label }: { value: number; onCommit: (v: number) => void; min?: number; max?: number; step?: number; unit?: string; label: string }) {
   const [text, setText] = useState(String(value));
   useEffect(() => { setText(String(value)); }, [value]);
   const commit = () => {
     const n = Number(text);
-    if (!Number.isFinite(n) || (min !== undefined && n < min)) { setText(String(value)); return; }
+    if (!Number.isFinite(n) || (min !== undefined && n < min) || (max !== undefined && n > max)) { setText(String(value)); return; }
     if (n !== value) onCommit(n);
   };
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setText(String(value)); };
@@ -206,6 +207,7 @@ export function NumberField({ value, onCommit, min, step, unit, label }: { value
         aria-label={label}
         value={text}
         min={min}
+        max={max}
         step={step}
         onChange={e => setText(e.target.value)}
         onBlur={commit}

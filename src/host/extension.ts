@@ -66,6 +66,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const settingsCenter = new SettingsCenter({
     read: key => cfg().get(key),
     write: (key, value) => cfg().update(key, value, vscode.ConfigurationTarget.Global),
+    writeAppearance: (axis, value) => cfg().update(`appearance.${axis}`, value, vscode.ConfigurationTarget.Global),
     hostLanguage: () => vscode.env.language,
     registry: () => manager.registry,
     runtimeInfo: agent => manager.runtimeInfo(agent),

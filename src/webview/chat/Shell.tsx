@@ -4,6 +4,7 @@ import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PermissionBlock, Qu
 import type { HiddenMap } from '@shared/settings';
 import type { AccountAction, AddAccountVia, EditTurnRequest, FileHit } from '@shared/protocol';
 import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
+import { lookAttrs, ThemeContext, type ShellLook, type Theme } from '../look';
 import { t } from '../i18n';
 import { ShellLayerContext } from '../ui/Popover';
 import { cn } from '../ui/cn';
@@ -65,7 +66,9 @@ export interface ShellHandlers {
 
 export interface ShellProps {
   appearance: Appearance;
-  theme: 'dark' | 'light';
+  theme: Theme;
+  // Rendering preferences from the settings page (fixed theme, font sizes, diff markers, smoothing); the LAB leaves it out
+  look?: ShellLook;
   // Lives in the sidebar or the editor area: decides the background level and content width
   host: 'sidebar' | 'editor';
   agent: AgentInfo;
@@ -176,6 +179,7 @@ export function Shell(p: ShellProps) {
 
   return (
     <AppearanceContext.Provider value={a}>
+      <ThemeContext.Provider value={p.theme}>
       <ShellLayerContext.Provider value={root}>
         <div
           ref={root}
@@ -184,6 +188,7 @@ export function Shell(p: ShellProps) {
           data-surface-host={p.host}
           data-agent={p.agent.id}
           {...appearanceDataAttrs(a)}
+          {...lookAttrs(p.look)}
         >
           {a.sessions === 'drawer' && (
             <aside className={cn(
@@ -254,6 +259,7 @@ export function Shell(p: ShellProps) {
           </div>
         </div>
       </ShellLayerContext.Provider>
+      </ThemeContext.Provider>
     </AppearanceContext.Provider>
   );
 }

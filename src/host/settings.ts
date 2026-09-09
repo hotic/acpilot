@@ -1,5 +1,6 @@
 import type { AgentId } from '@shared/transcript';
 import type { AgentInventory, AgentRuntimeInfo } from '@shared/inventory';
+import { AXES, type AxisKey } from '@shared/appearance';
 import { sanitizeSetting, type SettingKey, type SettingsView } from '@shared/settings';
 import { resolveLocale, type Locale } from '@shared/i18n';
 import type { AgentRegistry } from './acp/AgentRegistry';
@@ -12,6 +13,8 @@ export interface SettingsDeps {
   read: (key: SettingKey) => unknown;
   // Writes acpira.<key> at user scope
   write: (key: SettingKey, value: unknown) => PromiseLike<void>;
+  // Writes acpira.appearance.<axis> at user scope (the one axis the page exposes: motion)
+  writeAppearance: (axis: AxisKey, value: string) => PromiseLike<void>;
   // The host's display language (vscode.env.language), for resolving `auto`
   hostLanguage: () => string;
   registry: () => AgentRegistry;
@@ -45,6 +48,11 @@ export class SettingsCenter {
       autoCompact: this.read('autoCompact'),
       compactAtTokens: this.read('compactAtTokens'),
       hiddenOptions: this.read('hiddenOptions'),
+      theme: this.read('theme'),
+      uiFontSize: this.read('uiFontSize'),
+      codeFontSize: this.read('codeFontSize'),
+      diffMarkers: this.read('diffMarkers'),
+      fontSmoothing: this.read('fontSmoothing'),
     };
   }
 
@@ -57,6 +65,13 @@ export class SettingsCenter {
   async set(key: SettingKey, value: unknown): Promise<void> {
     await this.deps.write(key, sanitizeSetting(key, value));
     this.emit();
+  }
+
+  // An appearance axis from the page: only values the axis declares are written; the configuration listener pushes the new Appearance to every bridge
+  async setAppearance(axis: AxisKey, value: unknown): Promise<void> {
+    const ax = AXES.find(a => a.key === axis);
+    if (!ax || typeof value !== 'string' || !ax.options.some(o => o.value === value)) return;
+    await this.deps.writeAppearance(axis, value);
   }
 
   // Scan one agent's extension points fresh; every request is a rescan (the page's refresh button sends the same message)

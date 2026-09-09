@@ -28,7 +28,7 @@ export interface AxisDef<K extends AxisKey = AxisKey> {
   options: { value: Appearance[K]; label: string }[];
 }
 
-// Axis labels are English-source and LAB-only; the production settings page never exposes them
+// Axis labels are English-source and LAB-only; the production settings page exposes just `motion` (with its own i18n labels), the rest are design decisions
 export const AXES: AxisDef[] = [
   { key: 'density', label: 'Density', group: 'Structure', options: [{ value: 'cozy', label: 'Cozy' }, { value: 'compact', label: 'Compact' }, { value: 'airy', label: 'Airy' }] },
   { key: 'radius', label: 'Radius', group: 'Structure', options: [{ value: '12', label: '12' }, { value: '8', label: '8' }, { value: '16', label: '16' }] },

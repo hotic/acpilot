@@ -1,5 +1,5 @@
 import type { AccountInfo, AgentId, AgentInfo, ConfigControl, Draft, QuestionAnswers, SessionSummary, SessionView, TurnSettings } from './transcript';
-import type { Appearance } from './appearance';
+import type { Appearance, AxisKey } from './appearance';
 import type { HiddenMap, SettingKey, SettingsView } from './settings';
 import type { Locale } from './i18n';
 import type { AgentInventory } from './inventory';
@@ -127,6 +127,8 @@ export type WebviewMsg =
   // Settings page: write a setting (host maps it onto acpira.<key> at user scope), open a file / directory from the inventory lists,
   // rescan an agent's extension inventory, read the configOptions of its latest session
   | { type: 'setSetting'; key: SettingKey; value: unknown }
+  // An appearance axis the page exposes (motion); host maps it onto acpira.appearance.<axis> and re-pushes the Appearance
+  | { type: 'setAppearance'; axis: AxisKey; value: string }
   | { type: 'openPath'; path: string }
   // Tool references resolve relative to the originating session and retain their line.
   | { type: 'openFile'; sessionId: string; path: string; line?: number }

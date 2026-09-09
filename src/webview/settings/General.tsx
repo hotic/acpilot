@@ -9,7 +9,7 @@ import type { SettingsHandlers } from './SettingsShell';
 // The threshold field works in thousands of tokens
 const K = 1000;
 
-// General: the shell's own knobs. Appearance axes are deliberately absent — they are design decisions, not user settings.
+// General: the shell's own knobs. Rendering preferences live on the Appearance page; the LAB appearance axes (bar motion) stay design decisions.
 // The settings shell owns the page heading and content measure.
 export function General({ settings, agents, on }: { settings: SettingsView; agents: AgentInfo[]; on: SettingsHandlers }) {
   const languages = LANGUAGES.map(l => ({ value: l, label: t(`settings.language.${l}` as const) }));

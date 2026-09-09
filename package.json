@@ -176,6 +176,44 @@
             }
           }
         },
+        "acpira.theme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "light",
+            "dark"
+          ],
+          "default": "auto",
+          "description": "%acpira.conf.theme%"
+        },
+        "acpira.uiFontSize": {
+          "type": "number",
+          "default": 13,
+          "minimum": 10,
+          "maximum": 20,
+          "description": "%acpira.conf.uiFontSize%"
+        },
+        "acpira.codeFontSize": {
+          "type": "number",
+          "default": 12,
+          "minimum": 9,
+          "maximum": 20,
+          "description": "%acpira.conf.codeFontSize%"
+        },
+        "acpira.diffMarkers": {
+          "type": "string",
+          "enum": [
+            "color",
+            "signs"
+          ],
+          "default": "color",
+          "description": "%acpira.conf.diffMarkers%"
+        },
+        "acpira.fontSmoothing": {
+          "type": "boolean",
+          "default": false,
+          "description": "%acpira.conf.fontSmoothing%"
+        },
         "acpira.appearance.density": {
           "type": "string",
           "enum": [

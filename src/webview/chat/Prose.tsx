@@ -6,7 +6,7 @@ import type { TextBlock } from '@shared/transcript';
 import { useStreamMotion } from './streamMotion';
 import { CodeBlock } from './CodeBlock';
 import { Link } from './Link';
-import { useVsCodeTheme } from '../useVsCodeTheme';
+import { useTheme } from '../look';
 
 // Full Markdown via streamdown: GFM + KaTeX + Mermaid, streaming-aware (remend repairs incomplete syntax mid-stream).
 // All typography lives in styles/prose.css under .acp-prose — Tailwind never scans node_modules, so streamdown's own classes don't resolve here.
@@ -71,7 +71,7 @@ let mmdSeq = 0;
 
 // Mermaid diagram: rendered off-DOM via the plugin's shared instance; while streaming (or on bad syntax) the source shows as a code block
 function MermaidBlock({ chart }: { chart: string }) {
-  const theme = useVsCodeTheme();
+  const theme = useTheme();
   const [svg, setSvg] = useState<string>();
   const [failed, setFailed] = useState(false);
   useEffect(() => {

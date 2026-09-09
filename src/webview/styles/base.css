@@ -6,6 +6,9 @@
   .acp-shell textarea { field-sizing: content; }
   /* Native scrollbars and form controls follow the shell theme, not the host's. */
   [data-theme="light"] { color-scheme: light; }
+  [data-theme="dark"] { color-scheme: dark; }
+  /* acpira.fontSmoothing: grayscale antialiasing without dilation (thinner strokes); inherited, and a no-op off macOS */
+  .acp-shell[data-smoothing="antialiased"] { -webkit-font-smoothing: antialiased; }
 }
 
 /* Scrollbars are overlay-style: the gutter stays reserved (scrollbar-gutter) so content never shifts, but the track is invisible and the

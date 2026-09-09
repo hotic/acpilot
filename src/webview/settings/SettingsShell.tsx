@@ -4,19 +4,23 @@ import type { AccountInfo, AgentId, AgentInfo, ConfigControl } from '@shared/tra
 import type { AgentInventory } from '@shared/inventory';
 import type { SettingKey, SettingsView } from '@shared/settings';
 import type { Locale } from '@shared/i18n';
-import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
+import { AppearanceContext, appearanceDataAttrs, type Appearance, type AxisKey } from '../appearance';
+import { lookAttrs, ThemeContext, type ShellLook, type Theme } from '../look';
 import { IconButton } from '../ui/Button';
 import { ShellLayerContext } from '../ui/Popover';
 import { useScrollReveal } from '../ui/useScrollReveal';
 import { LocaleContext, t } from '../i18n';
 import { PageRail, type SettingsPage } from './Nav';
 import { General } from './General';
+import { AppearancePage } from './Appearance';
 import { AgentPage } from './AgentPage';
 import { Page, PageHeader } from './controls';
 
 // Every action the settings page sends to the host; the LAB implements these with a fake host, the real page with postMessage
 export interface SettingsHandlers {
   setSetting: <K extends SettingKey>(key: K, value: SettingsView[K]) => void;
+  // The one appearance axis the page exposes (motion); the rest stay LAB design decisions
+  setAppearance: <K extends AxisKey>(axis: K, value: Appearance[K]) => void;
   openPath: (path: string) => void;
   refreshInventory: (agent: AgentId) => void;
   selectAccount: (id: string) => void;
@@ -33,7 +37,9 @@ export interface SettingsEnv {
 
 export interface SettingsShellProps {
   appearance: Appearance;
-  theme: 'dark' | 'light';
+  theme: Theme;
+  // Rendering preferences from the settings (fixed theme, font sizes, …), applied to this shell as well so edits preview in place
+  look?: ShellLook;
   // Where the webview lives: the settings replace the chat in the sidebar (Codex-style); in the editor the same column is centred
   host: 'sidebar' | 'editor';
   locale: Locale;
@@ -58,7 +64,7 @@ export function SettingsShell(p: SettingsShellProps) {
   useScrollReveal(root);
   const page = p.page;
   const agent = page.kind === 'agent' ? p.agents.find(a => a.id === page.id) : undefined;
-  const title = agent ? t('settings.agent.title', { agent: agent.name }) : t('settings.general.title');
+  const title = agent ? t('settings.agent.title', { agent: agent.name }) : page.kind === 'appearance' ? t('settings.appearance.title') : t('settings.general.title');
   const action = agent && (
     <IconButton title={t('common.refresh')} aria-label={t('common.refresh')} onClick={() => p.on.refreshInventory(agent.id)}>
       <RefreshCw strokeWidth={1.5} />
@@ -66,6 +72,7 @@ export function SettingsShell(p: SettingsShellProps) {
   );
   return (
     <AppearanceContext.Provider value={p.appearance}>
+      <ThemeContext.Provider value={p.theme}>
       <LocaleContext.Provider value={p.locale}>
         <ShellLayerContext.Provider value={root}>
           <div
@@ -75,13 +82,15 @@ export function SettingsShell(p: SettingsShellProps) {
             data-surface-host={p.host}
             data-agent={agent?.id ?? p.settings.defaultAgent}
             {...appearanceDataAttrs(p.appearance)}
+            {...lookAttrs(p.look)}
           >
             <div className="flex min-h-0 flex-1">
               <PageRail agents={p.agents} page={p.page} onPage={p.onPage} onBack={p.onBack} />
               <main key={page.kind === 'agent' ? page.id : page.kind} className="min-w-0 flex-1 overflow-y-auto scroll-stable">
                 <Page>
                   <PageHeader title={title} action={action} />
-                  {p.page.kind === 'general' && <General settings={p.settings} agents={p.agents} on={p.on} />}
+                  {page.kind === 'general' && <General settings={p.settings} agents={p.agents} on={p.on} />}
+                  {page.kind === 'appearance' && <AppearancePage settings={p.settings} appearance={p.appearance} on={p.on} />}
                   {agent && (
                     <AgentPage
                       key={agent.id}
@@ -100,6 +109,7 @@ export function SettingsShell(p: SettingsShellProps) {
           </div>
         </ShellLayerContext.Provider>
       </LocaleContext.Provider>
+      </ThemeContext.Provider>
     </AppearanceContext.Provider>
   );
 }
