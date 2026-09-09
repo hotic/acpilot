@@ -340,9 +340,11 @@ function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: Thre
     if (!exchanges.length || (turn.role === 'user' && !turn.auto)) {
       exchanges.push({ key: ti, messages: [] });
     }
+    // Fold memory key: the session plus the turn's position and start time, so an edited-away turn at the same index does not inherit a choice
+    const memoryKey = replayKey !== undefined ? `${replayKey}:${ti}:${turn.role === 'agent' ? turn.startedAt ?? '' : ''}` : undefined;
     exchanges[exchanges.length - 1]!.messages.push(turn.role === 'user'
       ? <HistoryMessage key={turn.id ?? ti} turn={turn} turnIndex={ti} index={index} blobUrl={blobUrl} />
-      : <AgentMessage key={ti} turn={turn} index={index} compacting={compacting} running={running && ti === turns.length - 1 && !turn.stop} onPermission={onPermission} />);
+      : <AgentMessage key={ti} turn={turn} index={index} compacting={compacting} running={running && ti === turns.length - 1 && !turn.stop} onPermission={onPermission} memoryKey={memoryKey} />);
   });
   return (
     <div ref={ref} data-thread className="scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto px-page [container-type:size] [overflow-anchor:none]">

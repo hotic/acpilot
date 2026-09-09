@@ -21,6 +21,7 @@ import { QuestionRecord } from './Questions';
 import { PlanDocument } from './PlanDocument';
 import { TurnAttachments } from './Attachments';
 import { elapsedLabel, splitCodexBlocks } from './folding';
+import { rememberFold, rememberedFold } from './foldMemory';
 import { ProcessHistory } from './ProcessHistory';
 import { compactionForDisplay } from './compactionDisplay';
 
@@ -76,7 +77,8 @@ type OnPermission = (blockId: string, optionId: string) => void;
 // Agent message: consecutive "lines" (thought / plan / tool, commands included) are grouped together; prose / permission cards each stand alone as blocks.
 // The top-level activity owns the only Orb; detailed rows show their own verbs with static icons.
 // Memoized: the host pushes the whole view on every stream chunk and `reuse` keeps finished turns by reference, so only the live turn renders.
-export const AgentMessage = memo(function AgentMessage({ turn, index, running, onPermission, compacting }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission; compacting?: boolean }) {
+// `memoryKey` names the turn for fold memory (session + turn); without one the fold state lives only in the component.
+export const AgentMessage = memo(function AgentMessage({ turn, index, running, onPermission, compacting, memoryKey }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission; compacting?: boolean; memoryKey?: string }) {
   if (compacting) turn = compactionForDisplay(turn, running);
   const plans = turn.blocks.filter(b => b.type === 'plan_document');
   // Keep pending approvals in the activity input even when their controls live
@@ -85,15 +87,15 @@ export const AgentMessage = memo(function AgentMessage({ turn, index, running, o
   // Filter before grouping so they leave neither a disclosure nor a rail/spacing slot.
   const content = { ...turn, blocks: turn.blocks.filter(b => b.type !== 'plan_document' && (b.type !== 'thought' || !!b.text.trim())) };
   return <RowEntranceContext.Provider value={running}><div className="flex min-w-0 flex-col gap-gap px-pad [--row:var(--chat-row)]">
-    <AgentContent turn={content} index={index} running={running} onPermission={onPermission} />
+    <AgentContent turn={content} index={index} running={running} onPermission={onPermission} memoryKey={memoryKey} />
     {plans.map(plan => <PlanDocument key={plan.id} block={plan}
       permission={turn.blocks.find((b): b is PermissionBlock => b.type === 'permission' && b.planId === plan.id)} onChoose={onPermission} />)}
   </div></RowEntranceContext.Provider>;
 });
 
-function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission }) {
+function AgentContent({ turn, index, running, onPermission, memoryKey }: { turn: AgentTurn; index: number; running: boolean; onPermission: OnPermission; memoryKey?: string }) {
   const { fold } = useAppearance();
-  if (fold === 'codex') return <CodexMessage turn={turn} running={running} onPermission={onPermission} />;
+  if (fold === 'codex') return <CodexMessage turn={turn} running={running} onPermission={onPermission} memoryKey={memoryKey} />;
   // Plan approvals live on the plan card and the open question card above the composer; neither takes a slot in the message
   const groups = groupBlocks(detailBlocks(turn, running).filter(b => (b.type !== 'permission' || !b.planId) && (b.type !== 'question' || !!b.outcome)));
   return (
@@ -288,13 +290,13 @@ function CursorFold({ blocks }: { blocks: ToolCallBlock[] }) {
 // One process area per turn. Thoughts keep their normal disclosure under the activity row until the
 // first tool call makes the area foldable; the same panel stays mounted across that change so a row
 // the user opened is never rebuilt. Permission cards stay outside; the latest reply remains visible while it streams.
-function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; running: boolean; onPermission: OnPermission }) {
+function CodexMessage({ turn, running, onPermission, memoryKey }: { turn: AgentTurn; running: boolean; onPermission: OnPermission; memoryKey?: string }) {
   const { process, reply, permissions } = splitCodexBlocks(detailBlocks(turn, running));
   const foldable = turn.blocks.some(block => block.type === 'tool_call');
   return (
     <div className="flex flex-col gap-gap">
       {!foldable && <Activity turn={turn} running={running} />}
-      <CodexFold turn={turn} blocks={process} running={running} foldable={foldable} />
+      <CodexFold turn={turn} blocks={process} running={running} foldable={foldable} memoryKey={memoryKey} />
       {reply.map((block, i) => <Prose key={i} block={block} />)}
       {permissions.filter(block => !block.planId).map(block => <Permission key={block.id} block={block} onChoose={id => onPermission(block.id, id)} />)}
       {!running && outcomeOf(turn) && <Outcome turn={turn} />}
@@ -304,13 +306,20 @@ function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; runnin
 
 // The fold latches its initial state the moment it becomes foldable: closed unless a nested row is open by hand,
 // which keeps that row on screen. Afterwards only the user's toggle moves it; new chunks never reset it.
-function CodexFold({ turn, blocks, running, foldable }: { turn: AgentTurn; blocks: AgentBlock[]; running: boolean; foldable: boolean }) {
-  const [manual, setManual] = useState<boolean>();
+// The toggle is also written to fold memory under `memoryKey`, so a rebuilt message (or a reloaded webview) reopens
+// what the reader had opened instead of snapping shut mid-turn.
+function CodexFold({ turn, blocks, running, foldable, memoryKey }: { turn: AgentTurn; blocks: AgentBlock[]; running: boolean; foldable: boolean; memoryKey?: string }) {
+  const recall = (key: string | undefined) => ({ key, manual: key ? rememberedFold(key) : undefined });
+  const [choice, setChoice] = useState(() => recall(memoryKey));
+  // A key that changes under a mounted fold (a turn that gains its start time) re-reads memory instead of keeping a stranger's choice
+  if (choice.key !== memoryKey) setChoice(recall(memoryKey));
+  const manual = choice.key === memoryKey ? choice.manual : undefined;
   const openedInside = useRef(0);
   const latched = useRef<boolean | undefined>(undefined);
   if (!foldable) latched.current = undefined;
   else latched.current ??= openedInside.current > 0;
   const observe = useCallback((next: boolean) => { openedInside.current += next ? 1 : -1; }, []);
+  const toggle = useCallback((next: boolean) => { setChoice({ key: memoryKey, manual: next }); if (memoryKey) rememberFold(memoryKey, next); }, [memoryKey]);
   const open = !foldable || (manual ?? latched.current);
   const activity = liveActivity(turn);
   const CompletionIcon = turn.stop === 'cancelled' ? X : outcomeOf(turn) ? TriangleAlert : Check;
@@ -319,7 +328,7 @@ function CodexFold({ turn, blocks, running, foldable }: { turn: AgentTurn; block
   const elapsed = !running && turn.startedAt !== undefined && turn.endedAt !== undefined ? elapsedLabel(turn) : undefined;
   if (!foldable && blocks.length === 0) return null;
   return (
-    <Collapsible.Root open={open} onOpenChange={setManual} className="group flex min-w-0 flex-col" data-open={open || undefined}>
+    <Collapsible.Root open={open} onOpenChange={toggle} className="group flex min-w-0 flex-col" data-open={open || undefined}>
       {foldable && (
         <Collapsible.Trigger render={<Row as="button" interactive lead={lead} title={label} />}>
           <RowLabel className={running && activity.active ? 'shimmer' : undefined}>{label}</RowLabel>
