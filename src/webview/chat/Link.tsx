@@ -6,11 +6,12 @@ import { OpenToolFileContext, decodeFileHref, parseFileLink } from './fileLinks'
 
 // Links in agent output: the webview cannot navigate, so clicks are forwarded to the host.
 // Workspace paths go through openFile; http(s)/mailto stay on openExternal.
-// LAB has no acquireVsCodeApi; there we fall back to a plain window.open.
-const hasApi = typeof acquireVsCodeApi === 'function';
+// A host is either VS Code (acquireVsCodeApi) or a shell that injected window.__acpiraApi (JCEF, LAB fixtures); without either
+// (a bare LAB page) fall back to a plain window.open.
+const hasApi = () => !!window.__acpiraApi || typeof acquireVsCodeApi === 'function';
 
 function openExternal(url: string) {
-  if (hasApi) vscodeApi().postMessage({ type: 'openExternal', url });
+  if (hasApi()) vscodeApi().postMessage({ type: 'openExternal', url });
   else window.open(url, '_blank', 'noopener');
 }
 
