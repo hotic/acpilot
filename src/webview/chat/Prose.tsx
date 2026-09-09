@@ -1,11 +1,12 @@
 import { cloneElement, isValidElement, useEffect, useState, type ReactElement, type ReactNode } from 'react';
-import { Streamdown, type Components } from 'streamdown';
+import { Streamdown, defaultRehypePlugins, type Components } from 'streamdown';
 import { createMathPlugin } from '@streamdown/math';
 import { mermaid as mermaidDiagram } from '@streamdown/mermaid';
 import type { TextBlock } from '@shared/transcript';
 import { useStreamMotion } from './streamMotion';
 import { CodeBlock } from './CodeBlock';
-import { Link } from './Link';
+import { InlineFileCode, Link } from './Link';
+import { rewriteFileHrefs } from './fileLinks';
 import { useTheme } from '../look';
 
 // Full Markdown via streamdown: GFM + KaTeX + Mermaid, streaming-aware (remend repairs incomplete syntax mid-stream).
@@ -15,6 +16,10 @@ import { useTheme } from '../look';
 const PLUGINS = { math: createMathPlugin(), mermaid: mermaidDiagram };
 // Module-level: streamdown's top-level memo compares props by reference, so every config object must be stable
 const LINK_SAFETY = { enabled: false };
+const { raw: rehypeRaw, sanitize: rehypeSanitize, harden: rehypeHarden } = defaultRehypePlugins;
+if (!rehypeRaw || !rehypeSanitize || !rehypeHarden) throw new Error('streamdown default rehype plugins missing');
+// Rewrite file:// before sanitize/harden; urlTransform runs too late and harden would paint ` [blocked]`.
+const REHYPE = [rehypeRaw, rewriteFileHrefs, rehypeSanitize, rehypeHarden];
 export function Prose({ block }: { block: TextBlock }) {
   const streaming = !!block.streaming;
   const { animated, animating } = useStreamMotion(streaming);
@@ -30,6 +35,7 @@ export function Prose({ block }: { block: TextBlock }) {
       codeBlockMaxHeight={0}
       tableMaxHeight={0}
       linkSafety={LINK_SAFETY}
+      rehypePlugins={REHYPE}
       plugins={PLUGINS}
       components={COMPONENTS}
       className="acp-prose flex min-w-0 flex-col gap-gap text-1 text-fg-1"
@@ -49,7 +55,7 @@ const COMPONENTS: Components = {
     const code = textOf(children).replace(/\n$/, '');
     return lang === 'mermaid' ? <MermaidBlock chart={code} /> : <CodeBlock code={code} />;
   },
-  inlineCode: ({ children }) => <code>{children}</code>,
+  inlineCode: InlineFileCode,
   a: Link,
   table: ({ children }) => (
     <div className="acp-table scroll-thin overflow-x-auto rounded-lg border border-conversation-line">

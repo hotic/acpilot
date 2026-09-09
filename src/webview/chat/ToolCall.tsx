@@ -1,5 +1,5 @@
 import { Check, ChevronRight, FileText, Globe, X } from 'lucide-react';
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
 import type { ToolCallBlock } from '@shared/transcript';
 import { useAppearance } from '../appearance';
 import { Disclosure } from '../ui/Disclosure';
@@ -13,10 +13,11 @@ import { TOOL_ICON } from './icons';
 import { CodeSurface, DiffBlock } from './CodeBlock';
 import { TerminalOutput } from './Terminal';
 import { toolVerb } from './folding';
+import { OpenToolFileContext } from './fileLinks';
 import { fileReference, isFileListing, isLineCount, toolFiles } from './toolDetails';
 import { useToolSeconds } from './useToolSeconds';
 
-export const OpenToolFileContext = createContext<((path: string, line?: number) => void) | undefined>(undefined);
+export { OpenToolFileContext } from './fileLinks';
 
 // One tool call = one expandable row, command execution included (Codex-style: the command sits on the row, the output is a card below).
 // Three modes: text only / with icon / icon + meta. No Orb while running: icon mode uses the same static icon as the completed state, with the verb shimmering.

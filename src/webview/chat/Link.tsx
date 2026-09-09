@@ -1,8 +1,11 @@
-import type { ComponentProps } from 'react';
+import { isValidElement, useContext, type ComponentProps, type KeyboardEvent, type ReactNode } from 'react';
 import type { ExtraProps } from 'streamdown';
 import { vscodeApi } from '../vscodeApi';
+import { cn } from '../ui/cn';
+import { OpenToolFileContext, decodeFileHref, parseFileLink } from './fileLinks';
 
-// Links in agent output: the webview cannot navigate, so clicks are forwarded to the host (openExternal).
+// Links in agent output: the webview cannot navigate, so clicks are forwarded to the host.
+// Workspace paths go through openFile; http(s)/mailto stay on openExternal.
 // LAB has no acquireVsCodeApi; there we fall back to a plain window.open.
 const hasApi = typeof acquireVsCodeApi === 'function';
 
@@ -11,14 +14,24 @@ function openExternal(url: string) {
   else window.open(url, '_blank', 'noopener');
 }
 
+function fileFromHref(href: string) {
+  return decodeFileHref(href) ?? parseFileLink(href);
+}
+
 // ExtraProps: streamdown passes the hast node along; unused here but part of the component contract
 export function Link({ href, children, node: _node, ...rest }: ComponentProps<'a'> & ExtraProps) {
+  const openFile = useContext(OpenToolFileContext);
   return (
     <a
       href={href}
       onClick={e => {
         e.preventDefault();
         if (!href) return;
+        const file = fileFromHref(href);
+        if (file) {
+          openFile?.(file.path, file.line);
+          return;
+        }
         // Fragment links (GFM footnotes / back-references) stay in-page; only real URLs go external
         if (href.startsWith('#')) document.getElementById(href.slice(1))?.scrollIntoView();
         else openExternal(href);
@@ -28,4 +41,29 @@ export function Link({ href, children, node: _node, ...rest }: ComponentProps<'a
       {children}
     </a>
   );
+}
+
+export function InlineFileCode({ children, className, node: _node, ...rest }: ComponentProps<'code'> & ExtraProps) {
+  const openFile = useContext(OpenToolFileContext);
+  const file = openFile ? parseFileLink(textOf(children)) : undefined;
+  if (!openFile || !file) return <code className={className} {...rest}>{children}</code>;
+  const open = () => openFile(file.path, file.line);
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      open();
+    }
+  };
+  return (
+    <code role="link" tabIndex={0} title={file.path} className={cn('cursor-pointer hover:underline focus-visible:underline', className)}
+      onClick={open} onKeyDown={onKeyDown} {...rest}>{children}</code>
+  );
+}
+
+function textOf(node: ReactNode): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join('');
+  if (isValidElement(node)) return textOf((node.props as { children?: ReactNode }).children);
+  return '';
 }
