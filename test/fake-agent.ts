@@ -12,7 +12,7 @@ import * as acp from '@agentclientprotocol/sdk';
 // Login: when cwd contains "needs-auth", session/new requires authenticate first; authenticate validates _meta.api_key the way Devin does (only accepts good-key)
 // Process lifecycle knobs (env): FAKE_INIT_FAIL → initialize answers an error while the process stays up (an orphan unless the client kills it);
 // FAKE_STUBBORN → ignores SIGTERM and keeps the event loop busy, so only SIGKILL ends it; FAKE_SILENT_CANCEL → a cancel during background
-// compaction drops the work without the usual "Compaction canceled." prose
+// compaction drops the work without the usual "Compaction canceled." prose; FAKE_AUTH_REJECT → authenticate always fails (terminal login only)
 
 if (process.env.FAKE_STUBBORN) {
   process.on('SIGTERM', () => {});
@@ -75,6 +75,8 @@ const app = acp.agent({ name: 'fake-agent' })
     return { modes: { currentModeId: 'plan', availableModes: [{ id: 'agent', name: 'Agent' }, { id: 'plan', name: 'Plan' }] } };
   })
   .onRequest(acp.methods.agent.authenticate, ({ params }) => {
+    // FAKE_AUTH_REJECT: a CLI whose ACP authenticate never succeeds, so the host has to fall back to the registry's terminal login
+    if (process.env.FAKE_AUTH_REJECT) throw acp.RequestError.authRequired({ reason: 'use the terminal login' });
     const key = params._meta?.api_key;
     if (key !== undefined && key !== 'good-key') throw acp.RequestError.authRequired({ reason: 'bad key' });
     authed = true;

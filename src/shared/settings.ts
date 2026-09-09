@@ -46,6 +46,7 @@ export interface SettingsView {
 
 // Keys the webview may write back; the host maps them onto acpira.<key> at user scope
 export type SettingKey = 'language' | 'defaultAgent' | 'sessionScope' | 'autoCompact' | 'compactAtTokens' | 'hiddenOptions' | 'theme' | 'uiFontSize' | 'codeFontSize' | 'diffMarkers' | 'fontSmoothing';
+export const SETTING_KEYS: SettingKey[] = ['language', 'defaultAgent', 'sessionScope', 'autoCompact', 'compactAtTokens', 'hiddenOptions', 'theme', 'uiFontSize', 'codeFontSize', 'diffMarkers', 'fontSmoothing'];
 
 export const MIN_COMPACT_AT_TOKENS = 10_000;
 

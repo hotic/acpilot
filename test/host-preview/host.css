@@ -1,0 +1,27 @@
+/* What a host webview provides around the bundle: a full-height root, the --vscode-* roles tokens.css reads, no page scroll.
+   The IntelliJ shell injects the same variables from the IDE look and feel. */
+html, body, #root { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+body {
+  --vscode-foreground: #cccccc;
+  --vscode-sideBar-background: #181818;
+  --vscode-editor-background: #1f1f1f;
+  --vscode-widget-border: #313131;
+  --vscode-focusBorder: #0078d4;
+  --vscode-editor-font-family: "SF Mono", Menlo, Monaco, monospace;
+  background: var(--vscode-sideBar-background);
+  color: var(--vscode-foreground);
+  font-family: -apple-system, system-ui, sans-serif;
+}
+body.vscode-light {
+  --vscode-foreground: #3b3b3b;
+  --vscode-sideBar-background: #f8f8f8;
+  --vscode-editor-background: #ffffff;
+  --vscode-widget-border: #d4d4d4;
+  --vscode-focusBorder: #005fb8;
+}
+.acp-shell :focus, .acp-shell :focus-visible { outline: none !important; }
+
+/* The shell's own toasts (a platformRequest the sidecar sent), stacked bottom-right, out of the bundle's way */
+#harness-toasts { position: fixed; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 9999; pointer-events: none; }
+#harness-toasts > div { font: 12px/1.4 system-ui, sans-serif; padding: 8px 10px; border-radius: 6px; background: #2b2b2b; color: #e6e6e6; border: 1px solid #444; max-width: 360px; white-space: pre-wrap; }
+#harness-toasts > div.error { border-color: #a33; }

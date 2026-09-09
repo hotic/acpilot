@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { appearanceFromSettings, type Appearance, type AxisKey } from '@shared/appearance';
-import { sanitizeSetting, type HiddenMap } from '@shared/settings';
+import { SETTING_KEYS, sanitizeSetting, type HiddenMap } from '@shared/settings';
 import type { WebviewHost } from '@shared/protocol';
 import { AgentRegistry, type CustomAgentSetting } from './acp/AgentRegistry';
 import { AccountManager } from './accounts/AccountManager';
@@ -115,8 +115,9 @@ export class HostRuntime {
     if (affects('appearance')) for (const b of this.bridges) b.pushAppearance();
     if (affects('agents')) { this.activeRegistry = new AgentRegistry(this.read<Record<string, CustomAgentSetting>>('agents') ?? {}); this.manager.setRegistry(this.activeRegistry); }
     if (affects('hiddenOptions')) this.manager.emitHidden();
-    // Any other acpira.* knob the settings page shows (language, defaultAgent, compaction, …): re-push the view and follow a language change host-side
-    if (affects() && !affects('appearance') && !affects('agents')) {
+    // Any knob the settings page shows (language, defaultAgent, compaction, …): re-push the view and follow a language change host-side.
+    // Checked per key, not as "anything but appearance / agents": one shell event may carry an appearance axis and a language change together
+    if (SETTING_KEYS.some(k => affects(k))) {
       this.settings.emit();
       setHostLocale(this.settings.locale());
     }
