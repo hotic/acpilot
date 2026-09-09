@@ -16,7 +16,7 @@
 - **消息队列与审批。** Agent 工作时可追加排队消息，计划审阅和权限审批在对话中完成。
 - **切换 Agent，保留熟悉的操作。** 支持 Grok、Devin、Kimi Code 及其他兼容 ACP 的 CLI，共用会话管理与模型控制界面。
 
-<table>
+<table width="100%">
   <tr>
     <th width="50%">执行过程与待办</th>
     <th width="50%">输入与消息排队</th>
@@ -24,12 +24,12 @@
   <tr>
     <td width="50%" valign="top">
       <a href="media/readme/inspect.gif">
-        <img src="media/readme/inspect.gif" width="480" alt="执行过程与待办">
+        <img src="media/readme/inspect.gif" width="100%" alt="执行过程与待办">
       </a>
     </td>
     <td width="50%" valign="top">
       <a href="media/readme/follow-up.gif">
-        <img src="media/readme/follow-up.gif" width="480" alt="输入与消息排队">
+        <img src="media/readme/follow-up.gif" width="100%" alt="输入与消息排队">
       </a>
     </td>
   </tr>

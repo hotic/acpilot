@@ -16,7 +16,7 @@ Bring Grok, Devin, Kimi Code, and other ACP agents into VS Code and Cursor. Keep
 - **Queue and approvals.** Queue messages while an agent is working, review plans, and approve actions in place.
 - **Choose the agent. Keep the interface.** Use Grok, Devin, Kimi Code, and other ACP-compatible CLIs with shared session and model controls.
 
-<table>
+<table width="100%">
   <tr>
     <th width="50%">Execution and to-dos</th>
     <th width="50%">Follow-up messages</th>
@@ -24,12 +24,12 @@ Bring Grok, Devin, Kimi Code, and other ACP agents into VS Code and Cursor. Keep
   <tr>
     <td width="50%" valign="top">
       <a href="media/readme/inspect.gif">
-        <img src="media/readme/inspect.gif" width="480" alt="Execution and to-dos">
+        <img src="media/readme/inspect.gif" width="100%" alt="Execution and to-dos">
       </a>
     </td>
     <td width="50%" valign="top">
       <a href="media/readme/follow-up.gif">
-        <img src="media/readme/follow-up.gif" width="480" alt="Follow-up messages">
+        <img src="media/readme/follow-up.gif" width="100%" alt="Follow-up messages">
       </a>
     </td>
   </tr>
