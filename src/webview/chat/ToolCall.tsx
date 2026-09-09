@@ -1,6 +1,7 @@
 import { Check, ChevronRight, FileText, Globe, X } from 'lucide-react';
 import { memo, useContext, useState, type ReactNode } from 'react';
 import type { ToolCallBlock } from '@shared/transcript';
+import { toolTodoEntries } from '@shared/todoTools';
 import { useAppearance } from '../appearance';
 import { Disclosure } from '../ui/Disclosure';
 import { Row, RowLabel, RowTarget } from '../ui/Row';
@@ -9,12 +10,13 @@ import { IconButton } from '../ui/Button';
 import { Collapsible } from '../ui/Collapsible';
 import { ConnectedRail } from '../ui/ConnectedRail';
 import { t } from '../i18n';
-import { TOOL_ICON } from './icons';
+import { toolIcon } from './icons';
+import { PlanDetails } from './Plan';
 import { CodeSurface, DiffBlock } from './CodeBlock';
 import { TerminalOutput } from './Terminal';
 import { toolVerb } from './folding';
 import { OpenToolFileContext } from './fileLinks';
-import { fileReference, isFileListing, isLineCount, toolFiles } from './toolDetails';
+import { fileReference, isFileListing, toolFiles } from './toolDetails';
 import { useToolSeconds } from './useToolSeconds';
 
 export { OpenToolFileContext } from './fileLinks';
@@ -30,7 +32,8 @@ export const ToolCall = memo(function ToolCall({ block, grouped = false }: { blo
   const execute = block.kind === 'execute';
   const seconds = useToolSeconds(block);
   const files = toolFiles(block);
-  const Icon = TOOL_ICON[block.kind];
+  const Icon = toolIcon(block);
+  const todos = toolTodoEntries(block);
 
   const lead = toolLine === 'text' ? undefined : <Icon className="size-icon" strokeWidth={1.5} />;
 
@@ -52,26 +55,27 @@ export const ToolCall = memo(function ToolCall({ block, grouped = false }: { blo
     </RowLabel>
     {block.target && !(block.kind === 'read' && files.length) && <RowTarget mono={block.targetMono}>{block.target}</RowTarget>}
   </>;
+  if (todos !== undefined) return <PlanDetails entries={todos} label={label} trailing={trailing} />;
   // Search hits open on demand; read references remain visible inside the process.
   if (files.length && block.kind === 'search') return (
-    <Disclosure lead={lead} trailing={trailing} indent={false} rail="rows"
+    <Disclosure className="action-details" tone="action" lead={lead} trailing={trailing} indent={false} rail="rows"
       body={<ResultList items={files} kind={block.kind} detail={block} />}>
       {label}
     </Disclosure>
   );
   // A count-only read response has no content to inspect beyond its references.
   if (files.length) return (
-    <ConnectedRail enabled={toolLine !== 'text'} endAtLastRow className="flex flex-col">
-      <Row lead={lead} trailing={trailing}>{label}</Row>
+    <ConnectedRail enabled={toolLine !== 'text'} endAtLastRow className="action-details flex flex-col">
+      <Row tone="action" lead={lead} trailing={trailing}>{label}</Row>
       <ResultList items={files} kind={block.kind} detail={block} />
     </ConnectedRail>
   );
   // A history row without details has no second disclosure to open.
-  if (grouped && !block.content) return <Row lead={lead} trailing={trailing}>{label}</Row>;
+  if (grouped && !block.content) return <Row tone="action" lead={lead} trailing={trailing}>{label}</Row>;
 
   // Opening a process fold reveals action rows; outputs only expand on an explicit click.
   return (
-    <Disclosure lead={lead} trailing={trailing} indent={false} rail={block.content?.type === 'list' ? 'rows' : false} defaultOpen={!grouped && execute && running} body={<ToolBody block={block} />}>
+    <Disclosure className="action-details" tone="action" lead={lead} trailing={trailing} indent={false} rail={block.content?.type === 'list' ? 'rows' : false} defaultOpen={!grouped && execute && running} body={<ToolBody block={block} />}>
       {label}
     </Disclosure>
   );
@@ -82,8 +86,8 @@ export const ToolCall = memo(function ToolCall({ block, grouped = false }: { blo
 export const ReadGroup = memo(function ReadGroup({ blocks }: { blocks: ToolCallBlock[] }) {
   const { toolLine } = useAppearance();
   const first = blocks[0]!;
-  return <ConnectedRail enabled={toolLine !== 'text'} endAtLastRow className="read-group flex flex-col">
-    <Row lead={toolLine === 'text' ? undefined : <FileText className="size-icon" strokeWidth={1.5} />}>
+  return <ConnectedRail enabled={toolLine !== 'text'} endAtLastRow className="action-details read-group flex flex-col">
+    <Row tone="action" lead={toolLine === 'text' ? undefined : <FileText className="size-icon" strokeWidth={1.5} />}>
       <RowLabel>{toolVerb(first)}</RowLabel>
     </Row>
     <div className="tool-results flex flex-col">
@@ -112,13 +116,14 @@ function ResultList({ items, kind, rail = true, detail }: { items: string[]; kin
         const lead = toolLine === 'text' ? undefined : <Icon className="size-icon" strokeWidth={1.5} />;
         const target = <RowTarget mono={kind !== 'fetch'} className="text-fg-2">{main}</RowTarget>;
         if (kind === 'read' || kind === 'search') {
-          // ACP output belongs to the call; expose it once on its first file row.
-          const body = index === 0 && detail?.content && detail.content.type !== 'list' && !isLineCount(detail) && !isFileListing(detail)
+          // Search output belongs to the call; expose it once on its first file row. A read's output is the file itself (often just a
+          // line count or a truncation note), so its rows only open the file and carry no disclosure
+          const body = kind === 'search' && index === 0 && detail?.content && detail.content.type !== 'list' && !isFileListing(detail)
             ? <ToolBody block={detail} /> : undefined;
           return <FileResultRow key={it} hit={it} lead={lead} aside={aside} body={body}>{target}</FileResultRow>;
         }
         return (
-          <Row key={it} dense lead={lead} trailing={aside} title={it}>
+          <Row tone="action" key={it} dense lead={lead} trailing={aside} title={it}>
             {target}
           </Row>
         );
@@ -132,15 +137,18 @@ function FileResultRow({ hit, lead, aside, body, children }: { hit: string; lead
   const openFile = useContext(OpenToolFileContext);
   const [open, setOpen] = useState(false);
   const file = fileReference(hit);
+  const asideEl = aside && <span className="shrink-0 whitespace-nowrap text-3 text-fg-3/70 tabular-nums">{aside}</span>;
   return <Collapsible.Root open={open} onOpenChange={setOpen} className="flex min-w-0 flex-col">
-    <Row dense lead={lead} title={hit} trailing={<>
-      {aside}
-      {body && <Collapsible.Trigger render={<IconButton size="sm" title={t('tool.toggleOutput')} aria-label={t('tool.toggleOutput')}>
+    <Row tone="action" dense lead={lead} title={hit} className="group/file">
+      {openFile ? <button type="button" title={hit} className="group/ref flex min-w-0 max-w-full items-baseline gap-1 cursor-pointer text-left"
+        onClick={() => openFile(file.path, file.line)}>
+        {/* Only the file name underlines on hover / focus; the line range beside it stays plain */}
+        <span className="flex min-w-0 group-hover/ref:underline group-focus-visible/ref:underline">{children}</span>{asideEl}
+      </button>
+        : <span className="flex min-w-0 items-baseline gap-1">{children}{asideEl}</span>}
+      {body && <Collapsible.Trigger render={<IconButton size="sm" className="self-center text-fg-3 group-hover/file:text-fg-1 group-focus-within/file:text-fg-1" title={t('tool.toggleOutput')} aria-label={t('tool.toggleOutput')}>
         <ChevronRight className={cn('transition-transform', open && 'rotate-90')} strokeWidth={1.5} />
       </IconButton>} />}
-    </>}>
-      {openFile ? <button type="button" title={hit} className="flex min-w-0 max-w-full cursor-pointer text-left hover:underline focus-visible:underline"
-        onClick={() => openFile(file.path, file.line)}>{children}</button> : children}
     </Row>
     {body && <Collapsible.Panel className="-mx-hit [&>div]:px-hit"><div className="pt-1 pb-1.5">{body}</div></Collapsible.Panel>}
   </Collapsible.Root>;
@@ -148,7 +156,7 @@ function FileResultRow({ hit, lead, aside, body, children }: { hit: string; lead
 
 function splitHit(hit: string): { main: string; aside?: string } {
   const line = /^(.+?):(\d+(?:[–-]\d+)?)(?::\d+)?$/.exec(hit);
-  if (line) return { main: line[1]!.split(/[\\/]/).pop()!, aside: `:${line[2]}` };
+  if (line) return { main: line[1]!.split(/[\\/]/).pop()!, aside: `L${line[2]}` };
   if (/^(?:\.{0,2}\/|[A-Za-z]:[\\/])/.test(hit)) return { main: hit.split(/[\\/]/).pop()! };
   try {
     const u = new URL(hit);

@@ -147,6 +147,8 @@ export interface ToolCallBlock {
   endedAt?: number;
   meta?: string;
   diffStat?: { add: number; del: number };
+  // Confirmed todo-tool output, separate from the standard live plan update.
+  todoEntries?: PlanEntry[];
   content?: ToolContent;
 }
 

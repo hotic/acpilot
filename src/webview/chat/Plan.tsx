@@ -49,21 +49,28 @@ export function PlanCard({ entries, live }: { entries: PlanEntry[]; live?: boole
 // Historical plans are a single disclosure row. Expanded entries keep their
 // natural height and participate in the conversation's normal scroll flow.
 export const Plan = memo(function Plan({ block }: { block: PlanBlock }) {
+  return <PlanDetails entries={block.entries} label={<RowLabel>{t('plan.title')}</RowLabel>} />;
+});
+
+// Standard plans and todo-tool results share the same indented body and single
+// title-aligned rail. Entry status icons are not anchors for this outer rail.
+export function PlanDetails({ entries, label, trailing }: { entries: PlanEntry[]; label: ReactNode; trailing?: ReactNode }) {
   const { toolLine } = useAppearance();
   const [open, setOpen] = useState(false);
-  const done = block.entries.filter(entry => entry.status === 'completed').length;
+  const done = entries.filter(entry => entry.status === 'completed').length;
   return (
-    <Disclosure
+    <Disclosure className="action-details" tone="action"
       open={open} onToggle={setOpen}
       lead={toolLine === 'text' ? undefined : <ListTodo className="size-icon" strokeWidth={1.5} />}
-      body={<PlanEntries entries={block.entries} />}
+      trailing={trailing}
+      body={<PlanEntries entries={entries} />}
     >
-      <RowLabel>{t('plan.title')}</RowLabel>
-      <span className="text-3 text-fg-3 tabular-nums">{done}/{block.entries.length}</span>
+      {label}
+      <span className="text-3 text-fg-3 tabular-nums">{done}/{entries.length}</span>
       <PlanCaret open={open} />
     </Disclosure>
   );
-});
+}
 
 function PlanCaret({ open }: { open: boolean }) {
   return <ChevronDown className={cn('size-icon shrink-0 self-center transition-transform', open && 'rotate-180')} strokeWidth={1.5} />;

@@ -7,6 +7,7 @@ import type {
   AgentBlock, AgentTurn, CompactionBlock, CompactionStatus, ConfigControl, PlanPriority, PlanStatus, SessionControls, SessionOption, SlashCommand, ToolCallBlock, ToolContent, ToolKind, Turn, TurnError, Usage,
 } from '@shared/transcript';
 import { diffLines } from './diff';
+import { isTodoTool, todoEntries } from '@shared/todoTools';
 
 export { diffLines };
 
@@ -317,6 +318,8 @@ function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate, s?: N
   const raw = u.rawInput as Record<string, unknown> | undefined;
   if (u.kind) { b.kind = u.kind; b.verb = verbOf(u.kind); }
   if (u.title && TODO_TITLE.test(u.title.trim())) { b.verbKey = 'verb.todo'; b.verb = t('verb.todo'); }
+  const toolName = (meta?.['x.ai/tool'] as { name?: unknown } | undefined)?.name ?? meta?.['cognition.ai/inferenceToolName'];
+  if (typeof toolName === 'string' && TODO_TITLE.test(toolName)) { b.verbKey = 'verb.todo'; b.verb = t('verb.todo'); }
   if (u.title && ASK_TITLE.test(u.title.trim())) { b.verbKey = 'verb.ask'; b.verb = t('verb.ask'); }
   const shell = shellVerb(meta, u.title);
   if (shell) { b.verbKey = shell; b.verb = t(shell); }
@@ -363,6 +366,11 @@ function mergeTool(b: ToolCallBlock, u: acp.ToolCall | acp.ToolCallUpdate, s?: N
   if (!b.content && u.rawOutput !== undefined && u.rawOutput !== null) {
     const text = typeof u.rawOutput === 'string' ? u.rawOutput : JSON.stringify(u.rawOutput, null, 2);
     if (text.trim()) b.content = { type: 'text', text: text.slice(0, TOOL_OUTPUT_MAX) };
+  }
+  if (isTodoTool(b) && b.status === 'completed') {
+    // Parse the full wire result before the generic output preview's size limit.
+    const entries = todoEntries(u.rawOutput) ?? (b.content?.type === 'text' ? todoEntries(b.content.text) : undefined);
+    if (entries !== undefined) b.todoEntries = entries;
   }
 }
 
