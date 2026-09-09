@@ -40,9 +40,10 @@
 
 /* One measured path from the icon to a short solid-dot endpoint. The segment's own
    height is the single source of length: the line fills it and the dot hangs off its
-   bottom edge, so two separately transitioned transforms can never drift apart. */
+   bottom edge. ConnectedRail eases --rail-length itself (see the note there); a CSS
+   transition here would stall while the target moves every frame. */
 .connected-rail { position: relative; isolation: isolate; }
-.rail-segment { position: absolute; z-index: -1; width: var(--rail-width); height: calc(var(--rail-length) * 1px); transform: translateX(-50%); pointer-events: none; transition: height var(--rail-grow-duration) var(--rail-grow-ease); }
+.rail-segment { position: absolute; z-index: -1; width: var(--rail-width); height: calc(var(--rail-length, 0) * 1px); transform: translateX(-50%); pointer-events: none; }
 .rail-segment::before { content: ''; position: absolute; inset: 0; background: var(--rail-color); }
 .rail-segment[data-terminal]::after { content: ''; position: absolute; left: 50%; bottom: 0; width: var(--rail-dot-size); height: var(--rail-dot-size); border-radius: 50%; background: var(--rail-color); transform: translate(-50%, 50%); }
 .connected-rail:has(> .process-row-enter) > .rail-segment { animation: acp-row-part-in var(--row-enter-duration) var(--row-enter-file) ease-out both; }

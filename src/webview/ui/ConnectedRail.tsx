@@ -1,4 +1,4 @@
-import { useImperativeHandle, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode, type Ref } from 'react';
+import { useImperativeHandle, useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode, type Ref } from 'react';
 import { cn } from './cn';
 
 type Anchor = { x: number; top: number; bottom: number };
@@ -85,7 +85,20 @@ export interface ConnectedRailProps extends HTMLAttributes<HTMLDivElement> {
   endAtLastRow?: boolean;
 }
 
+const SNAP_DISTANCE = 0.25;
+const DEFAULT_GROW_MS = 220;
+
+// Motion-off and reduced-motion settings snap the rail instead of easing it.
+function motionDisabled(root: HTMLElement): boolean {
+  return typeof requestAnimationFrame !== 'function' || !!root.closest('[data-motion="none"]')
+    || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
 // --rail-length drives the segment height in CSS; the line and terminal dot follow it.
+// The value is written imperatively and eased in JS: a CSS transition retargeted every
+// frame either stalls (main-thread properties restart from their original value) or
+// runs on the compositor out of step with anything that does not, so neither can keep
+// the line attached to a panel that is still opening or to text that is still streaming.
 // Only endpoints are measured here; new text is never buffered for rail animation.
 export function ConnectedRail({ ref: forwardedRef, children, enabled = true, className, selector = '.row-lead:not(.row-lead-empty)', endAtLastRow = false, ...rest }: ConnectedRailProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -94,6 +107,51 @@ export function ConnectedRail({ ref: forwardedRef, children, enabled = true, cla
   const observedLeads = useRef(new Set<Element>());
   const [segments, setSegments] = useState<Segment[]>([]);
   const measureRef = useRef<() => void>(() => {});
+  const spans = useRef<(HTMLSpanElement | null)[]>([]);
+  const lengths = useRef<number[]>([]);
+  const growFrame = useRef<number | undefined>(undefined);
+
+  // Ease every segment toward its measured length with one shared value per segment.
+  // Exponential approach tolerates a target that moves every frame without restarting.
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const targets = segments.map(segment => segment.bottom - segment.top);
+    const write = (index: number, value: number) => {
+      lengths.current[index] = value;
+      spans.current[index]?.style.setProperty('--rail-length', String(value));
+    };
+    lengths.current.length = targets.length;
+    const snap = motionDisabled(root);
+    let pending = false;
+    targets.forEach((target, index) => {
+      const current = lengths.current[index];
+      if (current === undefined || snap) write(index, target);
+      else if (current !== target) pending = true;
+    });
+    if (!pending) return;
+    const duration = Number.parseFloat(getComputedStyle(root).getPropertyValue('--rail-grow-duration')) || DEFAULT_GROW_MS;
+    const tau = duration / 4;
+    let last = performance.now();
+    const tick = (now: number) => {
+      growFrame.current = undefined;
+      const rate = 1 - Math.exp(-(now - last) / tau);
+      last = now;
+      let busy = false;
+      targets.forEach((target, index) => {
+        const current = lengths.current[index];
+        if (current === undefined || current === target) return;
+        const next = Math.abs(target - current) < SNAP_DISTANCE ? target : current + (target - current) * rate;
+        write(index, next);
+        if (next !== target) busy = true;
+      });
+      if (busy) growFrame.current = requestAnimationFrame(tick);
+    };
+    growFrame.current = requestAnimationFrame(tick);
+    return () => {
+      if (growFrame.current !== undefined) { cancelAnimationFrame(growFrame.current); growFrame.current = undefined; }
+    };
+  }, [segments]);
 
   useLayoutEffect(() => {
     const measure = () => {
@@ -179,7 +237,8 @@ export function ConnectedRail({ ref: forwardedRef, children, enabled = true, cla
   return <div {...rest} ref={ref} className={cn('connected-rail', className)}>
     {children}
     {enabled && segments.map((segment, index) => <span key={index} aria-hidden="true" className="rail-segment"
+      ref={span => { spans.current[index] = span; }}
       data-terminal={segment.terminal || undefined}
-      style={{ left: segment.x, top: segment.top, '--rail-length': segment.bottom - segment.top } as CSSProperties} />)}
+      style={{ left: segment.x, top: segment.top }} />)}
   </div>;
 }

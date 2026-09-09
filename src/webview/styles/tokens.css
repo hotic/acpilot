@@ -93,7 +93,6 @@
   --rail-dot-size: 4px;
   --rail-color: color-mix(in srgb, var(--fg-3) 65%, var(--bg-1));
   --rail-grow-duration: 220ms;
-  --rail-grow-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --scroll-fade-size: 28px;
   --row-hit-outset: 6px;
   --ctl: 28px;
