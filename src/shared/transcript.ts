@@ -12,6 +12,14 @@ export interface AgentInfo {
   accounts?: boolean;
   // An executable was detected locally; false greys it out in the menu, undefined means not probed yet
   available?: boolean;
+  // How to get the CLI when none was found: the vendor's one-line install for this platform and its docs page
+  install?: AgentInstall;
+}
+
+export interface AgentInstall {
+  // A shell line to run in a terminal; absent when the vendor publishes no one-liner for this platform
+  command?: string;
+  docs?: string;
 }
 
 // One allowance window as the vendor reports it (Devin: daily / weekly; a plan may hide either). remaining is 0..1, resetsAt an ISO timestamp
@@ -27,7 +35,7 @@ export interface AccountQuota {
   fetchedAt: string;
 }
 
-// Account: one login identity of an agent. Only metadata here; secrets live in the host's SecretStorage and never enter the webview
+// Account: one login identity of an agent. Only metadata here; secrets live in the host vault and never enter the webview
 export interface AccountInfo {
   id: string;
   agent: AgentId;

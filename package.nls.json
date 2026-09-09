@@ -5,7 +5,7 @@
   "acpira.cmd.showLog": "Show Log",
   "acpira.conf.defaultAgent": "The default agent for new sessions",
   "acpira.conf.language": "Interface language; auto follows VS Code",
-  "acpira.conf.agents": "Add custom ACP agents: `{ \"<id>\": { \"name\": \"display name\", \"command\": \"executable\", \"args\": [\"...\"], \"login\": \"login command\" } }`",
+  "acpira.conf.agents": "Add custom ACP agents: `{ \"<id>\": { \"name\": \"display name\", \"command\": \"executable\", \"args\": [\"...\"], \"login\": \"login command\", \"install\": { \"command\": \"install line\", \"docs\": \"URL\" } } }`",
   "acpira.conf.compactAtTokens": "When context usage after a turn (the agent's reported usage.used) reaches this many tokens, /compact is sent automatically. Only applies to agents that report usage and offer a /compact command; models with a smaller context window are the agent's own lookout",
   "acpira.conf.autoCompact": "Send /compact automatically once over the threshold (turn off to compact by hand from the context panel only)",
   "acpira.conf.hiddenOptions": "Option families hidden from the menus (models / reasoning levels…): `{ \"<agent>\": { \"<configOption id>\": [\"<family name>\", ...] } }`. Toggle them on the agent page in Acpira settings; hand-editing is rarely needed",

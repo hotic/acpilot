@@ -86,6 +86,8 @@ Store multiple accounts per agent, paste or drop images, and attach workspace fi
    - [Grok](https://x.ai) — `grok` (`grok agent stdio`)
    - [Devin](https://devin.ai) — `devin` (`devin acp`)
    - [Kimi Code](https://www.kimi.com) — `kimi` (`kimi acp`)
+
+   An agent without a CLI is greyed out in the menus; its settings page shows the vendor's install command (copy it, or run it in a terminal from there). Acpira notices a newly installed CLI on its own — no reload needed.
 3. Click the Acpira icon in the **Activity Bar** (left). If it is hidden, right-click the Activity Bar and enable **Acpira**. The view can be dragged to the secondary sidebar.
 
 ## Get started

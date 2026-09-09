@@ -5,7 +5,7 @@
   "acpira.cmd.showLog": "查看日志",
   "acpira.conf.defaultAgent": "新会话默认用哪个 agent",
   "acpira.conf.language": "界面语言；auto 跟随 VS Code",
-  "acpira.conf.agents": "追加自定义 ACP agent：`{ \"<id>\": { \"name\": \"显示名\", \"command\": \"可执行文件\", \"args\": [\"...\"], \"login\": \"登录命令\" } }`",
+  "acpira.conf.agents": "追加自定义 ACP agent：`{ \"<id>\": { \"name\": \"显示名\", \"command\": \"可执行文件\", \"args\": [\"...\"], \"login\": \"登录命令\", \"install\": { \"command\": \"安装命令\", \"docs\": \"文档 URL\" } } }`",
   "acpira.conf.compactAtTokens": "一轮结束后上下文用量（agent 报的 usage.used）达到这么多 token 就自动发 /compact。只对报 usage 且有 /compact 命令的 agent 生效；上下文窗口比这个数小的模型由 agent 自己兜底",
   "acpira.conf.autoCompact": "超阈值后自动发送 /compact（关掉就只能在上下文面板里手动压）",
   "acpira.conf.hiddenOptions": "从菜单里隐藏的选项家族（模型 / 推理层级…）：`{ \"<agent>\": { \"<configOption id>\": [\"<家族名>\", ...] } }`。在 Acpira 设置页的 agent 页里开关即可，一般不用手编",

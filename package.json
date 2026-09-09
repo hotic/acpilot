@@ -139,6 +139,17 @@
               "login": {
                 "type": "string"
               },
+              "install": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "docs": {
+                    "type": "string"
+                  }
+                }
+              },
               "env": {
                 "type": "object",
                 "additionalProperties": {

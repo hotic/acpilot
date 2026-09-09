@@ -55,6 +55,8 @@ export class WebviewBridge implements vscode.Disposable {
   private async onMessage(m: WebviewMsg) {
     if (m.type === 'ready') {
       this.ready = true;
+      // A webview (re)opening is a cheap moment to re-check the executables; a change arrives as an `agents` event after init
+      void this.manager.reprobe();
       await this.viewer.ensureActive();
       this.post({
         type: 'init',

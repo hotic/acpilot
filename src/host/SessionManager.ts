@@ -39,6 +39,8 @@ export type ManagerEvent =
 
 // Master of all sessions: live processes, the summary list, the viewers; every webview action enters here. No vscode import, so it stays testable
 const TRASH_TTL = 30_000;
+// While some agent has no executable, look again this often (a handful of stat calls) so a CLI installed in a terminal lights up without a reload
+const PROBE_INTERVAL = 10_000;
 
 // One viewer per webview (sidebar, each editor tab): its own active session over the shared process pool and session list, so several
 // tabs can each show a different conversation. Global events (list, agents, accounts) reach every viewer; `session` events only the viewers showing that session
@@ -84,6 +86,9 @@ export class SessionManager {
   private prefs: SessionPrefs = { lastSettings: {} };
   // The default viewer: what the single-view API (activeId / active / handle / newSession …) operates on, e.g. in tests and scripts
   private mainViewer?: SessionViewer;
+  private unwatchRegistry?: () => void;
+  private probeTimer?: NodeJS.Timeout;
+  private disposed = false;
 
   constructor(private deps: ManagerDeps) {
     deps.accounts?.subscribe(accounts => this.emit({ type: 'accounts', accounts }));
@@ -92,14 +97,41 @@ export class SessionManager {
       log: line => this.deps.log(line),
       spawnEnv: (agent, accountId) => this.deps.accounts?.spawnEnv(agent, accountId) ?? Promise.resolve(undefined),
     });
+    this.watchRegistry(deps.registry);
   }
 
   async init() {
     this.index = await this.deps.store.loadIndex();
     this.prefs = await this.deps.store.loadPrefs();
     await this.deps.registry.probeAll();
+    this.scheduleProbe();
     this.deps.accounts?.refreshQuotas().catch(e => this.deps.log(`quota refresh failed: ${msg(e)}`));
     this.warm(this.deps.defaultAgent());
+  }
+
+  // Any lookup that flips an agent's availability (the poll, a settings-page rescan, a spawn) re-pushes the list to every webview,
+  // so the menus and the settings navigation never wait for a reload
+  private watchRegistry(r: AgentRegistry) {
+    this.unwatchRegistry?.();
+    this.unwatchRegistry = r.subscribe(() => {
+      this.emit({ type: 'agents', agents: this.agents() });
+      this.scheduleProbe();
+    });
+  }
+
+  // Look for the executables again (cached paths are re-verified); the registry notifies when the available set changed
+  async reprobe(): Promise<void> {
+    try { await this.deps.registry.probeAll(); } catch (e) { this.deps.log(`agent probe failed: ${msg(e)}`); }
+    this.scheduleProbe();
+  }
+
+  // Poll only while something is missing; once every agent is installed the timer stops (an uninstall surfaces on the next forced reprobe)
+  private scheduleProbe() {
+    clearTimeout(this.probeTimer);
+    this.probeTimer = undefined;
+    if (this.disposed || !this.deps.registry.missing()) return;
+    this.probeTimer = setTimeout(() => { this.probeTimer = undefined; void this.reprobe(); }, PROBE_INTERVAL);
+    this.probeTimer.unref?.();
   }
 
   private warm(agent: AgentId, accountId?: string) {
@@ -136,7 +168,8 @@ export class SessionManager {
   // Swap the registry (acpira.agents changed): re-probe the binaries, then push the new list out
   setRegistry(r: AgentRegistry) {
     this.deps.registry = r;
-    r.probeAll().then(() => this.emit({ type: 'agents', agents: this.agents() })).catch(e => this.deps.log(`agent probe failed: ${msg(e)}`));
+    this.watchRegistry(r);
+    this.reprobe().then(() => this.emit({ type: 'agents', agents: this.agents() })).catch(e => this.deps.log(`agent probe failed: ${msg(e)}`));
   }
 
   agents(): AgentInfo[] {
@@ -371,6 +404,7 @@ export class SessionManager {
         case 'sendQueued': await this.live.get(m.sessionId)?.sendQueued(m.id); break;
         case 'editQueued': await this.live.get(m.sessionId)?.editQueued(m.id, m.text, m.retainedAttachments, m.attachments); break;
         case 'login': await this.login(s, m.methodId); break;
+        case 'installAgent': this.install(m.agent); break;
         default: break;
       }
     } catch (e) {
@@ -495,7 +529,23 @@ export class SessionManager {
     }
   }
 
+  // Run the vendor's install line in a terminal. runInTerminal quotes each argument, so the pipeline goes through the platform shell as one
+  // string; the poll then notices the new executable within PROBE_INTERVAL
+  private install(agent: AgentId) {
+    const def = this.deps.registry.get(agent);
+    const command = this.deps.registry.install(agent)?.command;
+    if (!command) return;
+    const [shell, flag] = process.platform === 'win32' ? ['powershell', '-Command'] : ['bash', '-c'];
+    this.deps.runInTerminal(t('host.installTerminalTitle', { agent: def.name }), shell, [flag, command]);
+    this.deps.toast('info', t('host.installThenDetect', { agent: def.name }));
+  }
+
   async dispose() {
+    this.disposed = true;
+    clearTimeout(this.probeTimer);
+    this.probeTimer = undefined;
+    this.unwatchRegistry?.();
+    this.unwatchRegistry = undefined;
     for (const s of this.live.values()) {
       await this.deps.store.flush(s.toRecord());
       s.dispose();

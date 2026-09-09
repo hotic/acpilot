@@ -1,8 +1,8 @@
-import { mkdtempSync, existsSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { HiddenMap } from '../src/shared/settings';
 import { AgentRegistry } from '../src/host/acp/AgentRegistry';
 import { SessionManager } from '../src/host/SessionManager';
@@ -124,6 +124,48 @@ describe('SessionManager', () => {
     await m2.init();
     expect(m2.agents().find(a => a.id === 'ghost')?.available).toBe(false);
     await m2.dispose();
+  });
+
+  // A CLI installed while the window is open: the registry's notification re-pushes agents to every viewer, and the poll keeps looking while
+  // something is missing (fake timers drive it); the install action runs the vendor line through the shell in a host terminal
+  it('a CLI appearing after init reaches the viewers as an agents event, via the poll or a direct lookup; installAgent runs the vendor line in a terminal', async () => {
+    vi.useFakeTimers();
+    const dir = mkdtempSync(join(tmpdir(), 'acpira-mgr-'));
+    const bin = join(dir, 'ghost-cli');
+    const terminal: { command: string; args: string[] }[] = [];
+    const m = new SessionManager({
+      // `never` stays missing so the poll keeps its timer armed regardless of which built-in CLIs this machine has
+      registry: new AgentRegistry({ ghost: { name: 'Ghost', command: bin, install: { command: 'curl -fsSL https://example.com/i.sh | bash' } }, never: { name: 'Never', command: '/nonexistent/never-cli' } }),
+      store: new TranscriptStore(mkdtempSync(join(tmpdir(), 'acpira-mgr-'))),
+      log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'ghost', runInTerminal: (_t, command, args) => terminal.push({ command, args }), toast: () => {},
+    });
+    try {
+      await m.init();
+      const v = m.attach();
+      const seen: (boolean | undefined)[] = [];
+      v.subscribe(ev => { if (ev.type === 'agents') seen.push(ev.agents.find(a => a.id === 'ghost')?.available); });
+      expect(m.agents().find(a => a.id === 'ghost')).toMatchObject({ available: false, install: { command: 'curl -fsSL https://example.com/i.sh | bash' } });
+
+      // The settings page's rescan path: a direct lookup finds the new binary and the list is pushed at once
+      writeFileSync(bin, '#!/bin/sh\nexit 0\n'); chmodSync(bin, 0o755);
+      expect(await m.registry.resolveBinary('ghost')).toBe(bin);
+      expect(seen).toEqual([true]);
+
+      // Removed again: the next poll tick notices (the tick starts real fs lookups, so waitFor lets them land)
+      rmSync(bin);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.waitFor(() => expect(seen).toEqual([true, false]));
+      // …and the poll keeps running while it is missing, so a reinstall shows up on its own
+      writeFileSync(bin, '#!/bin/sh\nexit 0\n'); chmodSync(bin, 0o755);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.waitFor(() => expect(seen).toEqual([true, false, true]));
+
+      await v.handle({ type: 'installAgent', agent: 'ghost' });
+      expect(terminal).toEqual([{ command: process.platform === 'win32' ? 'powershell' : 'bash', args: [process.platform === 'win32' ? '-Command' : '-c', 'curl -fsSL https://example.com/i.sh | bash'] }]);
+    } finally {
+      await m.dispose();
+      vi.useRealTimers();
+    }
   });
 
   it('hidden options: read from the host as a plain copy and re-pushed on emitHidden', () => {

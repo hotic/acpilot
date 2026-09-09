@@ -1,5 +1,5 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
-import { FileText, Globe, KeyRound, Plus, Server, SlidersHorizontal, Sparkles, X } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { BookOpen, Check, Copy, FileText, Globe, KeyRound, Plus, Server, SlidersHorizontal, Sparkles, SquareTerminal, X } from 'lucide-react';
 import type { AccountInfo, AgentInfo, ConfigControl } from '@shared/transcript';
 import type { AgentInventory, InventoryFile, InventoryMcp, InventorySkill, McpTransport } from '@shared/inventory';
 import type { SettingsView } from '@shared/settings';
@@ -54,6 +54,7 @@ export function AgentPage({ agent, accounts, inventory, controls, settings, env,
   return (
     <>
       <AgentFacts agent={agent} inventory={inventory} env={env} />
+      {agent.available === false && agent.install && <InstallSection agent={agent} on={on} />}
 
       {agent.accounts && (
         <div className="flex flex-col gap-2">
@@ -105,6 +106,50 @@ function AgentFacts({ agent, inventory, env }: { agent: AgentInfo; inventory?: A
       <FactRow label={t('settings.fact.version')}>{version ?? <span className="text-fg-2">{t('settings.fact.noLive')}</span>}</FactRow>
     </Group>
   );
+}
+
+// No executable found: the vendor's install line (copyable, runnable in a host terminal) and its docs page. The section disappears on its own
+// once the host's probe finds the binary, so nothing here needs a refresh button
+function InstallSection({ agent, on }: { agent: AgentInfo; on: SettingsHandlers }) {
+  const { command, docs } = agent.install!;
+  const action = command && (
+    <SectionAction icon={<SquareTerminal strokeWidth={1.75} />} onClick={() => on.installAgent(agent.id)}>{t('settings.install.run')}</SectionAction>
+  );
+  return (
+    <div className="flex flex-col gap-2">
+      <SectionHead action={action}>{t('settings.install.title', { agent: agent.name })}</SectionHead>
+      <Section desc={t('settings.install.desc')}>
+        {command && (
+          <ItemRow
+            lead={<SquareTerminal strokeWidth={1.5} />}
+            title={<span className="font-mono text-mono text-fg-1" title={command}>{command}</span>}
+            trailing={<CopyButton text={command} />}
+          />
+        )}
+        {docs && <ItemRow lead={<BookOpen strokeWidth={1.5} />} title={t('settings.install.docs')} desc={hostOf(docs)} onOpen={() => on.openExternal(docs)} />}
+      </Section>
+    </div>
+  );
+}
+
+// Copies the line and confirms with a check for a moment
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const h = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(h);
+  }, [copied]);
+  const Icon = copied ? Check : Copy;
+  return (
+    <IconButton title={t('common.copy')} aria-label={t('common.copy')} onClick={() => { void navigator.clipboard.writeText(text).then(() => setCopied(true)); }} className="-mr-1.5 text-fg-2">
+      <Icon strokeWidth={1.5} />
+    </IconButton>
+  );
+}
+
+function hostOf(url: string): string {
+  try { return new URL(url).host; } catch { return url; }
 }
 
 // Option families of each configOption (model / reasoning level …) with a show / hide switch each; hidden families leave the composer menus.

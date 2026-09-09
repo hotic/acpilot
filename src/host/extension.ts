@@ -5,12 +5,13 @@ import { appearanceFromSettings, type Appearance, type AxisKey } from '@shared/a
 import type { HiddenMap } from '@shared/settings';
 import { AgentRegistry, type CustomAgentSetting } from './acp/AgentRegistry';
 import { AccountManager } from './accounts/AccountManager';
-import { AccountStore, type SecretVault } from './accounts/AccountStore';
+import { AccountStore, FileVault } from './accounts/AccountStore';
 import { DevinAccountProvider } from './accounts/devin';
 import { SessionManager } from './SessionManager';
 import { SettingsCenter } from './settings';
 import { msg } from './errors';
 import { setHostLocale } from './i18n';
+import { acpiraHome, migrateOnce } from './store/dataDir';
 import { TranscriptStore } from './store/TranscriptStore';
 import { WebviewBridge } from './bridge';
 import { WorkspaceFiles } from './files';
@@ -29,25 +30,32 @@ export async function activate(context: vscode.ExtensionContext) {
     t.sendText([command, ...args].map(shellQuote).join(' '));
   };
 
-  // Secrets go into the system keychain (context.secrets); account metadata goes into globalStorage/accounts.json
-  const vault: SecretVault = {
-    get: async k => context.secrets.get(k),
-    store: async (k, v) => context.secrets.store(k, v),
-    delete: async k => context.secrets.delete(k),
-  };
-  const storage = context.globalStorageUri.fsPath;
-  const accountStore = new AccountStore(join(storage, 'accounts.json'), vault, line => log.info(line));
+  // ~/.acpira (ACPIRA_HOME) holds accounts.json, secrets.json, sessions/, scratch/; copy legacy globalStorage once
+  const root = acpiraHome();
+  const vault = new FileVault(join(root, 'secrets.json'), line => log.info(line));
+  await migrateOnce({
+    from: context.globalStorageUri.fsPath,
+    to: root,
+    oldVault: {
+      get: async k => context.secrets.get(k),
+      store: async (k, v) => context.secrets.store(k, v),
+      delete: async k => context.secrets.delete(k),
+    },
+    newVault: vault,
+    log: line => log.info(line),
+  });
+  const accountStore = new AccountStore(join(root, 'accounts.json'), vault, line => log.info(line));
   await accountStore.load();
   let activeRegistry = registry();
   const accounts = new AccountManager({
     store: accountStore,
-    providers: [new DevinAccountProvider(join(storage, 'scratch'), () => activeRegistry.resolveBinary('devin'))],
+    providers: [new DevinAccountProvider(join(root, 'scratch'), () => activeRegistry.resolveBinary('devin'))],
     log: line => log.info(line),
     runInTerminal,
     toast,
   });
 
-  const sessionsDir = join(storage, 'sessions');
+  const sessionsDir = join(root, 'sessions');
   const manager = new SessionManager({
     registry: activeRegistry,
     store: new TranscriptStore(sessionsDir, line => log.info(line)),
@@ -109,6 +117,9 @@ export async function activate(context: vscode.ExtensionContext) {
       const sub = b.viewer.subscribe(ev => { if (ev.type === 'session') panel.title = ev.session.title; });
       panel.onDidDispose(() => { sub(); bridges.delete(b); b.dispose(); });
     }),
+
+    // Coming back from an external terminal where a CLI was installed or removed: re-check the executables right away
+    vscode.window.onDidChangeWindowState(e => { if (e.focused) void manager.reprobe(); }),
 
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('acpira.appearance')) for (const b of bridges) b.pushAppearance();

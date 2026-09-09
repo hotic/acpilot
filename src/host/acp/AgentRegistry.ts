@@ -1,9 +1,16 @@
 import { access, constants } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
-import type { AgentId, AgentInfo, SessionOption } from '@shared/transcript';
+import type { AgentId, AgentInfo, AgentInstall, SessionOption } from '@shared/transcript';
 import { t } from '../i18n';
 import { expandPath } from '../inventory';
+
+// The vendor's documented one-line installs: a POSIX shell line (macOS / Linux / WSL) and, where published, the PowerShell counterpart
+export interface InstallDef {
+  posix?: string;
+  windows?: string;
+  docs?: string;
+}
 
 // How an ACP agent is launched: command, args, candidate binary paths, login command
 export interface AgentDef {
@@ -14,6 +21,7 @@ export interface AgentDef {
   // Explicit candidate paths take precedence over PATH (a CLI installed under ~/.local/bin etc. may not be on a GUI process's PATH)
   candidates: string[];
   login?: { command: string; args: string[] };
+  install?: InstallDef;
   env?: Record<string, string>;
   // Modes the protocol doesn't advertise but the CLI actually supports (fills in when session/new returns empty modes); switching still goes through session/set_mode
   modes?: SessionOption[];
@@ -25,6 +33,7 @@ export const BUILTIN_AGENTS: AgentDef[] = [
     command: 'grok', args: ['agent', 'stdio'],
     candidates: ['~/.grok/bin/grok', '~/.local/bin/grok', '/opt/homebrew/bin/grok', '/usr/local/bin/grok'],
     login: { command: 'grok', args: ['login'] },
+    install: { posix: 'curl -fsSL https://x.ai/cli/install.sh | bash', windows: 'irm https://x.ai/cli/install.ps1 | iex', docs: 'https://docs.x.ai/build/overview' },
     // Grok doesn't give modes in session/new, but CLI ≥ 0.2.117 accepts session/set_mode (verified in probe-set-mode.ts):
     // default / plan go through the protocol; yolo is host-side auto-approval of permission requests, and the CLI stays in default.
     // The descriptions are i18n keys, resolved against the host locale when the modes enter a session
@@ -43,6 +52,7 @@ export const BUILTIN_AGENTS: AgentDef[] = [
       '/Applications/Devin.app/Contents/Resources/app/extensions/windsurf/devin/bin/devin',
     ],
     login: { command: 'devin', args: ['auth', 'login'] },
+    install: { posix: 'curl -fsSL https://cli.devin.ai/install.sh | bash', windows: 'irm https://cli.devin.ai/install.ps1 | iex', docs: 'https://docs.devin.ai/cli' },
     // An ACP service with ACP_BACKEND set accepts only the credential the host hands over and ignores the local login (the Windsurf inside Devin.app launches it the same way),
     // so the account layer becomes the sole source of credentials, and it's obvious which account the usage is billed to
     env: { ACP_BACKEND: 'windsurf' },
@@ -53,6 +63,7 @@ export const BUILTIN_AGENTS: AgentDef[] = [
     candidates: ['~/.local/bin/kimi', '~/.kimi-code/bin/kimi', '/opt/homebrew/bin/kimi', '/usr/local/bin/kimi'],
     // Kimi's login is /login typed inside the TUI; launching kimi in a terminal is enough
     login: { command: 'kimi', args: [] },
+    install: { posix: 'curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash', windows: 'irm https://code.kimi.com/kimi-code/install.ps1 | iex', docs: 'https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started.html' },
   },
 ];
 
@@ -62,6 +73,8 @@ export interface CustomAgentSetting {
   command: string;
   args?: string[];
   login?: string;
+  // Shown on the settings page when the command is not found: a shell line to run in a terminal and / or a docs URL
+  install?: { command?: string; docs?: string };
   env?: Record<string, string>;
   // Modes the protocol doesn't advertise but the CLI supports (same as AgentDef.modes)
   modes?: SessionOption[];
@@ -71,28 +84,60 @@ export class AgentRegistry {
   private defs = new Map<AgentId, AgentDef>();
   private resolved = new Map<AgentId, string>();
   private probed = false;
+  private listeners = new Set<() => void>();
 
-  constructor(custom: Record<string, CustomAgentSetting> = {}) {
+  constructor(custom: Record<string, CustomAgentSetting> = {}, private platform: NodeJS.Platform = process.platform) {
     for (const d of BUILTIN_AGENTS) this.defs.set(d.id, d);
     for (const [id, c] of Object.entries(custom)) {
       if (!c?.command) continue;
       const login = c.login?.trim().split(/\s+/);
+      // A custom install line is taken as written on every platform: the setting owner knows their shell
+      const command = c.install?.command?.trim() || undefined;
+      const docs = c.install?.docs?.trim() || undefined;
       this.defs.set(id, {
         id, name: c.name ?? id, command: c.command, args: c.args ?? [], candidates: [], env: c.env, modes: c.modes,
         login: login?.length ? { command: login[0]!, args: login.slice(1) } : undefined,
+        install: command || docs ? { posix: command, windows: command, docs } : undefined,
       });
     }
   }
 
   // Only after a probe pass can we claim available; unprobed agents aren't marked, so the menu doesn't flicker grey before lighting up
   list(): AgentInfo[] {
-    return [...this.defs.values()].map(d => ({ id: d.id, name: d.name, ...(this.probed ? { available: this.resolved.has(d.id) } : {}) }));
+    return [...this.defs.values()].map(d => {
+      const install = this.install(d.id);
+      return { id: d.id, name: d.name, ...(this.probed ? { available: this.resolved.has(d.id) } : {}), ...(install ? { install } : {}) };
+    });
   }
 
-  // Locate every agent's executable in one pass; afterwards list() carries available
-  async probeAll(): Promise<void> {
-    await Promise.all([...this.defs.keys()].map(id => this.resolveBinary(id)));
+  // The install line for this platform (plus docs); undefined when the definition offers nothing usable here
+  install(id: AgentId): AgentInstall | undefined {
+    const def = this.defs.get(id)?.install;
+    const command = this.platform === 'win32' ? def?.windows : def?.posix;
+    if (!command && !def?.docs) return undefined;
+    return { ...(command ? { command } : {}), ...(def?.docs ? { docs: def.docs } : {}) };
+  }
+
+  // Fires whenever a probe changes which agents have an executable (installed while the window is open, removed, PATH edited …)
+  subscribe(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  // Some agent still has no executable: the reason to keep probing periodically
+  missing(): boolean {
+    return [...this.defs.keys()].some(id => !this.resolved.has(id));
+  }
+
+  // Locate every agent's executable in one pass; afterwards list() carries available. Safe to call again at any time: cached paths are
+  // re-verified, so a CLI installed (or removed) since the last pass is picked up. Resolves to whether the available set changed since the
+  // previous pass; the first pass only establishes the baseline
+  async probeAll(): Promise<boolean> {
+    const first = !this.probed;
+    const before = this.snapshot();
+    await Promise.all([...this.defs.keys()].map(id => this.locate(id)));
     this.probed = true;
+    return first ? false : this.settle(before);
   }
 
   get(id: AgentId): AgentDef {
@@ -101,14 +146,33 @@ export class AgentRegistry {
     return d;
   }
 
-  // Find the executable: explicit candidates → PATH; returns null if not found (the UI then prompts to install)
+  // Find the executable: explicit candidates → PATH; returns null if not found (the UI then prompts to install).
+  // A single lookup (spawn, inventory scan) that flips an agent's availability notifies subscribers like a full probe would
   async resolveBinary(id: AgentId): Promise<string | null> {
+    const before = this.snapshot();
+    const found = await this.locate(id);
+    if (this.probed) this.settle(before);
+    return found;
+  }
+
+  // A cached path is trusted only while it still exists and is executable; otherwise search again
+  private async locate(id: AgentId): Promise<string | null> {
     const cached = this.resolved.get(id);
-    if (cached) return cached;
+    if (cached && await executable(cached)) return cached;
     const def = this.get(id);
     const found = await resolveCommand(def.command, def.candidates);
-    if (found) this.resolved.set(id, found);
+    if (found) this.resolved.set(id, found); else this.resolved.delete(id);
     return found;
+  }
+
+  private snapshot(): string {
+    return [...this.defs.keys()].filter(id => this.resolved.has(id)).join('\0');
+  }
+
+  private settle(before: string): boolean {
+    const changed = before !== this.snapshot();
+    if (changed) for (const fn of this.listeners) fn();
+    return changed;
   }
 }
 

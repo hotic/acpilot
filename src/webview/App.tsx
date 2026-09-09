@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AccountAction, EditTurnRequest, FileHit, HostMsg, InitState, WebviewMsg } from '@shared/protocol';
 import type { AccountInfo, AgentId, AgentInfo, ConfigControl, SessionSummary, SessionView } from '@shared/transcript';
 import type { HiddenMap, SettingsView } from '@shared/settings';
@@ -59,6 +59,8 @@ export function App() {
   const [inventories, setInventories] = useState<Partial<Record<AgentId, AgentInventory>>>({});
   const [controls, setControls] = useState<Partial<Record<AgentId, ConfigControl[]>>>({});
   const [page, setPage] = useState<SettingsPage>({ kind: 'general' });
+  // The agents list as last received, for spotting availability flips inside the message handler
+  const lastAgents = useRef<AgentInfo[]>([]);
   const hostTheme = useVsCodeTheme();
   // The theme setting resolved against the host; the document carries it too so color-scheme reaches native controls outside the shell
   const { theme } = resolveTheme(settings?.theme ?? 'auto', hostTheme);
@@ -77,9 +79,16 @@ export function App() {
           if (m.error) wait?.reject(new Error(m.error)); else wait?.resolve();
           break;
         }
-        case 'init': setInit(m.state); setAppearance(m.state.appearance); setAgents(m.state.agents); setSessions(m.state.sessions); setAccounts(m.state.accounts); setAccountActions(m.state.accountActions ?? []); setHidden(m.state.hidden); setSession(m.state.active); setSettings(m.state.settings); setLocale(m.state.locale); setLoc(m.state.locale); break;
+        case 'init': setInit(m.state); setAppearance(m.state.appearance); lastAgents.current = m.state.agents; setAgents(m.state.agents); setSessions(m.state.sessions); setAccounts(m.state.accounts); setAccountActions(m.state.accountActions ?? []); setHidden(m.state.hidden); setSession(m.state.active); setSettings(m.state.settings); setLocale(m.state.locale); setLoc(m.state.locale); break;
         case 'appearance': setAppearance(m.appearance); break;
-        case 'agents': setAgents(m.agents); break;
+        // An agent whose executable appeared or vanished has a stale inventory (binary path, version); drop it so the page rescans
+        case 'agents': {
+          const flipped = m.agents.filter(a => lastAgents.current.find(p => p.id === a.id)?.available !== a.available).map(a => a.id);
+          lastAgents.current = m.agents;
+          setAgents(m.agents);
+          if (flipped.length) setInventories(inv => { const next = { ...inv }; for (const id of flipped) delete next[id]; return next; });
+          break;
+        }
         case 'sessions': setSessions(m.sessions); break;
         case 'accounts': setAccounts(m.accounts); break;
         case 'accountActions': setAccountActions(m.actions); break;
@@ -143,6 +152,8 @@ export function App() {
     addAccount: agent => post({ type: 'addAccount', agent, via: 'auto' }),
     removeAccount: id => post({ type: 'removeAccount', id }),
     refreshQuota: agent => post({ type: 'refreshQuota', agent }),
+    installAgent: agent => post({ type: 'installAgent', agent }),
+    openExternal: url => post({ type: 'openExternal', url }),
   }), []);
 
   if (!init || !settings) return null;

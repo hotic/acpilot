@@ -113,6 +113,8 @@ export type WebviewMsg =
   | { type: 'refreshQuota'; agent: AgentId }
   | { type: 'compact' }
   | { type: 'login'; methodId?: string }
+  // Settings page of an agent without an executable: run its vendor install line (AgentInfo.install) in a host terminal
+  | { type: 'installAgent'; agent: AgentId }
   | { type: 'retry' }
   // Send the last user turn again after its agent turn ended in error / a short stop; both turns are dropped from the transcript first
   | { type: 'retryTurn' }
