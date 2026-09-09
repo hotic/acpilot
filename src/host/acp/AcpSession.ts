@@ -103,6 +103,7 @@ export class AcpSession {
   private usageNotifications = false;
   private grokUsageUnavailable = false;
   private syncingThought = false;
+  private rev = 0;
 
   constructor(record: SessionRecord, private deps: SessionDeps) {
     this.id = record.id;
@@ -154,7 +155,7 @@ export class AcpSession {
     return {
       id: this.id, agent: this.agent, accountId: this.accountId, title: this.title, cwd: this.cwd,
       status: this.status, error: this.error, authMethods: this.authMethods,
-      turns: this.state.turns, running: this.phase.running, controls: this.state.controls,
+      turns: this.state.turns, running: this.phase.running, rev: this.rev, controls: this.state.controls,
       usage: this.state.usage, commands: this.state.commands,
       queued: this.queue.snapshot(),
       createdAt: this.createdAt, updatedAt: this.updatedAt,
@@ -173,6 +174,7 @@ export class AcpSession {
   // so bumping it here made concurrently running sessions leapfrog each other on every update
   private touch() {
     applyModelSources(this.agent, this.state.controls.options, this.modelSources);
+    this.rev++;
     this.deps.onChange(this);
   }
 
@@ -215,7 +217,7 @@ export class AcpSession {
     this.status = 'starting';
     this.error = undefined;
     this.authHint = undefined;
-    this.deps.onChange(this);
+    this.touch();
     try {
       await this.connect();
       await this.openSession();
@@ -417,7 +419,7 @@ export class AcpSession {
       this.status = 'starting';
       this.error = undefined;
       this.authHint = undefined;
-      this.deps.onChange(this);
+      this.touch();
       try {
         await this.handoff();
         await this.openSession();
@@ -674,12 +676,12 @@ export class AcpSession {
     const t = title.trim();
     if (!t) return;
     this.state.title = t.slice(0, RENAME_MAX);
-    this.deps.onChange(this);
+    this.touch();
   }
 
   setPinned(pinned: boolean) {
     this.pinned = pinned || undefined;
-    this.deps.onChange(this);
+    this.touch();
   }
 
   resolvePermission(blockId: string, optionId: string) {

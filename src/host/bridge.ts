@@ -9,6 +9,7 @@ import type { SessionManager, SessionViewer } from './SessionManager';
 import type { SettingsCenter } from './settings';
 import type { WorkspaceFiles } from './files';
 import { msg } from './errors';
+import { freezeHostMsg, HostMsgBatch } from './msgBatch';
 
 export interface BridgeEnv {
   extensionUri: vscode.Uri;
@@ -23,17 +24,13 @@ export interface BridgeEnv {
   log: (line: string) => void;
 }
 
-// Manager events within this window collapse to one post per message type
-const BATCH_WINDOW_MS = 30;
-
 // One bridge per webview: renders the HTML, hands incoming WebviewMsg to its viewer / the manager, and pushes their changes back after coalescing.
 // The viewer is this webview's own active session; `initial` is where it opens (a session id, the most recent session, or nothing → a fresh session)
 export class WebviewBridge implements vscode.Disposable {
   readonly viewer: SessionViewer;
   private disposables: vscode.Disposable[] = [];
-  private pending = new Map<string, HostMsg>();
-  private timer?: NodeJS.Timeout;
   private ready = false;
+  private readonly batch = new HostMsgBatch(m => this.post(m));
 
   constructor(
     private webview: vscode.Webview,
@@ -145,15 +142,10 @@ export class WebviewBridge implements vscode.Disposable {
   // Streaming updates are dense; for the same message type within one batch window, keep only the latest
   private queue(m: HostMsg) {
     if (!this.ready) return;
-    this.pending.set(m.type, m);
-    this.timer ??= setTimeout(() => {
-      this.timer = undefined;
-      for (const queued of this.pending.values()) this.post(queued);
-      this.pending.clear();
-    }, BATCH_WINDOW_MS);
+    this.batch.push(m);
   }
 
-  post(msg: HostMsg) { void this.webview.postMessage(msg); }
+  post(msg: HostMsg) { void this.webview.postMessage(freezeHostMsg(msg)); }
 
   pushAppearance() { this.post({ type: 'appearance', appearance: this.env.appearance() }); }
 
@@ -187,7 +179,7 @@ export class WebviewBridge implements vscode.Disposable {
   }
 
   dispose() {
-    clearTimeout(this.timer);
+    this.batch.dispose();
     for (const d of this.disposables) d.dispose();
     this.viewer.dispose();
   }

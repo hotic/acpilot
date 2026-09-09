@@ -4,7 +4,7 @@ import type { AccountInfo, AgentId, AgentInfo, ConfigControl, SessionSummary, Se
 import type { HiddenMap, SettingsView } from '@shared/settings';
 import type { AgentInventory } from '@shared/inventory';
 import type { Locale } from '@shared/i18n';
-import { reuse } from '@shared/reuse';
+import { applySession } from '@shared/reuse';
 import { BASE_APPEARANCE, type Appearance } from './appearance';
 import { LocaleContext, setLocale, t } from './i18n';
 import { Shell, type ShellHandlers } from './chat/Shell';
@@ -80,7 +80,7 @@ export function App() {
           if (m.error) wait?.reject(new Error(m.error)); else wait?.resolve();
           break;
         }
-        case 'init': setInit(m.state); setAppearance(m.state.appearance); lastAgents.current = m.state.agents; setAgents(m.state.agents); setSessions(m.state.sessions); setAccounts(m.state.accounts); setAccountActions(m.state.accountActions ?? []); setHidden(m.state.hidden); setSession(m.state.active); setSettings(m.state.settings); setLocale(m.state.locale); setLoc(m.state.locale); break;
+        case 'init': setInit(m.state); setAppearance(m.state.appearance); lastAgents.current = m.state.agents; setAgents(m.state.agents); setSessions(m.state.sessions); setAccounts(m.state.accounts); setAccountActions(m.state.accountActions ?? []); setHidden(m.state.hidden); setSession(current => m.state.active ? applySession(current, m.state.active) : undefined); setSettings(m.state.settings); setLocale(m.state.locale); setLoc(m.state.locale); break;
         case 'appearance': setAppearance(m.appearance); break;
         // An agent whose executable appeared or vanished has a stale inventory (binary path, version); drop it so the page rescans
         case 'agents': {
@@ -95,7 +95,7 @@ export function App() {
         case 'accountActions': setAccountActions(m.actions); break;
         case 'hidden': setHidden(m.hidden); break;
         // Keep unchanged turns / blocks by reference so memoized history skips re-rendering during streaming
-        case 'session': setSession(current => current?.id === m.session.id ? reuse(current, m.session) : m.session); break;
+        case 'session': setSession(current => applySession(current, m.session)); break;
         case 'settings': setSettings(m.settings); setLocale(m.locale); setLoc(m.locale); break;
         case 'inventory': setInventories(inv => ({ ...inv, [m.agent]: m.inventory })); break;
         case 'controls': setControls(c => ({ ...c, [m.agent]: m.controls })); break;

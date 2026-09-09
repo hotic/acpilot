@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionView } from '../src/shared/transcript';
-import { reuse } from '../src/shared/reuse';
+import { applySession, reuse } from '../src/shared/reuse';
 
 const clone = <T>(value: T): T => structuredClone(value);
 
@@ -66,5 +66,33 @@ describe('reuse', () => {
     expect(reuse(previous, { list: [1, 2], value: { x: 1 } }).list).toEqual([1, 2]);
     expect(reuse(previous, { list: [1, 2, 3], value: 'text' }).value).toBe('text');
     expect(reuse(previous, { list: [1, 2, 3], value: null }).value).toBeNull();
+  });
+});
+
+describe('applySession', () => {
+  it('drops an older running snapshot that arrives after settle', () => {
+    const idle = { ...view(), running: false, rev: 4 };
+    const stale = { ...view(), running: true, rev: 3 };
+    expect(applySession(idle, stale)).toBe(idle);
+  });
+
+  it('applies a newer snapshot and a first paint without a current view', () => {
+    const idle = { ...view(), running: false, rev: 4 };
+    const next = { ...view(), running: true, rev: 5 };
+    expect(applySession(idle, next).running).toBe(true);
+    expect(applySession(undefined, idle)).toBe(idle);
+  });
+
+  it('applies unversioned snapshots so the LAB and an older host still update', () => {
+    const current = { ...view(), running: false, rev: 4 };
+    const unversioned = { ...view(), running: true };
+    expect(applySession(current, unversioned).running).toBe(true);
+    expect(applySession({ ...view(), running: false }, { ...view(), running: true, rev: 1 }).running).toBe(true);
+  });
+
+  it('replaces a snapshot from another session even when rev is lower', () => {
+    const current = { ...view(), id: 'a', running: false, rev: 8 };
+    const other = { ...view(), id: 'b', running: true, rev: 1 };
+    expect(applySession(current, other)).toBe(other);
   });
 });

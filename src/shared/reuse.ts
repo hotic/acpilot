@@ -1,3 +1,5 @@
+import type { SessionView } from './transcript';
+
 // postMessage hands the webview a freshly cloned SessionView on every push, so no
 // subtree keeps its identity even when nothing in it changed. Walk the new value
 // against the previous one and return the previous reference wherever the two are
@@ -30,4 +32,11 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null) return false;
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
+}
+
+// Keep the newer snapshot when two session payloads race. Missing rev (LAB fixtures, first paint)
+// always applies so an unversioned host still updates.
+export function applySession(current: SessionView | undefined, next: SessionView): SessionView {
+  if (current?.id === next.id && next.rev != null && current.rev != null && next.rev <= current.rev) return current;
+  return current?.id === next.id ? reuse(current, next) : next;
 }

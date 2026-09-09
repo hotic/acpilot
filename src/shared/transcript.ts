@@ -354,6 +354,10 @@ export interface SessionView {
   authMethods?: AuthMethodInfo[];
   turns: Turn[];
   running: boolean;
+  // Monotonic snapshot id for this process. Turns are mutated in place and postMessage clones
+  // asynchronously, so an older running:true payload can arrive after settle; the webview drops a
+  // lower or equal rev. Not persisted.
+  rev?: number;
   controls: SessionControls;
   usage?: Usage;
   commands: SlashCommand[];

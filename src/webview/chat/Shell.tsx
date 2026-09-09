@@ -342,7 +342,7 @@ function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: Thre
     }
     exchanges[exchanges.length - 1]!.messages.push(turn.role === 'user'
       ? <HistoryMessage key={turn.id ?? ti} turn={turn} turnIndex={ti} index={index} blobUrl={blobUrl} />
-      : <AgentMessage key={ti} turn={turn} index={index} compacting={compacting} running={running && ti === turns.length - 1} onPermission={onPermission} />);
+      : <AgentMessage key={ti} turn={turn} index={index} compacting={compacting} running={running && ti === turns.length - 1 && !turn.stop} onPermission={onPermission} />);
   });
   return (
     <div ref={ref} data-thread className="scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto px-page [container-type:size] [overflow-anchor:none]">

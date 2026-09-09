@@ -399,6 +399,24 @@ describe('AcpSession', () => {
     s.dispose();
   });
 
+  it('session views carry a monotonic rev and leave running false after the prompt returns', async () => {
+    const { session } = deps();
+    const s = session();
+    try {
+      const before = s.view().rev ?? 0;
+      await s.start();
+      const ready = s.view().rev ?? 0;
+      expect(ready).toBeGreaterThan(before);
+      expect(s.view().rev).toBe(ready);
+      await s.prompt('hi');
+      const done = s.view();
+      expect(done.running).toBe(false);
+      expect(done.rev ?? 0).toBeGreaterThan(ready);
+      const last = done.turns.at(-1);
+      expect(last?.role === 'agent' && last.stop).toBe('end_turn');
+    } finally { s.dispose(); }
+  });
+
   it('cancel: text stops midway, the turn wraps up, can send again', async () => {
     const { session } = deps();
     const s = session();
