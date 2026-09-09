@@ -115,10 +115,11 @@
   --hdr: 52px;
   /* Attachment thumbnail: the same square tile in drafts and sent messages */
   --thumb: 56px;
-  /* Sticky prompts leave room for the reply, even in a short sidebar; once stuck at the top they fold to a few lines. */
-  --user-message-max: min(240px, 40cqh);
+  /* Sticky prompts leave room for the reply, even in a short sidebar; once stuck at the top they fold to a few lines.
+     Floor at the stuck height so a hidden webview (40cqh → 0) does not collapse the card to nothing. */
   --user-message-stuck-lines: 3;
   --user-message-stuck-max: calc(var(--user-message-stuck-lines) * var(--text-1-lh));
+  --user-message-max: min(240px, max(40cqh, var(--user-message-stuck-max)));
 
   /* Three radius levels: inline (inline code / progress bar) / control (button / Chip / menu item / row hover) / container (composer / card / overlay / code block / bubble).
      --r-xs is for tiny swatches only (legend squares) and does not follow the radius axis */

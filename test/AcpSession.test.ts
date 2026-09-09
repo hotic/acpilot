@@ -695,6 +695,44 @@ describe('AcpSession', () => {
     s.dispose();
   });
 
+  it('auto compaction runs before a follow-up queued during the over-threshold turn', async () => {
+    const { session } = deps('/tmp', () => ({ atTokens: 300_000, auto: true }));
+    const s = session();
+    await s.start();
+    const first = s.prompt('big');
+    await s.prompt('follow-up');
+    await first;
+    await until(() => !s.isRunning && s.view().turns.some(t => t.role === 'user' && t.text === 'follow-up'));
+    const users = s.view().turns.filter(t => t.role === 'user');
+    expect(users).toMatchObject([
+      { text: 'big' },
+      { text: '/compact', auto: true },
+      { text: 'follow-up' },
+    ]);
+    expect(s.view().usage?.used).toBeLessThan(300_000);
+    s.dispose();
+  });
+
+  it('auto compaction runs before the next typed prompt when a previous turn left usage over the threshold', async () => {
+    let auto = false;
+    const { session } = deps('/tmp', () => ({ atTokens: 300_000, auto }));
+    const s = session();
+    await s.start();
+    await s.prompt('big');
+    expect(s.view().turns).toHaveLength(2);
+    expect(s.view().usage!.used).toBeGreaterThan(300_000);
+    auto = true;
+    await s.prompt('hi');
+    await until(() => !s.isRunning && s.view().turns.some(t => t.role === 'user' && t.text === 'hi'));
+    const users = s.view().turns.filter(t => t.role === 'user');
+    expect(users).toMatchObject([
+      { text: 'big' },
+      { text: '/compact', auto: true },
+      { text: 'hi' },
+    ]);
+    s.dispose();
+  });
+
   it('manual compaction: sends /compact when available; errors when not', async () => {
     const { session } = deps('/tmp', () => ({ atTokens: 300_000, auto: false }));
     const s = session();

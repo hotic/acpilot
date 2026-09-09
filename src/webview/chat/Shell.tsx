@@ -10,6 +10,7 @@ import { ShellLayerContext } from '../ui/Popover';
 import { cn } from '../ui/cn';
 import { useScrollReveal } from '../ui/useScrollReveal';
 import { useStableList } from '../ui/useStableList';
+import { scrollerUsable } from './promptStuck';
 import { Header } from './Header';
 import { SessionList } from './SessionList';
 import { AgentMessage } from './Turns';
@@ -311,17 +312,19 @@ function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: Thre
     const el = ref.current;
     if (!el) return;
     pinned.current = true;
-    el.scrollTop = el.scrollHeight;
-    const onScroll = () => { pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48; };
+    const pin = () => { if (scrollerUsable(el) && pinned.current) el.scrollTop = el.scrollHeight; };
+    pin();
+    // A hidden sidebar collapses this to no box and fires a scroll that looks like "left the bottom".
+    const onScroll = () => { if (scrollerUsable(el)) pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48; };
     el.addEventListener('scroll', onScroll, { passive: true });
     // Keep stuck to the bottom when the container itself shrinks (composer grows / panel narrows); observe only the container, not the content
-    const ro = new ResizeObserver(() => { if (pinned.current) el.scrollTop = el.scrollHeight; });
+    const ro = new ResizeObserver(pin);
     ro.observe(el);
     return () => { ro.disconnect(); el.removeEventListener('scroll', onScroll); };
   }, [replayKey]);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (el && pinned.current) el.scrollTop = el.scrollHeight;
+    if (el && scrollerUsable(el) && pinned.current) el.scrollTop = el.scrollHeight;
   }, [turns, running]);
 
   // Each user message sticks only within its own exchange. Automatic commands belong
@@ -342,7 +345,7 @@ function Thread({ turns, running, wide, replayKey, blobUrl, onPermission }: Thre
       : <AgentMessage key={ti} turn={turn} index={index} compacting={compacting} running={running && ti === turns.length - 1} onPermission={onPermission} />);
   });
   return (
-    <div ref={ref} data-thread className="scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto px-page [container-type:size]">
+    <div ref={ref} data-thread className="scroll-stable min-h-0 min-w-0 flex-1 overflow-y-auto px-page [container-type:size] [overflow-anchor:none]">
       <div key={replayKey} className={cn('mx-auto flex flex-col gap-msg pt-pad-y pb-gap', wide && 'max-w-(--content-w)')}>
         {exchanges.map(exchange => (
           // Positioned so the prompt's stuck-state sentinel can sit at the exchange's top edge.

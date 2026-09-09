@@ -30,6 +30,16 @@ export function usageWindow(size: number, compactAt?: number): number {
   return Math.min(size, compactAt);
 }
 
+// A budget strictly inside the agent window, shown as a marker — not a replacement for `size`
+export function compactBudget(size: number, compactAt?: number): number | undefined {
+  if (!compactAt || compactAt <= 0 || compactAt >= size) return undefined;
+  return compactAt;
+}
+
+export function overCompactBudget(used: number, compactAt?: number): boolean {
+  return !!compactAt && compactAt > 0 && used >= compactAt;
+}
+
 type RawUsage = Record<Exclude<UsageSegmentId, 'system'>, number>;
 
 // The estimate runs on every stream push; finished turns keep their identity (App reuses deep-equal

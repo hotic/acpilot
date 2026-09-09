@@ -49,7 +49,9 @@ export interface SessionAccountHooks {
   authenticate(agent: AgentId, accountId: string, proc: AgentProcess): Promise<void>;
 }
 
-// Auto-compaction: after a turn ends, if usage.used has reached atTokens and the agent has /compact, send one automatically
+// Auto-compaction: if usage.used has reached atTokens and the agent has /compact, send one
+// before the next user-facing prompt (and after end_turn, before the queue flushes). The
+// current session/prompt cannot be interrupted.
 export interface CompactionPolicy {
   atTokens: number;
   auto: boolean;
@@ -438,6 +440,16 @@ export class AcpSession {
     if (this.status !== 'ready') return;
     if (!text.trim() && attachments.length === 0 && !staged?.prepared.blocks.length) return;
     if (this.phase.running) { await this.queue.enqueue(text, attachments, staged?.prepared); return; }
+    // Mid-turn we cannot inject /compact: session/prompt is still on the wire. The next user-facing
+    // ACP request (typed send or a queued follow-up) is the earliest slot; compact that first.
+    if (!auto && !isCompactCommand(text) && this.shouldAutoCompact()) {
+      this.log(`usage ${this.state.usage?.used} ≥ threshold, auto /compact before prompt`);
+      await this.compact(true);
+      if (this.status !== 'ready' || this.phase.running) {
+        if (this.status === 'ready') await this.queue.enqueue(text, attachments, staged?.prepared);
+        return;
+      }
+    }
     this.phase.running = true;
     this.phase.staging = true;
     this.phase.stagingAborted = false;
@@ -507,11 +519,7 @@ export class AcpSession {
     // A hand-typed /compact counts as a compaction too; likewise record the usage right after it
     if (auto || compacting) this.compactedAt = this.state.usage?.used ?? 0;
     this.touch();
-    if (this.queue.flush()) return;
-    if (!auto && stop === 'end_turn' && this.shouldAutoCompact()) {
-      this.log(`usage ${this.state.usage?.used} ≥ threshold, auto /compact`);
-      this.compact(true).catch(e => this.log(`auto /compact failed: ${msg(e)}`));
-    }
+    this.afterPrompt(auto, stop);
   }
 
   dequeue(id: string) { this.queue.dequeue(id); }
@@ -545,6 +553,19 @@ export class AcpSession {
     if (used < policy.atTokens) return false;
     // If it hasn't grown back a fair bit since the last compaction (1/10 of the threshold), don't fire again
     return this.compactedAt === undefined || used >= this.compactedAt + policy.atTokens / 10;
+  }
+
+  // Compact before flushing so a queued follow-up is not the request that runs over budget.
+  private afterPrompt(auto: boolean, stop: acp.StopReason) {
+    if (!auto && stop === 'end_turn' && this.shouldAutoCompact()) {
+      this.log(`usage ${this.state.usage?.used} ≥ threshold, auto /compact`);
+      this.compact(true).catch(e => {
+        this.log(`auto /compact failed: ${msg(e)}`);
+        this.queue.flush();
+      });
+      return;
+    }
+    this.queue.flush();
   }
 
   private settle(stop: acp.StopReason, error?: TurnError) {

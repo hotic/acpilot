@@ -8,6 +8,7 @@ import { Disclosure, DisclosureObserverContext } from '../ui/Disclosure';
 import { Collapsible } from '../ui/Collapsible';
 import { Orb } from '../effects/Orb';
 import { cn } from '../ui/cn';
+import { useMergedRefs } from '../ui/mergeRefs';
 import { useScrollFade } from '../ui/useScrollFade';
 import { TOOL_ICON } from './icons';
 import { Thought } from './Thought';
@@ -31,6 +32,9 @@ import { compactionForDisplay } from './compactionDisplay';
 export function UserMessage({ turn, index, blobUrl, onEdit, compact }: { turn: UserTurn; index: number; blobUrl?: (blob: string) => string; onEdit?: () => void; compact?: boolean }) {
   const { userMessage } = useAppearance();
   const fade = useScrollFade<HTMLDivElement>();
+  const text = useRef<HTMLDivElement>(null);
+  const textRef = useMergedRefs(fade, text);
+  useLayoutEffect(() => { if (compact && text.current) text.current.scrollTop = 0; }, [compact]);
   if (turn.auto) {
     return (
       <div className="enter px-pad" style={{ '--i': index } as CSSProperties}>
@@ -57,8 +61,8 @@ export function UserMessage({ turn, index, blobUrl, onEdit, compact }: { turn: U
         )}
       >
         {turn.attachments?.length ? <TurnAttachments attachments={turn.attachments} blobUrl={blobUrl} /> : null}
-        {turn.text && <div ref={fade} className={cn(
-          'scroll-fade scroll-thin min-h-0 whitespace-pre-wrap transition-[max-height] duration-(--dur-open) ease-out [--scroll-fade-size:var(--text-1-lh)]',
+        {turn.text && <div ref={textRef} className={cn(
+          'scroll-fade scroll-thin min-h-0 whitespace-pre-wrap transition-[max-height] duration-(--dur-open) ease-out [--scroll-fade-size:var(--text-1-lh)] [overflow-anchor:none]',
           // Folded text does not take the wheel: scrolling over a stuck card keeps moving the conversation.
           compact ? 'max-h-(--user-message-stuck-max) overflow-hidden' : 'max-h-(--user-message-max) overflow-y-auto',
         )}>{turn.text}</div>}

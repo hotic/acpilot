@@ -5,19 +5,19 @@ import { t } from '../i18n';
 import { cn } from '../ui/cn';
 import { IconButton } from '../ui/Button';
 import { Popover } from '../ui/Popover';
-import { estimateUsage, usageWindow, type UsageSegment } from './usageBreakdown';
+import { compactBudget, estimateUsage, overCompactBudget, usageWindow, type UsageSegment } from './usageBreakdown';
 
 // Context usage: a --icon-sized ring inside a --ctl-square button; hovering shows the breakdown card (Cursor-style), and agents with /compact can be compacted from its title row
-export function ContextRing({ usage, turns, canCompact, compactAt, onCompact, onOpenChange }: {
-  usage: Usage; turns: Turn[]; canCompact: boolean; compactAt?: number; onCompact: () => void; onOpenChange: (open: boolean) => void;
+export function ContextRing({ usage, turns, canCompact, compactAt, running, onCompact, onOpenChange }: {
+  usage: Usage; turns: Turn[]; canCompact: boolean; compactAt?: number; running?: boolean;
+  onCompact: () => void; onOpenChange: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const display = useMemo<Usage>(() => {
-    const size = usageWindow(usage.size, compactAt);
-    return size === usage.size ? usage : { ...usage, size };
-  }, [usage, compactAt]);
-  const pct = Math.min(1, display.used / display.size);
-  const segments = useMemo(() => estimateUsage(turns, display), [turns, display]);
+  const ringSize = useMemo(() => usageWindow(usage.size, compactAt), [usage.size, compactAt]);
+  const pct = Math.min(1, usage.used / ringSize);
+  const budget = compactBudget(usage.size, compactAt);
+  const over = overCompactBudget(usage.used, compactAt);
+  const segments = useMemo(() => estimateUsage(turns, usage), [turns, usage]);
   const r = 6, c = 2 * Math.PI * r;
   return (
     <Popover.Root open={open} onOpenChange={setOpen} onOpenLifecycle={onOpenChange}>
@@ -32,7 +32,15 @@ export function ContextRing({ usage, turns, canCompact, compactAt, onCompact, on
           </svg>
         </button>} />
       <Popover.Portal><Popover.Positioner side="top" align="end" width="lg"><Popover.Popup>
-        <UsagePanel usage={display} pct={pct} segments={segments} onCompact={canCompact ? () => { onCompact(); setOpen(false); } : undefined} />
+        <UsagePanel
+          usage={usage}
+          pct={Math.min(1, usage.used / usage.size)}
+          segments={segments}
+          budget={budget}
+          overAt={over && compactAt ? compactAt : undefined}
+          pending={over && canCompact ? (running ? t('usage.pendingAfterTurn') : t('usage.pendingBeforeSend')) : undefined}
+          onCompact={canCompact ? () => { onCompact(); setOpen(false); } : undefined}
+        />
       </Popover.Popup></Popover.Positioner></Popover.Portal>
     </Popover.Root>
   );
@@ -50,8 +58,12 @@ const SEG_COLOR: Record<UsageSegment['id'], string> = {
 // Breakdown panel (modeled on Cursor's context usage): title row with the compact button, one summary line (percent left, "~used / size" right), a thin stacked bar,
 // then legend rows — square swatch, label, right-aligned count. Hovering a row or bar segment highlights that slice (dims the rest); nothing opens on click.
 // The breakdown is a local estimate, so the total carries a "~" and the counts are read as approximate
-function UsagePanel({ usage, pct, segments, onCompact }: { usage: Usage; pct: number; segments: UsageSegment[]; onCompact?: () => void }) {
+function UsagePanel({ usage, pct, segments, budget, overAt, pending, onCompact }: {
+  usage: Usage; pct: number; segments: UsageSegment[];
+  budget?: number; overAt?: number; pending?: string; onCompact?: () => void;
+}) {
   const [hov, setHov] = useState<UsageSegment['id']>();
+  const mark = overAt ? `${t('usage.used', { n: fmtTokens(usage.used) })} · ${t('usage.limit', { n: fmtTokens(usage.size) })} · ${t('usage.budget', { n: fmtTokens(overAt) })}` : `${t('usage.used', { n: fmtTokens(usage.used) })} · ${t('usage.limit', { n: fmtTokens(usage.size) })}`;
   return (
     <div className="flex flex-col gap-1 p-1 tabular-nums">
       <div className="flex h-ctl items-center justify-between pl-2">
@@ -62,11 +74,18 @@ function UsagePanel({ usage, pct, segments, onCompact }: { usage: Usage; pct: nu
           </IconButton>
         )}
       </div>
-      <div className="flex items-baseline justify-between px-2 text-3" title={`${t('usage.used', { n: fmtTokens(usage.used) })} · ${t('usage.limit', { n: fmtTokens(usage.size) })}`}>
+      <div className="flex items-baseline justify-between px-2 text-3" title={mark}>
         <span className="text-fg-2">{t('usage.usedPctShort', { pct: Math.round(pct * 100) })}</span>
         <span className="text-fg-3">{t('usage.about', { n: fmtTokens(usage.used) })} / {fmtTokens(usage.size)}{usage.cost !== undefined ? t('usage.cost', { n: usage.cost.toFixed(2) }) : ''}</span>
       </div>
-      <div className="mx-2 mb-1 flex h-1.5 overflow-hidden rounded-full bg-active">
+      {(overAt || pending) && (
+        <div className="px-2 text-3 text-fg-2">
+          {overAt ? t('usage.overBudget', { n: fmtTokens(overAt) }) : null}
+          {overAt && pending ? ' · ' : ''}
+          {pending}
+        </div>
+      )}
+      <div className="relative mx-2 mb-1 flex h-1.5 overflow-hidden rounded-full bg-active">
         {segments.map(s =>
           s.tokens > 0 && (
             <div
@@ -77,6 +96,13 @@ function UsagePanel({ usage, pct, segments, onCompact }: { usage: Usage; pct: nu
               style={{ width: `${(s.tokens / usage.size) * 100}%` }}
             />
           ),
+        )}
+        {budget && (
+          <div
+            className="absolute inset-y-0 w-px bg-fg-1"
+            style={{ left: `${(budget / usage.size) * 100}%` }}
+            title={t('usage.budget', { n: fmtTokens(budget) })}
+          />
         )}
       </div>
       <div className="flex flex-col">

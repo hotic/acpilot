@@ -6,6 +6,7 @@ export function useScrollFade<T extends HTMLElement>() {
   return useCallback((element: T | null) => {
     if (!element) return;
     const update = () => {
+      if (element.clientHeight < 1) return;
       const overflow = element.scrollHeight - element.clientHeight;
       element.toggleAttribute('data-more-above', overflow > 1 && element.scrollTop > 1);
       element.toggleAttribute('data-more-below', overflow > 1 && overflow - element.scrollTop > 1);

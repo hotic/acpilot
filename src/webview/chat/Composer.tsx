@@ -33,7 +33,7 @@ export interface ComposerProps {
   hidden?: HiddenMap[string];
   usage?: Usage;
   canCompact?: boolean;
-  // Auto-compact threshold: caps the context ring when smaller than the agent's reported window
+  // Auto-compact threshold: the ring fills against this budget when it is smaller than the agent's window
   compactAt?: number;
   // Workspace root: dropped and mentioned files are labeled relative to it
   cwd: string;
@@ -229,7 +229,7 @@ export function Composer(p: ComposerProps) {
           {other.map(c => (
             <OptionControl key={c.id} end control={c} hidden={p.hidden?.[c.id]} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />
           ))}
-          {p.usage && <ContextRing usage={p.usage} turns={p.turns} canCompact={!!p.canCompact && !dim} compactAt={p.compactAt} onCompact={p.onCompact} onOpenChange={onOpenChange} />}
+          {p.usage && <ContextRing usage={p.usage} turns={p.turns} canCompact={!!p.canCompact && !dim} compactAt={p.compactAt} running={p.running} onCompact={p.onCompact} onOpenChange={onOpenChange} />}
           {models.map((c, i) => (
             <ModelControl key={c.id} control={c} hidden={p.hidden?.[c.id]} reasoning={i === 0 ? reasoning : undefined}
               onSetReasoning={p.onSetConfig} onSelect={v => p.onSetConfig(c.id, v)} onOpenChange={onOpenChange} />

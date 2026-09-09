@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateUsage, estTokens, usageWindow } from '../src/webview/chat/usageBreakdown';
+import { compactBudget, estimateUsage, estTokens, overCompactBudget, usageWindow } from '../src/webview/chat/usageBreakdown';
 import type { Turn, Usage } from '../src/shared/transcript';
 
 // 100 latin chars ≈ 25 tokens
@@ -32,6 +32,22 @@ describe('usageWindow', () => {
     expect(usageWindow(1_000_000)).toBe(1_000_000);
     expect(usageWindow(1_000_000, 0)).toBe(1_000_000);
     expect(usageWindow(1_000_000, -1)).toBe(1_000_000);
+  });
+});
+
+describe('compactBudget', () => {
+  it('only marks a budget strictly inside the agent window', () => {
+    expect(compactBudget(1_000_000, 300_000)).toBe(300_000);
+    expect(compactBudget(200_000, 300_000)).toBeUndefined();
+    expect(compactBudget(300_000, 300_000)).toBeUndefined();
+    expect(compactBudget(1_000_000)).toBeUndefined();
+  });
+
+  it('treats usage at or above the threshold as over budget', () => {
+    expect(overCompactBudget(345_000, 300_000)).toBe(true);
+    expect(overCompactBudget(300_000, 300_000)).toBe(true);
+    expect(overCompactBudget(299_999, 300_000)).toBe(false);
+    expect(overCompactBudget(345_000)).toBe(false);
   });
 });
 

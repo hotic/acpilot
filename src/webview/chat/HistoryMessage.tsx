@@ -6,6 +6,7 @@ import { useAppearance } from '../appearance';
 import { Composer, type ComposerProps } from './Composer';
 import { EditAttachments } from './Attachments';
 import { UserMessage } from './Turns';
+import { promptIsStuck, scrollerUsable } from './promptStuck';
 import { cn } from '../ui/cn';
 
 // Every prompt card reads this, so it must stay stable across stream pushes: editability is a flag,
@@ -28,7 +29,8 @@ export const HistoryComposerContext = createContext<ComposerProps | undefined>(u
 // the fade so replies cannot show through the editor or the swapping content.
 // A stuck card folds to a few lines: the sentinel at the exchange's top leaving the scroller marks the stuck state, and the frame
 // keeps its natural flow height meanwhile so the fold never moves the conversation under the reader; the freed area is transparent
-// and lets pointer events through to the reply scrolling beneath it.
+// and lets pointer events through to the reply scrolling beneath it. A hidden sidebar webview collapses the thread to no box —
+// those IntersectionObserver records are ignored, then re-checked when the thread is visible again.
 export const HistoryMessage = memo(function HistoryMessage(p: { turn: UserTurn; index: number; turnIndex: number; blobUrl?: (blob: string) => string }) {
   const context = useContext(HistoryContext);
   const { motion } = useAppearance();
@@ -41,15 +43,30 @@ export const HistoryMessage = memo(function HistoryMessage(p: { turn: UserTurn; 
   const [stuck, setStuck] = useState(false);
   const sentinel = useCallback((el: HTMLDivElement | null) => {
     if (!el || typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver(([entry]) => {
-      const below = !!entry && !entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0);
+    const thread = el.closest('[data-thread]');
+    const apply = (entry: IntersectionObserverEntry) => {
+      const below = promptIsStuck(entry);
+      if (below === undefined) return;
       const target = frame.current;
       // Measure before React applies the fold, while the frame still has its natural height.
       if (target) target.style.minHeight = below ? `${target.offsetHeight}px` : '';
       setStuck(below);
-    }, { root: el.closest('[data-thread]'), threshold: 0 });
+    };
+    const observer = new IntersectionObserver(([entry]) => { if (entry) apply(entry); }, { root: thread, threshold: 0 });
     observer.observe(el);
-    return () => observer.disconnect();
+    if (!(thread instanceof HTMLElement)) return () => observer.disconnect();
+    // A collapsed webview never delivers a usable record; force one when the thread gets a box again.
+    let usable = scrollerUsable(thread);
+    const ro = new ResizeObserver(() => {
+      const next = scrollerUsable(thread);
+      if (next === usable) return;
+      usable = next;
+      if (!next) return;
+      observer.unobserve(el);
+      observer.observe(el);
+    });
+    ro.observe(thread);
+    return () => { observer.disconnect(); ro.disconnect(); };
   }, []);
   const editor = context && context.editing === p.turnIndex ? context : undefined;
   const editing = !!editor;
