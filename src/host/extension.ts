@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import * as vscode from 'vscode';
 import { appearanceFromSettings, type Appearance, type AxisKey } from '@shared/appearance';
-import type { HiddenMap } from '@shared/settings';
+import { sanitizeSetting, type HiddenMap } from '@shared/settings';
 import { AgentRegistry, type CustomAgentSetting } from './acp/AgentRegistry';
 import { AccountManager } from './accounts/AccountManager';
 import { AccountStore, FileVault } from './accounts/AccountStore';
@@ -69,6 +69,7 @@ export async function activate(context: vscode.ExtensionContext) {
     localAccounts: new LocalAccounts({ env: agent => ({ ...process.env, ...activeRegistry.get(agent).env }) }),
     compaction: () => ({ atTokens: cfg().get<number>('compactAtTokens') ?? 300_000, auto: cfg().get<boolean>('autoCompact') ?? true }),
     hidden: () => cfg().get<HiddenMap>('hiddenOptions') ?? {},
+    scope: () => sanitizeSetting('sessionScope', cfg().get('sessionScope')),
   });
   await manager.init();
 

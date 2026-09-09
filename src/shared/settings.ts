@@ -17,12 +17,22 @@ export const DIFF_MARKERS: DiffMarkers[] = ['color', 'signs'];
 export const UI_FONT_SIZE = { min: 10, max: 20, default: 13 } as const;
 export const CODE_FONT_SIZE = { min: 9, max: 20, default: 12 } as const;
 
+// Which sessions the list shows: those opened in the current workspace folder (a session's cwd), or every session on this machine
+export type SessionScope = 'workspace' | 'all';
+export const SESSION_SCOPES: SessionScope[] = ['workspace', 'all'];
+
+// Whether a session belongs to the workspace shown: its cwd is that folder (sessions opened without a folder carry the home directory)
+export function inWorkspace(session: { cwd: string }, workspace: string): boolean {
+  return session.cwd === workspace;
+}
+
 // The settings the page shows and edits; the host builds it from acpira.* and pushes it on every change
 export interface SettingsView {
   language: Language;
   // Language resolved against the host's display language
   locale: Locale;
   defaultAgent: AgentId;
+  sessionScope: SessionScope;
   autoCompact: boolean;
   compactAtTokens: number;
   hiddenOptions: HiddenMap;
@@ -35,7 +45,7 @@ export interface SettingsView {
 }
 
 // Keys the webview may write back; the host maps them onto acpira.<key> at user scope
-export type SettingKey = 'language' | 'defaultAgent' | 'autoCompact' | 'compactAtTokens' | 'hiddenOptions' | 'theme' | 'uiFontSize' | 'codeFontSize' | 'diffMarkers' | 'fontSmoothing';
+export type SettingKey = 'language' | 'defaultAgent' | 'sessionScope' | 'autoCompact' | 'compactAtTokens' | 'hiddenOptions' | 'theme' | 'uiFontSize' | 'codeFontSize' | 'diffMarkers' | 'fontSmoothing';
 
 export const MIN_COMPACT_AT_TOKENS = 10_000;
 
@@ -43,6 +53,7 @@ export const DEFAULT_SETTINGS: SettingsView = {
   language: 'auto',
   locale: 'en',
   defaultAgent: 'grok',
+  sessionScope: 'workspace',
   autoCompact: true,
   compactAtTokens: 300_000,
   hiddenOptions: {},
@@ -76,6 +87,8 @@ export function sanitizeSetting<K extends SettingKey>(key: K, value: unknown): S
       return (oneOf(value, THEMES) ?? fallback) as SettingsView[K];
     case 'diffMarkers':
       return (oneOf(value, DIFF_MARKERS) ?? fallback) as SettingsView[K];
+    case 'sessionScope':
+      return (oneOf(value, SESSION_SCOPES) ?? fallback) as SettingsView[K];
     case 'hiddenOptions':
       return (isHiddenMap(value) ? value : fallback) as SettingsView[K];
   }

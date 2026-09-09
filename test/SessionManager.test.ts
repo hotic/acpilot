@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -326,6 +326,69 @@ describe('SessionManager', () => {
     expect(c.sessions().find(s => s.id === sa)?.title).toBe('A 的会话');
     await b.dispose();
     await c.dispose();
+  }, 30_000);
+
+  // Sessions belong to the workspace folder they were opened in (their cwd). Under the workspace scope a viewer left without a session
+  // falls onto one of this folder's, never another project's; moving re-homes a session into the current folder
+  it('workspace scope: summaries carry cwd, "most recent" and the post-deletion pick stay inside the folder, moveSession re-homes stored and live sessions', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'acpira-mgr-'));
+    // The agent process is spawned in the session's cwd, so the project folders have to exist
+    const proj = (name: string) => { const p = join(dir, 'proj', name); mkdirSync(p, { recursive: true }); return p; };
+    let cwd = proj('a');
+    let scope: 'workspace' | 'all' = 'workspace';
+    const toasts: string[] = [];
+    const mk = () => new SessionManager({
+      registry: new AgentRegistry({ fake: { name: 'Fake', command: TSX, args: [FAKE] } }),
+      store: new TranscriptStore(join(dir, 'sessions')), log: () => {}, cwd: () => cwd, defaultAgent: () => 'fake', runInTerminal: () => {}, toast: (_l, t) => toasts.push(t),
+      scope: () => scope,
+    });
+    // Project A: one session with a turn
+    let m = mk();
+    await m.init();
+    await m.newSession();
+    const a1 = m.activeId!;
+    await m.handle({ type: 'send', text: 'in a' });
+    expect(m.sessions()[0]).toMatchObject({ id: a1, cwd: proj('a') });
+    await m.dispose();
+
+    // Project B: a sidebar starting on "most recent" must not land on A's session
+    cwd = proj('b');
+    m = mk();
+    await m.init();
+    expect(m.attach({ mostRecent: true }).activeId).toBeUndefined();
+    scope = 'all';
+    expect(m.attach({ mostRecent: true }).activeId).toBe(a1);
+    scope = 'workspace';
+    await m.newSession();
+    const b1 = m.activeId!;
+    await m.handle({ type: 'send', text: 'in b' });
+    await m.newSession();
+    const b2 = m.activeId!;
+    await m.handle({ type: 'send', text: 'in b too' });
+    // Deleting the active one falls back to B's other session, not the newer-looking A one
+    await m.handle({ type: 'deleteSession', id: b2 });
+    expect(m.activeId).toBe(b1);
+
+    // Move A's stored session into B: its record and summary change folder
+    await m.handle({ type: 'moveSession', id: a1 });
+    expect(m.sessions().find(s => s.id === a1)?.cwd).toBe(proj('b'));
+    expect((await new TranscriptStore(join(dir, 'sessions')).load(a1))?.cwd).toBe(proj('b'));
+
+    // Move a live idle session: it is reopened in the new folder (a fresh process; "gone" makes the fake report the old id swept, so it falls back to
+    // session/new with the local history kept) and its viewer stays on it; a running one refuses
+    cwd = proj('c-gone');
+    await m.handle({ type: 'moveSession', id: b1 });
+    expect(m.activeId).toBe(b1);
+    expect(m.active()?.cwd).toBe(proj('c-gone'));
+    expect(m.active()?.status).toBe('ready');
+    expect(m.active()?.turns.length).toBe(2);
+    cwd = proj('d');
+    const sending = m.handle({ type: 'send', text: 'slow' });
+    await m.handle({ type: 'moveSession', id: b1 });
+    expect(toasts.some(t => t.includes('moving') || t.includes('移动'))).toBe(true);
+    await sending;
+    expect(m.active()?.cwd).toBe(proj('c-gone'));
+    await m.dispose();
   }, 30_000);
 
   it('the first session takes the warm process started at init', async () => {

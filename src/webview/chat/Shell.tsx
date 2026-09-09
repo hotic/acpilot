@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Paperclip } from 'lucide-react';
 import type { AccountInfo, AgentInfo, AuthMethodInfo, Draft, PermissionBlock, QuestionBlock, QueuedPrompt, SessionControls, SessionStatus, SessionSummary, Turn, Usage } from '@shared/transcript';
-import type { HiddenMap } from '@shared/settings';
+import type { HiddenMap, SessionScope } from '@shared/settings';
 import type { AccountAction, AddAccountVia, EditTurnRequest, FileHit } from '@shared/protocol';
 import { AppearanceContext, appearanceDataAttrs, type Appearance } from '../appearance';
 import { lookAttrs, ThemeContext, type ShellLook, type Theme } from '../look';
@@ -47,6 +47,9 @@ export interface ShellHandlers {
   deleteSession: (id: string) => void;
   restoreSession: (id: string) => void;
   pinSession: (id: string, pinned: boolean) => void;
+  // Project scoping of the list: re-home a session into this window's workspace folder; switch the acpira.sessionScope setting
+  moveSession?: (id: string) => void;
+  setSessionScope?: (scope: SessionScope) => void;
   // Account layer: selecting an account starts a new session with it; adding an account goes through import / terminal login; removing only deletes the locally saved credential
   selectAccount: (id: string) => void;
   addAccount: (agent: AgentInfo['id'], via: AddAccountVia) => void;
@@ -95,6 +98,9 @@ export interface ShellProps {
   activeSessionId?: string;
   // Workspace root of the session; attachments are labeled relative to it
   cwd?: string;
+  // This window's workspace folder and the list scope setting: the session list filters by them (the LAB leaves both out and shows everything)
+  workspace?: string;
+  sessionScope?: SessionScope;
   // Where attachment blobs are served from (the host's sessions directory as a webview URI); absent in the LAB
   blobBase?: string;
   on: ShellHandlers;
@@ -133,6 +139,12 @@ export function Shell(p: ShellProps) {
       on.deleteSession(id);
       pushToast({ key: id, text: t('session.deleted', { title }), undo: () => { on.restoreSession(id); dropToast(id); } });
     },
+    // A moved session leaves a "this project" list at once (or loses its project tag under "all"); the toast says where it went
+    moveSession: on.moveSession && (id => {
+      const title = p.sessions.find(s => s.id === id)?.title ?? t('session.fallbackTitle');
+      on.moveSession!(id);
+      pushToast({ key: `m${id}`, text: t('session.moved', { title }) });
+    }),
   }), [on, p.sessions, pushToast, dropToast]);
   const blobUrl = useMemo(() => (p.blobBase && p.activeSessionId ? (blob: string) => `${p.blobBase}/${p.activeSessionId}/${blob}` : undefined), [p.blobBase, p.activeSessionId]);
   // The card for a turn that stopped short stands until dismissed or until the transcript moves on; the key ties the dismissal to that one turn.
@@ -148,10 +160,14 @@ export function Shell(p: ShellProps) {
       sessions={p.sessions}
       agents={p.agents}
       activeId={p.activeSessionId}
+      workspace={p.workspace}
+      scope={p.sessionScope}
+      onScope={on.setSessionScope}
       onSelect={id => { on.selectSession(id); setDrawerOpen(false); }}
       onRename={on.renameSession}
       onDelete={handlers.deleteSession}
       onPin={on.pinSession}
+      onMove={handlers.moveSession}
     />
   );
 
@@ -208,6 +224,8 @@ export function Shell(p: ShellProps) {
               accounts={p.accounts}
               accountId={p.accountId}
               activeSessionId={p.activeSessionId}
+              workspace={p.workspace}
+              sessionScope={p.sessionScope}
               on={handlers}
               onToggleDrawer={() => setDrawerOpen(o => !o)}
               drawerOpen={drawerOpen}

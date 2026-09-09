@@ -1,6 +1,6 @@
 import type { AccountInfo, AgentId, AgentInfo, ConfigControl, SessionSummary, SessionView } from '@shared/transcript';
 import type { AccountAction, AddAccountVia, EditTurnRequest, WebviewMsg } from '@shared/protocol';
-import type { HiddenMap } from '@shared/settings';
+import { inWorkspace, type HiddenMap, type SessionScope } from '@shared/settings';
 import type { AgentRuntimeInfo } from '@shared/inventory';
 import { captureTurnSettings } from '@shared/turnSettings';
 import { AgentRegistry } from './acp/AgentRegistry';
@@ -29,6 +29,9 @@ export interface ManagerDeps {
   compaction?: () => CompactionPolicy;
   // Option families hidden from the composer menus (in VS Code, the acpira.hiddenOptions setting, edited from the settings page)
   hidden?: () => HiddenMap;
+  // Which sessions count as "here" when a viewer needs one on its own (the newest at start, the next after a deletion): those of the
+  // current workspace folder, or any (acpira.sessionScope). The webview filters the list it shows by the same setting
+  scope?: () => SessionScope;
 }
 
 export type ManagerEvent =
@@ -280,10 +283,17 @@ export class SessionManager {
     return id ? this.live.get(id)?.view() : undefined;
   }
 
+  // The newest session a viewer may fall onto by itself: under the workspace scope one of this folder's, otherwise any
+  private mostRecent(): string | undefined {
+    const scope = this.deps.scope?.() ?? 'all';
+    const cwd = this.deps.cwd();
+    return this.index.find(s => scope === 'all' || inWorkspace(s, cwd))?.id;
+  }
+
   // Attach a viewer (one per webview). `initial` is the session it opens on; `mostRecent` starts it on the newest listed session, like the sidebar
   // after a reload; with neither, ensureActive opens a fresh session
   attach(initial?: string | { mostRecent: true }): SessionViewer {
-    const id = typeof initial === 'string' ? initial : initial?.mostRecent ? this.index[0]?.id : undefined;
+    const id = typeof initial === 'string' ? initial : initial?.mostRecent ? this.mostRecent() : undefined;
     const v = new SessionViewer(this, id);
     this.viewers.add(v);
     return v;
@@ -449,6 +459,7 @@ export class SessionManager {
         case 'deleteSession': await this.deleteSession(m.id); break;
         case 'restoreSession': await this.restoreSession(m.id); break;
         case 'pinSession': await this.pinSession(m.id, m.pinned); break;
+        case 'moveSession': await this.moveSession(m.id); break;
         case 'selectAccount': await this.selectAccount(v, m.id); break;
         case 'addAccount': await this.addAccount(v, m.agent, m.via); break;
         case 'removeAccount': await this.deps.accounts?.remove(m.id); break;
@@ -492,12 +503,7 @@ export class SessionManager {
     if (!r) return;
     patch(r);
     await this.deps.store.flush(r);
-    const i = this.index.findIndex(s => s.id === id);
-    if (i >= 0) this.index[i] = summarize(r);
-    sortIndex(this.index);
-    this.touched.add(id);
-    this.saveIndex();
-    this.emitSessions();
+    this.replaceSummary(r);
   }
 
   // Deletion is soft: kill the process, drop it from the list, move the record into the store's trash with a 30-second undo window; the files are really
@@ -519,9 +525,43 @@ export class SessionManager {
     this.saveIndex();
     for (const v of this.viewersOn(id)) {
       v.activeId = undefined;
-      const next = this.index[0]?.id;
+      const next = this.mostRecent();
       if (next) await this.selectSessionFor(v, next); else await this.newSessionFor(v);
     }
+    this.emitSessions();
+  }
+
+  // Re-home a session into this window's workspace folder. cwd is what the agent process was spawned with and what session/new / load
+  // carried, so a live session is closed and reopened in the new folder (its viewers follow through selectSessionFor); one with a turn in
+  // flight cannot move. A stored record is patched in place and picks the folder up when it is next opened
+  async moveSession(id: string) {
+    const cwd = this.deps.cwd();
+    const live = this.live.get(id);
+    if (live) {
+      if (live.cwd === cwd) return;
+      if (live.isRunning) throw new Error(t('host.moveWhileRunning'));
+      const record = live.toRecord();
+      // Out of the live map first so the callbacks dispose triggers cannot write the old record back
+      this.live.delete(id);
+      live.dispose();
+      this.wasRunning.delete(id);
+      this.modeSeen.delete(id);
+      record.cwd = cwd;
+      await this.deps.store.flush(record);
+      this.replaceSummary(record);
+      for (const v of this.viewersOn(id)) { v.activeId = undefined; await this.selectSessionFor(v, id); }
+      return;
+    }
+    await this.patchRecord(id, r => { r.cwd = cwd; });
+  }
+
+  // A record changed on disk without a live session: refresh its list entry (this host's copy wins over the disk index for it)
+  private replaceSummary(record: SessionRecord) {
+    const i = this.index.findIndex(s => s.id === record.id);
+    if (i >= 0) this.index[i] = summarize(record); else this.index.push(summarize(record));
+    sortIndex(this.index);
+    this.touched.add(record.id);
+    this.saveIndex();
     this.emitSessions();
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CODE_FONT_SIZE, DEFAULT_SETTINGS, sanitizeSetting, UI_FONT_SIZE } from '../src/shared/settings';
+import { CODE_FONT_SIZE, DEFAULT_SETTINGS, inWorkspace, sanitizeSetting, UI_FONT_SIZE } from '../src/shared/settings';
 import { SettingsCenter, type SettingsDeps } from '../src/host/settings';
 
 // settings.json is hand-editable and the setSetting message can come from any webview script: every appearance value is checked before it is used
@@ -25,6 +25,16 @@ describe('sanitizeSetting (appearance)', () => {
   it('fontSmoothing is a boolean', () => {
     expect(sanitizeSetting('fontSmoothing', true)).toBe(true);
     expect(sanitizeSetting('fontSmoothing', 'yes')).toBe(DEFAULT_SETTINGS.fontSmoothing);
+  });
+
+  it('sessionScope accepts workspace / all and defaults to workspace; a session is in a workspace when its cwd is that folder', () => {
+    expect(sanitizeSetting('sessionScope', 'all')).toBe('all');
+    expect(sanitizeSetting('sessionScope', 'workspace')).toBe('workspace');
+    expect(sanitizeSetting('sessionScope', 'project')).toBe('workspace');
+    expect(sanitizeSetting('sessionScope', undefined)).toBe('workspace');
+    expect(inWorkspace({ cwd: '/w/a' }, '/w/a')).toBe(true);
+    expect(inWorkspace({ cwd: '/w/a/sub' }, '/w/a')).toBe(false);
+    expect(inWorkspace({ cwd: '/w/b' }, '/w/a')).toBe(false);
   });
 });
 

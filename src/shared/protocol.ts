@@ -105,6 +105,8 @@ export type WebviewMsg =
   | { type: 'deleteSession'; id: string }
   | { type: 'restoreSession'; id: string }
   | { type: 'pinSession'; id: string; pinned: boolean }
+  // Re-home a session into this window's workspace folder: its cwd becomes the folder (the agent works there from the next open on)
+  | { type: 'moveSession'; id: string }
   // Start a new session with this account (also becomes the agent's default account)
   | { type: 'selectAccount'; id: string }
   | { type: 'addAccount'; agent: AgentId; via: AddAccountVia }

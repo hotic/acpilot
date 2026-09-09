@@ -117,6 +117,19 @@
           "default": "auto",
           "description": "%acpira.conf.language%"
         },
+        "acpira.sessionScope": {
+          "type": "string",
+          "enum": [
+            "workspace",
+            "all"
+          ],
+          "enumDescriptions": [
+            "%acpira.conf.sessionScope.workspace%",
+            "%acpira.conf.sessionScope.all%"
+          ],
+          "default": "workspace",
+          "description": "%acpira.conf.sessionScope%"
+        },
         "acpira.agents": {
           "type": "object",
           "default": {},

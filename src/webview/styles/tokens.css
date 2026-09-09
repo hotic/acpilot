@@ -133,6 +133,8 @@
   --pop-w-md: 260px;
   --pop-w-lg: 300px;
   --pop-w-xl: 360px;
+  /* The faint project name a session row from another project carries before its time, kept short so the title keeps the room */
+  --session-project-w: 10ch;
 
   /* Max lines shown in a terminal block's output area; beyond that it scrolls inside the block */
   --term-lines: 12;
@@ -393,4 +395,5 @@
   --spacing-pop-md: var(--pop-w-md);
   --spacing-pop-lg: var(--pop-w-lg);
   --spacing-pop-xl: var(--pop-w-xl);
+  --spacing-project: var(--session-project-w);
 }

@@ -129,6 +129,8 @@ export function App() {
     deleteSession: id => post({ type: 'deleteSession', id }),
     restoreSession: id => post({ type: 'restoreSession', id }),
     pinSession: (id, pinned) => post({ type: 'pinSession', id, pinned }),
+    moveSession: id => post({ type: 'moveSession', id }),
+    setSessionScope: scope => post({ type: 'setSetting', key: 'sessionScope', value: scope }),
     selectAccount: id => post({ type: 'selectAccount', id }),
     addAccount: (agent, via) => post({ type: 'addAccount', agent, via }),
     removeAccount: id => post({ type: 'removeAccount', id }),
@@ -210,6 +212,8 @@ export function App() {
       sessions={sessions}
       activeSessionId={session?.id}
       cwd={session?.cwd}
+      workspace={init.cwd}
+      sessionScope={settings.sessionScope}
       blobBase={init.blobBase}
       on={on}
       replayKey={session?.id}

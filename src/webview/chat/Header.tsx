@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { History, Menu as MenuIcon, Plus, Settings2, UserRound } from 'lucide-react';
 import type { AccountInfo, AgentInfo, SessionSummary } from '@shared/transcript';
+import type { SessionScope } from '@shared/settings';
 import { useAppearance } from '../appearance';
 import { t } from '../i18n';
 import { IconButton } from '../ui/Button';
@@ -22,7 +23,10 @@ export interface HeaderProps {
   accounts?: AccountInfo[];
   accountId?: string;
   activeSessionId?: string;
-  on: Pick<ShellHandlers, 'selectSession' | 'newSession' | 'renameSession' | 'deleteSession' | 'pinSession' | 'selectAgent' | 'selectAccount' | 'addAccount' | 'removeAccount' | 'refreshQuota'>;
+  // This window's workspace folder and the list scope, handed on to the session list (see SessionListProps)
+  workspace?: string;
+  sessionScope?: SessionScope;
+  on: Pick<ShellHandlers, 'selectSession' | 'newSession' | 'renameSession' | 'deleteSession' | 'pinSession' | 'moveSession' | 'setSessionScope' | 'selectAgent' | 'selectAccount' | 'addAccount' | 'removeAccount' | 'refreshQuota'>;
   onToggleDrawer?: () => void;
   drawerOpen?: boolean;
   // Swaps the chat for the settings page (webview-local view state)
@@ -32,7 +36,7 @@ export interface HeaderProps {
 // Header: a plain text title on the left (sharing the conversation flow's left edge), account / session history / new session icons on the right
 // (the common layout of Claude Code / Codex / Cursor); one divider below. The drawer axis swaps the left side for a menu button.
 // The person icon is the account layer's home (login state, switching, adding): it opens the agent panel, whose footer leads to the accounts page
-export function Header({ title, sessions, agent, agents, accounts, accountId, activeSessionId, on, onToggleDrawer, onOpenSettings, drawerOpen }: HeaderProps) {
+export function Header({ title, sessions, agent, agents, accounts, accountId, activeSessionId, workspace, sessionScope, on, onToggleDrawer, onOpenSettings, drawerOpen }: HeaderProps) {
   const [accountOpen, setAccountOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const { sessions: mode } = useAppearance();
@@ -84,9 +88,9 @@ export function Header({ title, sessions, agent, agents, accounts, accountId, ac
               <Popover.Root open={historyOpen} onOpenChange={setHistoryOpen}>
                 <Popover.Trigger render={<IconButton title={t('session.history')} aria-label={t('session.history')}><History strokeWidth={1.5} /></IconButton>} />
                 <Popover.Portal><Popover.Positioner side="bottom" align="end" width="xl"><Popover.Popup initialFocus={interaction => interaction === 'keyboard'}>
-                  <SessionList sessions={sessions} agents={agents} activeId={activeSessionId}
+                  <SessionList sessions={sessions} agents={agents} activeId={activeSessionId} workspace={workspace} scope={sessionScope} onScope={on.setSessionScope}
                     onSelect={id => { on.selectSession(id); setHistoryOpen(false); }}
-                    onRename={on.renameSession} onDelete={on.deleteSession} onPin={on.pinSession} />
+                    onRename={on.renameSession} onDelete={on.deleteSession} onPin={on.pinSession} onMove={on.moveSession} />
                 </Popover.Popup></Popover.Positioner></Popover.Portal>
               </Popover.Root>
               {accountButton}
