@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Check, ChevronRight, Compass, Hand, MessageCircleQuestion, TriangleAlert, X } from 'lucide-react';
 import type { AgentBlock, AgentTurn, CompactionBlock, PermissionBlock, ToolCallBlock, ToolKind, UserTurn } from '@shared/transcript';
 import { useAppearance, type Appearance } from '../appearance';
@@ -92,7 +92,7 @@ function AgentContent({ turn, index, running, onPermission }: { turn: AgentTurn;
   const groups = groupBlocks(detailBlocks(turn, running).filter(b => (b.type !== 'permission' || !b.planId) && (b.type !== 'question' || !!b.outcome)));
   return (
     <div className="flex flex-col gap-gap">
-      {running && <Activity turn={turn} />}
+      <Activity turn={turn} running={running} />
       {groups.map((g, gi) => (
         <div key={g.kind === 'block' && 'id' in g.block && g.block.id ? g.block.id : `g${gi}`}>
           {g.kind === 'lines'
@@ -159,12 +159,38 @@ function liveActivity(turn: AgentTurn) {
   return { label: t(compactionInActivity(turn) ? 'turns.compacting' : 'host.working'), active: true, lead: <Orb kind="think" /> };
 }
 
-function Activity({ turn }: { turn: AgentTurn }) {
+function Activity({ turn, running }: { turn: AgentTurn; running: boolean }) {
+  const [present, setPresent] = useState(running);
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (running) { setPresent(true); return; }
+    if (!present) return;
+    // Retire the row only after its native exit transition finishes. Motion-off
+    // produces no transitions and removes it immediately; no artificial delay is used.
+    const animations = ref.current?.getAnimations() ?? [];
+    if (!animations.length) { setPresent(false); return; }
+    let disposed = false;
+    void Promise.allSettled(animations.map(animation => animation.finished)).then(() => {
+      if (!disposed) setPresent(false);
+    });
+    return () => { disposed = true; };
+  }, [running, present]);
   const activity = liveActivity(turn);
+  if (!running && !present) return null;
   return (
-    <Row lead={activity.lead} className="font-medium">
-      <RowLabel className={activity.active ? 'shimmer' : undefined}>{activity.label}</RowLabel>
-    </Row>
+    // Fade the complete label before collapsing its slot; clipping the row at the
+    // same time would cut the text away during the first few frames of the exit.
+    // The negative closing margin removes the parent's gap together with the row.
+    <div ref={ref} inert={!running} className={cn(
+      'grid transition-[grid-template-rows,opacity,margin-bottom] duration-(--dur-open) ease-out',
+      running ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 -mb-gap [transition-delay:var(--dur-open),0s,var(--dur-open)]',
+    )}>
+      <div className="min-h-0 overflow-hidden">
+        <Row lead={activity.lead} className="font-medium">
+          <RowLabel className={activity.active ? 'shimmer' : undefined}>{activity.label}</RowLabel>
+        </Row>
+      </div>
+    </div>
   );
 }
 
@@ -260,7 +286,7 @@ function CodexMessage({ turn, running, onPermission }: { turn: AgentTurn; runnin
   if (!turn.blocks.some(block => block.type === 'tool_call')) {
     return (
       <div className="flex flex-col gap-gap">
-        {running && <Activity turn={turn} />}
+        <Activity turn={turn} running={running} />
         {detailBlocks(turn, running).map((block, i) => <Block key={'id' in block ? block.id : i} block={block} onPermission={onPermission} />)}
         {!running && outcomeOf(turn) && <Outcome turn={turn} />}
       </div>

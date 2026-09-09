@@ -43,6 +43,8 @@ describe('PlanBar dock visibility', () => {
       { role: 'agent', blocks: [] },
     ];
     expect(dockPlan(turns, true)).toBe(open);
+    // Completing a later follow-up does not complete the preceding plan.
+    expect(dockPlan(turns, false)).toBe(open);
     expect(dockPlan(turns.slice(0, 2), false)).toBe(open);
   });
 
