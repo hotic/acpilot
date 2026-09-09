@@ -168,31 +168,33 @@ describe('SessionManager', () => {
     const bin = join(dir, 'ghost-cli');
     const terminal: { command: string; args: string[] }[] = [];
     const m = new SessionManager({
-      // `never` stays missing so the poll keeps its timer armed regardless of which built-in CLIs this machine has
+      // `never` stays missing so the poll keeps its timer armed regardless of which built-in CLIs this machine has.
+      // Warm that stub, not ghost: init's background spawn would otherwise race the test's resolveBinary on the same id.
       registry: new AgentRegistry({ ghost: { name: 'Ghost', command: bin, install: { command: 'curl -fsSL https://example.com/i.sh | bash' } }, never: { name: 'Never', command: '/nonexistent/never-cli' } }),
       store: new TranscriptStore(mkdtempSync(join(tmpdir(), 'acpira-mgr-'))),
-      log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'ghost', runInTerminal: (_t, command, args) => terminal.push({ command, args }), toast: () => {},
+      log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'never', runInTerminal: (_t, command, args) => terminal.push({ command, args }), toast: () => {},
     });
     try {
       await m.init();
       const v = m.attach();
       const seen: (boolean | undefined)[] = [];
+      const last = () => seen.at(-1);
       v.subscribe(ev => { if (ev.type === 'agents') seen.push(ev.agents.find(a => a.id === 'ghost')?.available); });
       expect(m.agents().find(a => a.id === 'ghost')).toMatchObject({ available: false, install: { command: 'curl -fsSL https://example.com/i.sh | bash' } });
 
       // The settings page's rescan path: a direct lookup finds the new binary and the list is pushed at once
       writeFileSync(bin, '#!/bin/sh\nexit 0\n'); chmodSync(bin, 0o755);
       expect(await m.registry.resolveBinary('ghost')).toBe(bin);
-      expect(seen).toEqual([true]);
+      expect(last()).toBe(true);
 
       // Removed again: the next poll tick notices (the tick starts real fs lookups, so waitFor lets them land)
       rmSync(bin);
       await vi.advanceTimersByTimeAsync(10_000);
-      await vi.waitFor(() => expect(seen).toEqual([true, false]));
+      await vi.waitFor(() => expect(last()).toBe(false));
       // …and the poll keeps running while it is missing, so a reinstall shows up on its own
       writeFileSync(bin, '#!/bin/sh\nexit 0\n'); chmodSync(bin, 0o755);
       await vi.advanceTimersByTimeAsync(10_000);
-      await vi.waitFor(() => expect(seen).toEqual([true, false, true]));
+      await vi.waitFor(() => expect(last()).toBe(true));
 
       await v.handle({ type: 'installAgent', agent: 'ghost' });
       expect(terminal).toEqual([{ command: process.platform === 'win32' ? 'powershell' : 'bash', args: [process.platform === 'win32' ? '-Command' : '-c', 'curl -fsSL https://example.com/i.sh | bash'] }]);

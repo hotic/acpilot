@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP server injection from Acpira settings remains planned. Agents still read their own CLI MCP config.
 - Steer / interrupt follow-up modes remain planned. Mid-turn messages stay in the host-side queue.
 
+## [1.1.2] - 2026-09-09
+
+### Fixed
+
+- Agent availability tests no longer assume Grok, Devin, and Kimi are already installed, so a clean CI runner matches a developer machine. 1.1.1's GitHub Release did not finish marketplace publication.
+
 ## [1.1.1] - 2026-09-09
 
 ### Added

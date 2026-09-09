@@ -57,7 +57,8 @@ describe('AgentRegistry', () => {
     install();
     expect(await r.resolveBinary('ghost')).toBe(bin);
     expect(notified).toBe(1);
-    expect(r.missing()).toBe(false);
+    expect(r.list().find(a => a.id === 'ghost')?.available).toBe(true);
+    // Built-ins stay on the registry, so missing() still follows whether this machine has grok / kimi / devin
   });
 
   it('install info follows the platform: POSIX line on darwin / linux, PowerShell line on win32, docs everywhere', () => {
