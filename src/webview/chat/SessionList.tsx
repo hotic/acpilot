@@ -86,7 +86,8 @@ export function SessionList({ sessions, agents, activeId, autoFocus, onSelect, o
         ))}
       </div>
       <div className="mt-1 flex min-h-0 flex-col overflow-y-auto border-t border-line pb-1" role="listbox" aria-label={t('session.listAria')}>
-        {!shown.length && <div className="px-3 py-3 text-2 text-fg-3">{q ? t('session.noMatch') : agentFilter ? t('session.noneAgent', { name: nameOf(agentFilter) }) : t('session.none')}</div>}
+        {/* Empty state takes exactly one item row (pt-1 + min-h-row) so the popover keeps its height whether the filter matches 0 or 1 session */}
+        {!shown.length && <div className="mt-1 flex min-h-row items-center justify-center px-2 text-2 text-fg-3">{q ? t('session.noMatch') : agentFilter ? t('session.noneAgent', { name: nameOf(agentFilter) }) : t('session.none')}</div>}
         {pinned.length > 0 && (
           <div className="flex flex-col pt-1" role="group" aria-label={t('session.group.pinned')}>
             {pinned.map(renderItem)}
