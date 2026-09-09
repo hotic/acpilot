@@ -7,6 +7,7 @@ import { AgentRegistry, type CustomAgentSetting } from './acp/AgentRegistry';
 import { AccountManager } from './accounts/AccountManager';
 import { AccountStore, FileVault } from './accounts/AccountStore';
 import { DevinAccountProvider } from './accounts/devin';
+import { LocalAccounts } from './accounts/local';
 import { SessionManager } from './SessionManager';
 import { SettingsCenter } from './settings';
 import { msg } from './errors';
@@ -65,6 +66,7 @@ export async function activate(context: vscode.ExtensionContext) {
     runInTerminal,
     toast,
     accounts,
+    localAccounts: new LocalAccounts({ env: agent => ({ ...process.env, ...activeRegistry.get(agent).env }) }),
     compaction: () => ({ atTokens: cfg().get<number>('compactAtTokens') ?? 300_000, auto: cfg().get<boolean>('autoCompact') ?? true }),
     hidden: () => cfg().get<HiddenMap>('hiddenOptions') ?? {},
   });

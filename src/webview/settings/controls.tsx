@@ -242,6 +242,8 @@ export interface ItemRowProps {
   trailing?: ReactNode;
   // Hover-revealed open button at the right edge (opens a file)
   onOpen?: () => void;
+  // Keep metadata aligned in lists containing both openable and missing files.
+  reserveOpen?: boolean;
   // The whole row is the button (navigation): a chevron at the right edge
   onClick?: () => void;
   // Greyed out as a whole (disabled server, missing file)
@@ -249,7 +251,7 @@ export interface ItemRowProps {
   className?: string;
 }
 
-export function ItemRow({ lead, title, desc, extra, trailing, onOpen, onClick, dim, className }: ItemRowProps) {
+export function ItemRow({ lead, title, desc, extra, trailing, onOpen, reserveOpen, onClick, dim, className }: ItemRowProps) {
   const Tag = onClick ? 'button' : 'div';
   return (
     <Tag
@@ -268,10 +270,12 @@ export function ItemRow({ lead, title, desc, extra, trailing, onOpen, onClick, d
         {extra}
       </span>
       {trailing && <span className="flex shrink-0 items-center gap-2">{trailing}</span>}
-      {onOpen && (
-        <IconButton title={t('common.open')} aria-label={t('common.open')} onClick={onOpen} className="-mr-1.5 text-fg-2 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100">
-          <ExternalLink strokeWidth={1.5} />
-        </IconButton>
+      {(onOpen || reserveOpen) && (
+        <span className="-mr-1.5 flex size-ctl shrink-0 items-center justify-center" aria-hidden={!onOpen || undefined}>
+          {onOpen && <IconButton title={t('common.open')} aria-label={t('common.open')} onClick={onOpen} className="text-fg-2 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100">
+            <ExternalLink strokeWidth={1.5} />
+          </IconButton>}
+        </span>
       )}
       {onClick && <ChevronRight className="-mr-1 size-icon shrink-0 text-fg-2" strokeWidth={1.5} />}
     </Tag>

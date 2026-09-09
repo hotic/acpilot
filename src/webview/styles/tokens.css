@@ -2,6 +2,10 @@
    Color roles prefer the host's --vscode-* values; with no host (LAB) they fall back to Dark / Light Modern values. */
 
 :root {
+  --quota-track: 7px;
+  --quota-ok: #39745f;
+  --quota-warn: color-mix(in srgb, var(--warn) 75%, var(--bg-2));
+  --quota-danger: color-mix(in srgb, var(--danger) 70%, var(--bg-2));
   /* Host palette: the roles that follow the VS Code theme go through these, so a fixed theme (acpira.theme = light / dark,
      data-theme-fixed on the shell) can blank them and let the fallbacks paint the whole scheme */
   --host-fg: var(--vscode-foreground);
@@ -291,6 +295,7 @@
 
 /* Tailwind theme mapping: class names → the tokens above */
 @theme inline {
+  --container-quota: 30rem;
   --color-*: initial;
   --color-fg-1: var(--fg-1);
   --color-fg-2: var(--fg-2);

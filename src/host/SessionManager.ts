@@ -7,6 +7,7 @@ import { AgentRegistry } from './acp/AgentRegistry';
 import { AgentPool } from './acp/AgentPool';
 import { AcpSession, type CompactionPolicy, type SessionRecord } from './acp/AcpSession';
 import type { AccountManager } from './accounts/AccountManager';
+import type { LocalAccounts } from './accounts/local';
 import { TranscriptStore, summarize, type SessionPrefs } from './store/TranscriptStore';
 import { cloneJson } from './clone';
 import { msg } from './errors';
@@ -24,6 +25,7 @@ export interface ManagerDeps {
   toast: (level: 'info' | 'error', text: string) => void;
   // Account layer (optional): agents on the account layer bind an account when opening a session
   accounts?: AccountManager;
+  localAccounts?: LocalAccounts;
   compaction?: () => CompactionPolicy;
   // Option families hidden from the composer menus (in VS Code, the acpira.hiddenOptions setting, edited from the settings page)
   hidden?: () => HiddenMap;
@@ -87,11 +89,13 @@ export class SessionManager {
   // The default viewer: what the single-view API (activeId / active / handle / newSession …) operates on, e.g. in tests and scripts
   private mainViewer?: SessionViewer;
   private unwatchRegistry?: () => void;
+  private unwatchLocalAccounts?: () => void;
   private probeTimer?: NodeJS.Timeout;
   private disposed = false;
 
   constructor(private deps: ManagerDeps) {
     deps.accounts?.subscribe(accounts => this.emit({ type: 'accounts', accounts }));
+    this.unwatchLocalAccounts = deps.localAccounts?.subscribe(() => this.emit({ type: 'agents', agents: this.agents() }));
     this.pool = new AgentPool({
       registry: () => this.deps.registry,
       log: line => this.deps.log(line),
@@ -106,6 +110,7 @@ export class SessionManager {
     await this.deps.registry.probeAll();
     this.scheduleProbe();
     this.deps.accounts?.refreshQuotas().catch(e => this.deps.log(`quota refresh failed: ${msg(e)}`));
+    void this.deps.localAccounts?.refresh();
     this.warm(this.deps.defaultAgent());
   }
 
@@ -173,7 +178,9 @@ export class SessionManager {
   }
 
   agents(): AgentInfo[] {
-    return this.deps.registry.list().map(a => (this.deps.accounts?.supports(a.id) ? { ...a, accounts: true } : a));
+    return this.deps.registry.list().map(a => this.deps.accounts?.supports(a.id)
+      ? { ...a, accounts: true }
+      : { ...a, localAccount: this.deps.localAccounts?.get(a.id) });
   }
 
   accounts(): AccountInfo[] { return this.deps.accounts?.list() ?? []; }
@@ -281,7 +288,10 @@ export class SessionManager {
     this.emitSession(s);
     this.emitSessions();
     if (s.isRunning) this.wasRunning.add(s.id);
-    else if (this.wasRunning.delete(s.id) && s.accountId) this.deps.accounts?.refreshQuota(s.accountId, true).catch(e => this.deps.log(`quota refresh failed: ${msg(e)}`));
+    else if (this.wasRunning.delete(s.id)) {
+      if (s.accountId) this.deps.accounts?.refreshQuota(s.accountId, true).catch(e => this.deps.log(`quota refresh failed: ${msg(e)}`));
+      else void this.deps.localAccounts?.refresh(s.agent, true);
+    }
     // Only ready sessions count, and the first ready sighting only records: the mode a session opens with (agent default, or a restored
     // session's own) is not a new choice; a change after that is
     const view = s.view();
@@ -396,7 +406,9 @@ export class SessionManager {
         case 'selectAccount': await this.selectAccount(v, m.id); break;
         case 'addAccount': await this.addAccount(v, m.agent, m.via); break;
         case 'removeAccount': await this.deps.accounts?.remove(m.id); break;
-        case 'refreshQuota': await this.deps.accounts?.refreshQuotas(m.agent); break;
+        case 'refreshQuota':
+          await Promise.all([this.deps.accounts?.refreshQuotas(m.agent), this.deps.localAccounts?.refresh(m.agent)]);
+          break;
         case 'compact': await s?.compact(); break;
         case 'retry': await s?.retry(); break;
         case 'retryTurn': await s?.retryTurn(); break;
@@ -541,6 +553,7 @@ export class SessionManager {
   }
 
   async dispose() {
+    this.unwatchLocalAccounts?.();
     this.disposed = true;
     clearTimeout(this.probeTimer);
     this.probeTimer = undefined;

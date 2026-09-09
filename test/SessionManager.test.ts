@@ -7,6 +7,7 @@ import type { HiddenMap } from '../src/shared/settings';
 import { AgentRegistry } from '../src/host/acp/AgentRegistry';
 import { SessionManager } from '../src/host/SessionManager';
 import { TranscriptStore } from '../src/host/store/TranscriptStore';
+import { LocalAccounts } from '../src/host/accounts/local';
 
 const FAKE = fileURLToPath(new URL('./fake-agent.ts', import.meta.url));
 const TSX = fileURLToPath(new URL('../node_modules/.bin/tsx', import.meta.url));
@@ -27,6 +28,36 @@ function manager() {
 }
 
 describe('SessionManager', () => {
+  it('publishes local quota updates and refreshes after a turn without binding an imported account', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'acpira-local-manager-'));
+    const local = new LocalAccounts({ home: dir, env: () => ({ KIMI_CODE_API_KEY: 'test-code-key' }),
+      fetch: vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ usage: { limit: 100, used: 25 } }))),
+    });
+    const refresh = vi.spyOn(local, 'refresh');
+    const m = new SessionManager({
+      registry: new AgentRegistry({ kimi: { name: 'Kimi Code', command: TSX, args: [FAKE] } }),
+      store: new TranscriptStore(dir), localAccounts: local,
+      log: () => {}, cwd: () => '/tmp', defaultAgent: () => 'kimi', runInTerminal: () => {}, toast: () => {},
+    });
+    const updates: unknown[] = [];
+    m.subscribe(ev => { if (ev.type === 'agents') updates.push(ev.agents); });
+    try {
+      await m.init();
+      await m.handle({ type: 'refreshQuota', agent: 'kimi' });
+      expect(m.agents().find(a => a.id === 'kimi')).toMatchObject({ localAccount: { status: 'ready', quota: { windows: [{ remaining: 0.75 }] } } });
+      expect(updates.length).toBeGreaterThan(0);
+      expect(m.accounts()).toEqual([]);
+      await m.newSession();
+      expect(m.active()?.accountId).toBeUndefined();
+      refresh.mockClear();
+      await m.handle({ type: 'send', text: 'hi' });
+      expect(refresh).toHaveBeenCalledWith('kimi', true);
+    } finally {
+      await m.dispose();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('delete is soft: leaves the list, switches the active session, file kept; restore brings it back; rename / pin land in the index', async () => {
     const { m, dir } = manager();
     await m.init();

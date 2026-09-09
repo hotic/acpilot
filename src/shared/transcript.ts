@@ -10,6 +10,8 @@ export interface AgentInfo {
   name: string;
   // Goes through the account layer (multiple logins can be stored and switched); agents without it rely on their own CLI's login
   accounts?: boolean;
+  // Read-only official CLI account; independent of the selected model's provider.
+  localAccount?: LocalAccountInfo;
   // An executable was detected locally; false greys it out in the menu, undefined means not probed yet
   available?: boolean;
   // How to get the CLI when none was found: the vendor's one-line install for this platform and its docs page
@@ -33,6 +35,13 @@ export interface QuotaWindow {
 export interface AccountQuota {
   windows: QuotaWindow[];
   fetchedAt: string;
+}
+
+export interface LocalAccountInfo {
+  label: string;
+  detail?: string;
+  status: 'loading' | 'ready' | 'login_required' | 'expired' | 'unavailable';
+  quota?: AccountQuota;
 }
 
 // Account: one login identity of an agent. Only metadata here; secrets live in the host vault and never enter the webview

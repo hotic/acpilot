@@ -5,6 +5,8 @@ import type { AddAccountVia } from '@shared/protocol';
 import { PanelFooter, PanelHeader, OptionContent } from '../ui/Panel';
 import { RadioGroup } from '../ui/RadioGroup';
 import { QuotaBars } from '../ui/QuotaBars';
+import { AccountLabel } from '../ui/AccountLabel';
+import { LocalAccountQuota } from '../ui/LocalAccountQuota';
 import { t } from '../i18n';
 import { AgentMark } from './AgentMark';
 
@@ -37,12 +39,25 @@ export function AgentPanel(p: AgentPanelProps) {
   const current = p.accounts.find(a => a.id === p.accountId);
   const add = { label: t('composer.addAccount'), icon: <Plus strokeWidth={1.75} />, onClick: () => { p.onAddAccount(p.agent.id, 'auto'); p.close(); } };
   const { onRefreshQuota, agent } = p;
-  useEffect(() => { if (view === 'accounts') onRefreshQuota?.(agent.id); }, [view, agent.id, onRefreshQuota]);
+  useEffect(() => {
+    if (view !== 'accounts') return;
+    onRefreshQuota?.(agent.id);
+    const timer = setInterval(() => onRefreshQuota?.(agent.id), 60_000);
+    return () => clearInterval(timer);
+  }, [view, agent.id, onRefreshQuota]);
 
   const list = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     (list.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? list.current?.querySelector<HTMLButtonElement>('button:not(:disabled)'))?.focus({ preventScroll: true });
   }, [view]);
+  if (view === 'accounts' && p.agent.localAccount) return <div className="flex flex-col">
+    <PanelHeader lead={{ label: t('common.back'), icon: <ChevronLeft strokeWidth={1.75} />, onClick: event => showPage(event, 'agents') }}>{t('quota.officialAccount')}</PanelHeader>
+    <div className="flex min-w-0 flex-col gap-1 px-2 py-1.5 text-2">
+      <AccountLabel label={p.agent.localAccount.label} detail={p.agent.localAccount.detail} />
+      <LocalAccountQuota account={p.agent.localAccount} />
+      <span className="text-3 text-fg-2">{t('quota.local.desc')}</span>
+    </div>
+  </div>;
   if (view === 'accounts') return <div className="flex flex-col">
     <PanelHeader lead={{ label: t('common.back'), icon: <ChevronLeft strokeWidth={1.75} />, onClick: event => showPage(event, 'agents') }} action={add}>{p.agent.name}</PanelHeader>
     <RadioGroup.Root ref={list} aria-label={p.agent.name} value={p.accountId ?? ''} className="scroll-thin flex max-h-pop flex-col overflow-y-auto">
@@ -50,7 +65,7 @@ export function AgentPanel(p: AgentPanelProps) {
       {p.accounts.map(a => <div key={a.id} className="group/item relative flex shrink-0 flex-col">
         <RadioGroup.Item value={a.id} onClick={() => { p.onSelectAccount(a.id); p.close(); }}
           className={p.accounts.some(a => a.detail || a.quota) ? 'min-h-0 py-1.5 pr-8' : 'pr-8'}>
-          <OptionContent description={a.detail} extra={a.quota && <QuotaBars quota={a.quota} />} checked={a.id === p.accountId} checkSlot={!!current}>{a.label}</OptionContent>
+          <OptionContent extra={a.quota && <QuotaBars quota={a.quota} />} checked={a.id === p.accountId} checkSlot={!!current}><AccountLabel label={a.label} detail={a.detail} /></OptionContent>
         </RadioGroup.Item>
         <button type="button" aria-label={t('common.removeNamed', { name: a.label })} title={t('common.remove')}
           onClick={e => { e.stopPropagation(); p.onRemoveAccount(a.id); }}
@@ -67,5 +82,6 @@ export function AgentPanel(p: AgentPanelProps) {
       </RadioGroup.Item>)}
     </RadioGroup.Root>
     {p.agent.accounts && <PanelFooter onClick={event => showPage(event, 'accounts')} action={add}>{current ? current.label : t('composer.notLoggedIn')}</PanelFooter>}
+    {p.agent.localAccount && <PanelFooter onClick={event => showPage(event, 'accounts')}>{t('quota.officialAccount')}</PanelFooter>}
   </div>;
 }

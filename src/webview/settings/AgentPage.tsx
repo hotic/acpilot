@@ -7,6 +7,8 @@ import { familyLabel } from '@shared/composerControls';
 import { familyHidden, groupModels, setFamilyVisible, variantLabel, type ModelFamily } from '@shared/models';
 import { IconButton } from '../ui/Button';
 import { QuotaBars } from '../ui/QuotaBars';
+import { AccountLabel } from '../ui/AccountLabel';
+import { LocalAccountQuota } from '../ui/LocalAccountQuota';
 import { t } from '../i18n';
 import { ModelMark } from '../chat/ModelMark';
 import { Dot, FactRow, Group, ItemRow, Note, PathText, Section, SectionAction, SectionDescription, SectionHead, SourceLink, Switch, shortPath } from './controls';
@@ -34,7 +36,13 @@ export function AgentPage({ agent, accounts, inventory, controls, settings, env,
   useEffect(() => { if (!inventory) on.refreshInventory(agent.id); }, [agent.id, inventory, on]);
   // Re-read when the page opens and whenever the set of accounts changes (a login finishes while this page is already open)
   const accountKey = accounts.map(a => a.id).join();
-  useEffect(() => { if (agent.accounts) on.refreshQuota?.(agent.id); }, [agent.id, agent.accounts, accountKey, on]);
+  const hasQuota = !!(agent.accounts || agent.localAccount);
+  useEffect(() => {
+    if (!hasQuota) return;
+    on.refreshQuota?.(agent.id);
+    const timer = setInterval(() => on.refreshQuota?.(agent.id), 60_000);
+    return () => clearInterval(timer);
+  }, [agent.id, hasQuota, accountKey, on]);
 
   const counts: Record<AgentSection, number> = {
     models: controls?.reduce((n, c) => n + groupModels(c.options).length, 0) ?? 0,
@@ -56,6 +64,15 @@ export function AgentPage({ agent, accounts, inventory, controls, settings, env,
       <AgentFacts agent={agent} inventory={inventory} env={env} />
       {agent.available === false && agent.install && <InstallSection agent={agent} on={on} />}
 
+      {agent.localAccount && <div className="flex flex-col gap-2">
+        <SectionHead>{t('quota.officialAccount')}</SectionHead>
+        <Section desc={t('quota.local.desc')}>
+          <ItemRow lead={<KeyRound strokeWidth={1.5} />}
+            title={<AccountLabel label={agent.localAccount.label} detail={agent.localAccount.detail} />}
+            extra={<LocalAccountQuota account={agent.localAccount} />} />
+        </Section>
+      </div>}
+
       {agent.accounts && (
         <div className="flex flex-col gap-2">
           <SectionHead action={<SectionAction icon={<Plus strokeWidth={1.75} />} onClick={() => on.addAccount(agent.id)}>{t('settings.agent.addAccount')}</SectionAction>}>
@@ -67,9 +84,8 @@ export function AgentPage({ agent, accounts, inventory, controls, settings, env,
               <ItemRow
                 key={a.id}
                 lead={<KeyRound strokeWidth={1.5} />}
-                title={a.label}
-                desc={a.detail}
-                extra={a.quota && <QuotaBars quota={a.quota} className="max-w-(--setting-header-copy)" />}
+                title={<AccountLabel label={a.label} detail={a.detail} />}
+                extra={a.quota && <QuotaBars quota={a.quota} />}
                 trailing={
                   <IconButton title={t('common.remove')} aria-label={t('common.removeNamed', { name: a.label })} onClick={() => on.removeAccount(a.id)} className="-mr-1.5 text-fg-2 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100">
                     <X strokeWidth={1.5} />
@@ -285,6 +301,7 @@ function FilesSection({ kind, agent, files, env, on }: { kind: 'rules' | 'config
           lead={<Icon strokeWidth={1.5} />}
           title={shortPath(f.path, env)}
           dim={!f.exists}
+          reserveOpen
           trailing={f.exists ? <span className="text-2 text-fg-2 tabular-nums">{fmtSize(f.size ?? 0)}</span> : <span className="text-2 text-fg-2">{t('settings.file.missing')}</span>}
           onOpen={f.exists ? () => on.openPath(f.path) : undefined}
         />
