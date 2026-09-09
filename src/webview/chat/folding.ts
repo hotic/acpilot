@@ -2,16 +2,27 @@ import type { AgentBlock, AgentTurn, TextBlock, ToolCallBlock, ToolKind } from '
 import type { MsgKey } from '@shared/i18n';
 import { t } from '../i18n';
 
-// ACP has no final/commentary distinction: only the trailing text stays outside the process fold.
+// Thinking and to-do bookkeeping between closing paragraphs do not end the reply; in a foldable turn they join
+// the process fold instead, so a summary followed by one more thought and a short coda stays visible as a whole.
+const TAIL_PROCESS: ReadonlySet<AgentBlock['type']> = new Set<AgentBlock['type']>(['thought', 'plan']);
+
+// ACP has no final/commentary distinction: the text after the last action stays outside the process fold.
 // If another action arrives, that text becomes process history on the next render.
+// Turns without tool calls render flat and chronological, so there only the trailing text run is the reply.
 // The open question card is pinned above the composer; a resolved one stays in the process history
 // at the point where it was asked, so the answers read in sequence with the actions around them.
 export function splitCodexBlocks(blocks: AgentBlock[]) {
   const permissions = blocks.filter(b => b.type === 'permission');
   const content = blocks.filter(b => b.type !== 'permission' && (b.type !== 'question' || !!b.outcome));
+  const foldable = content.some(b => b.type === 'tool_call');
   let end = content.length;
-  while (end > 0 && content[end - 1]?.type === 'text') end--;
-  return { process: content.slice(0, end), reply: content.slice(end) as TextBlock[], permissions };
+  while (end > 0 && (content[end - 1]!.type === 'text' || (foldable && TAIL_PROCESS.has(content[end - 1]!.type)))) end--;
+  const tail = content.slice(end);
+  return {
+    process: [...content.slice(0, end), ...tail.filter(b => b.type !== 'text')],
+    reply: tail.filter((b): b is TextBlock => b.type === 'text'),
+    permissions,
+  };
 }
 
 const FOLD_KEY: Record<ToolCallBlock['status'], MsgKey> = {

@@ -22,6 +22,25 @@ describe('Codex process folding', () => {
     expect(splitCodexBlocks([intro, read, progress, run]).process).toEqual([intro, read, progress, run]);
   });
 
+  it('does not let a trailing thought or to-do update fold the reply that came before it', () => {
+    const summary = { type: 'text' as const, markdown: '修了两处。' };
+    const coda = { type: 'text' as const, markdown: '单测已经全绿。' };
+    const think = { type: 'thought' as const, text: 'double-checking the test run' };
+    const todo = { type: 'plan' as const, entries: [] };
+    // Summary → thought → coda: both paragraphs are the reply; the thought joins the process fold.
+    expect(splitCodexBlocks([read, think, summary, { ...think, streaming: true }, coda])).toEqual({
+      process: [read, think, { ...think, streaming: true }], reply: [summary, coda], permissions: [],
+    });
+    // A still-streaming thought after the summary keeps it on screen instead of folding it away mid-turn.
+    expect(splitCodexBlocks([read, summary, { ...think, streaming: true }]).reply).toEqual([summary]);
+    // Ticking the to-do list after the summary is bookkeeping, not a new action.
+    expect(splitCodexBlocks([read, summary, todo])).toEqual({ process: [read, todo], reply: [summary], permissions: [] });
+    // A real action after the summary still turns it into process history.
+    expect(splitCodexBlocks([read, summary, think, run]).reply).toEqual([]);
+    // Without tool calls nothing folds and the blocks render in order, so only the trailing text is the reply.
+    expect(splitCodexBlocks([think, summary, think, coda])).toEqual({ process: [think, summary, think], reply: [coda], permissions: [] });
+  });
+
   it('keeps approval actions accessible outside a collapsed process', () => {
     const permission: PermissionBlock = { type: 'permission', id: 'p', title: '运行测试', options: [] };
     const blocks = [read, run, permission];
