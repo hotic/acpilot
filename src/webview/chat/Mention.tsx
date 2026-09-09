@@ -68,7 +68,8 @@ export function MentionList({ anchor, hits, active, empty, onHover, onPick }: Me
       render={attributes => <div {...attributes} style={{ ...attributes.style,
         pointerEvents: attributes.style?.opacity === 0 ? 'none' : attributes.style?.pointerEvents,
       }} />}>
-      <Popover.Popup finalFocus={false} ref={panel} role="listbox" className="scroll-thin flex max-h-pop flex-col overflow-y-auto">
+      {/* The popup is the list itself: cap at min(8 rows, available height) so the two max-height rules don't collide. */}
+      <Popover.Popup finalFocus={false} ref={panel} role="listbox" className="scroll-thin flex max-h-[min(var(--spacing-pop),var(--available-height))] flex-col overflow-y-auto">
       {!hits.length && <div className="flex min-h-row items-center px-2 text-3 text-fg-3">{t('mention.noFiles')}</div>}
       {hits.map((h, i) => {
         const cut = h.path.lastIndexOf('/');

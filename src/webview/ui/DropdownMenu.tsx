@@ -32,7 +32,7 @@ function Positioner({ width = 'md', className, side = 'bottom', align = 'start',
   const { shell, gap, pad, width: shellWidth } = useShellPosition();
   return <Base.Positioner side={side} align={align} sideOffset={sideOffset ?? gap}
     collisionBoundary={collisionBoundary ?? shell} collisionPadding={collisionPadding ?? pad}
-    collisionAvoidance={collisionAvoidance ?? { side: 'none', align: 'shift' }}
+    collisionAvoidance={collisionAvoidance ?? { side: 'flip', align: 'shift' }}
     {...props} className={cnState(cn('z-30', overlayWidth[width]), className)}
     style={state => ({ maxWidth: shellWidth ? shellWidth - pad * 2 : undefined, ...(typeof props.style === 'function' ? props.style(state) : props.style) })} />;
 }
