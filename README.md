@@ -16,17 +16,30 @@ Bring Grok, Devin, Kimi Code, and other ACP agents into VS Code and Cursor. Keep
 - **Queue and approvals.** Queue messages while an agent is working, review plans, and approve actions in place.
 - **Choose the agent. Keep the interface.** Use Grok, Devin, Kimi Code, and other ACP-compatible CLIs with shared session and model controls.
 
-### A closer look
+<table>
+  <tr>
+    <th width="50%">Execution and to-dos</th>
+    <th width="50%">Follow-up messages</th>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="media/readme/inspect.gif">
+        <img src="media/readme/inspect.gif" width="480" alt="Execution and to-dos">
+      </a>
+    </td>
+    <td width="50%" valign="top">
+      <a href="media/readme/follow-up.gif">
+        <img src="media/readme/follow-up.gif" width="480" alt="Follow-up messages">
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">Inspect execution details and expand the to-do list.</td>
+    <td valign="top">Queue a request, send it, and read the full reply.</td>
+  </tr>
+</table>
 
-**Follow the work.** Inspect execution details and code changes, then expand and fold the to-do list.
-
-![Inspect execution details and a code diff, then review the to-do list.](media/readme/inspect.gif)
-
-**Send the next step.** Queue a follow-up, send it immediately, and read the completed response.
-
-![Type a follow-up, select Send now from the queue, and read the completed response.](media/readme/follow-up.gif)
-
-*Captured from Acpira's interface with a scripted example session and edited camera zooms.*
+*Captured from Acpira's interface with a scripted example session and edited camera zooms. Click an image for a larger view.*
 
 ## Why keep the native agents?
 

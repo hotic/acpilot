@@ -16,17 +16,30 @@
 - **消息队列与审批。** Agent 工作时可追加排队消息，计划审阅和权限审批在对话中完成。
 - **切换 Agent，保留熟悉的操作。** 支持 Grok、Devin、Kimi Code 及其他兼容 ACP 的 CLI，共用会话管理与模型控制界面。
 
-### 看看实际交互
+<table>
+  <tr>
+    <th width="50%">执行过程与待办</th>
+    <th width="50%">输入与消息排队</th>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="media/readme/inspect.gif">
+        <img src="media/readme/inspect.gif" width="480" alt="执行过程与待办">
+      </a>
+    </td>
+    <td width="50%" valign="top">
+      <a href="media/readme/follow-up.gif">
+        <img src="media/readme/follow-up.gif" width="480" alt="输入与消息排队">
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">查看执行详情，展开与收起待办。</td>
+    <td valign="top">输入请求、直接发送、查看完整回复。</td>
+  </tr>
+</table>
 
-**查看任务进展。** 先查看执行过程和代码修改，再展开与收起待办。
-
-![先查看执行过程和代码修改，再展开与收起待办。](media/readme/inspect.gif)
-
-**发送下一步。** 输入并排队后续请求，点击直接发送，查看完整回复。
-
-![输入后续请求，从队列中直接发送，再查看完整回复。](media/readme/follow-up.gif)
-
-*使用示例对话录制，画面来自 Acpira 实际界面，镜头聚焦为后期效果。*
+*使用示例对话录制，画面来自 Acpira 实际界面，镜头聚焦为后期效果。点击图片查看大图。*
 
 ## 为什么保留原生 Agent
 
