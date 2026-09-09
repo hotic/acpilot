@@ -422,7 +422,11 @@ function stripVerb(title: string): string {
 
 function toolContent(items: acp.ToolCallContent[]): ToolContent | undefined {
   const diff = items.find(c => c.type === 'diff');
-  if (diff && diff.type === 'diff') return { type: 'diff', lines: diffLines(diff.oldText ?? '', diff.newText) };
+  if (diff && diff.type === 'diff') return {
+    type: 'diff', lines: diffLines(diff.oldText ?? '', diff.newText),
+    // Full sides preserve multiline syntax state and exact copy text after context folding.
+    source: { path: diff.path, oldText: diff.oldText ?? '', newText: diff.newText },
+  };
   const texts = items.filter(c => c.type === 'content').map(c => c.type === 'content' ? textOf(c.content) : '').filter(Boolean);
   if (texts.length) return { type: 'text', text: texts.join('\n').slice(0, TOOL_OUTPUT_MAX) };
   const term = items.find(c => c.type === 'terminal');

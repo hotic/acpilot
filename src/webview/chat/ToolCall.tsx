@@ -96,7 +96,7 @@ function ToolBody({ block }: { block: ToolCallBlock }) {
   const c = block.content;
   if (!c) return null;
   if (block.kind === 'execute') return <TerminalOutput block={block} />;
-  if (c.type === 'diff') return <DiffBlock lines={c.lines} />;
+  if (c.type === 'diff') return <DiffBlock lines={c.lines} source={c.source} path={block.locations?.[0]?.path ?? block.target} />;
   if (c.type === 'list') return <ResultList items={c.items} kind={block.kind} />;
   return <CodeSurface className="text-fg-2 whitespace-pre">{c.text}</CodeSurface>;
 }

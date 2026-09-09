@@ -34,6 +34,11 @@
   /* Something attachable is being dragged over it */
   &[data-drag] { background: var(--cmp-bg-lift); outline: 1px dashed var(--fg-3); outline-offset: -1px; }
 }
+/* Diffs and terminal output share the same frame. */
+@utility code-output {
+  @apply relative min-w-0 overflow-hidden rounded-md border border-line bg-code;
+}
+
 @utility send-btn {
   background: var(--send-bg);
   box-shadow: var(--send-ring);
@@ -46,6 +51,14 @@
 }
 
 @layer components {
+  /* Rows and sticky gutters share an opaque background during horizontal scrolling. */
+  .diff-row { --diff-row-bg: var(--bg-code); }
+  .diff-row[data-kind="add"] { --diff-row-bg: var(--diff-add); }
+  .diff-row[data-kind="del"] { --diff-row-bg: var(--diff-del); }
+  [data-diff="signs"] .diff-row { --diff-row-bg: var(--bg-code); }
+  .diff-source > span { color: var(--syntax-dark, var(--fg-1)); }
+  [data-theme="light"] .diff-source > span { color: var(--syntax-light, var(--fg-1)); }
+
   /* Narrative text separates consecutive action groups without loosening tool rows.
      Use one leading margin per boundary, including adjacent prose blocks. */
   .process-content > .acp-prose:not(:first-child),

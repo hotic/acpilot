@@ -8,7 +8,10 @@ describe('diffLines', () => {
     const lines = diffLines(old, neu);
     expect(lines.filter(l => l.kind === 'del').map(l => l.text)).toEqual(['-line 10']);
     expect(lines.filter(l => l.kind === 'add').map(l => l.text)).toEqual(['+LINE 10']);
-    expect(lines.filter(l => l.kind === 'hunk')).toHaveLength(2);
+    // Leading omission stays (line offset), the trailing one is dropped: nothing follows it
+    expect(lines.filter(l => l.kind === 'hunk')).toHaveLength(1);
+    expect(lines[0]?.kind).toBe('hunk');
+    expect(lines.at(-1)?.kind).toBe('ctx');
     expect(lines.filter(l => l.kind === 'ctx')).toHaveLength(6);
   });
 

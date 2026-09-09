@@ -1,6 +1,10 @@
-import type { ReactNode } from 'react';
-import type { DiffLine } from '@shared/transcript';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import type { DiffLine, DiffSource } from '@shared/transcript';
 import { cn } from '../ui/cn';
+import { diffCopyText, highlightDiff, plainDiffRows, type CodeDiffRow } from './codeDiff';
+import { codeLanguage } from './codeSyntax';
+import { OutputCopy } from './OutputCopy';
+import { t } from '../i18n';
 
 // Code surface: all monospace content (code blocks / tool output / diffs) shares this one surface,
 // outlined with the conversation ring so it reads as a card next to the composer and bubbles
@@ -34,19 +38,53 @@ export function CodeBlock({ code }: { code: string }) {
   return <CodeSurface><code>{highlight(code)}</code></CodeSurface>;
 }
 
-const DIFF_CLASS: Record<DiffLine['kind'], string> = {
-  hunk: 'text-fg-3',
-  add: 'bg-[var(--diff-add)] text-fg-1',
-  del: 'bg-[var(--diff-del)] text-fg-2',
-  ctx: 'text-fg-2',
-};
+// Shared production version of the selected code-detail LAB design.
+export function DiffBlock({ lines, source, path = '' }: { lines: DiffLine[]; source?: DiffSource; path?: string }) {
+  const root = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const plain = useMemo(() => plainDiffRows(lines), [lines]);
+  const [colored, setColored] = useState<{ lines: DiffLine[]; source?: DiffSource; path: string; rows: CodeDiffRow[] }>();
+  const rows = colored?.lines === lines && colored.source === source && colored.path === path ? colored.rows : plain;
+  const copyText = useMemo(() => diffCopyText(lines, source), [lines, source]);
+  const language = codeLanguage(source?.path ?? path);
 
-export function DiffBlock({ lines }: { lines: DiffLine[] }) {
-  return (
-    <CodeSurface padded={false} className="py-1.5">
-      {lines.map((l, i) => (
-        <span key={i} className={cn('block whitespace-pre px-pad', DIFF_CLASS[l.kind])}>{l.text}</span>
-      ))}
-    </CodeSurface>
-  );
+  useEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    // Kept-mounted, collapsed outputs should not initialize grammars or tokenize.
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting) && !element.closest('[inert]')) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!visible || !language) return;
+    let current = true;
+    highlightDiff(lines, source, path).then(rows => { if (current) setColored({ lines, source, path, rows }); })
+      .catch(() => { /* Plain source remains available if a grammar cannot load. */ });
+    return () => { current = false; };
+  }, [visible, lines, source, path, language]);
+
+  return <div ref={root} className="group/code-output code-output diff-surface" data-language={language ?? 'plain'}>
+    <OutputCopy text={copyText} label={source !== undefined ? t('code.copySource') : t('code.copyVisible')} />
+    <div className="diff-scroll scroll-thin max-h-code-output overflow-auto overscroll-contain py-gap-half" tabIndex={0} role="region" aria-label={t('code.diff')}>
+      <div className="diff-table min-w-full w-max font-mono text-mono leading-code-output">
+        {rows.map((row, index) => row.kind === 'hunk' && index === rows.length - 1 ? null : row.kind === 'hunk'
+          ? <div className="diff-hunk relative h-diff-hunk border-y border-line my-gap-half text-fg-3 select-none [&[data-omission]:first-child]:hidden" key={index} title={row.text} aria-label={row.text}
+              data-omission={/unchanged lines|行未变/.test(row.text) || undefined}><span className="block sticky left-0 w-diff-gutter text-center text-3 leading-gap" aria-hidden="true">···</span></div>
+          : <div className="diff-row relative flex min-h-code-line bg-(--diff-row-bg)" data-kind={row.kind} key={index}>
+            <span className="diff-gutter sticky left-0 z-1 flex shrink-0 self-stretch text-fg-3 bg-(--diff-row-bg) select-none tabular-nums" aria-hidden="true">
+              <span className="diff-number min-w-diff-number text-right">{row.kind === 'del' ? row.oldLine : row.newLine}</span>
+              <span className={cn('diff-sign w-diff-sign text-center', row.kind === 'add' && 'text-ok', row.kind === 'del' && 'text-danger')}>{row.kind === 'add' ? '+' : row.kind === 'del' ? '−' : ''}</span>
+            </span>
+            <code className="diff-source block flex-1 whitespace-pre">{row.tokens.length ? row.tokens.map((token, tokenIndex) =>
+              <span key={tokenIndex} style={{ '--syntax-light': token.light, '--syntax-dark': token.dark } as CSSProperties}>{token.text}</span>) : '\u200b'}</code>
+          </div>)}
+      </div>
+    </div>
+  </div>;
 }

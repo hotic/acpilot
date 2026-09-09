@@ -52,8 +52,13 @@
   --ok: #3fb950;
   --warn: #d29922;
   --danger: #f85149;
-  --diff-add: rgba(63, 185, 80, 0.13);
-  --diff-del: rgba(248, 81, 73, 0.13);
+  --diff-add: color-mix(in srgb, var(--ok) 6%, var(--bg-code));
+  --diff-del: color-mix(in srgb, var(--danger) 8%, var(--bg-code));
+  --diff-number-width: 3.7ch;
+  --diff-sign-width: 2.2ch;
+  --code-output-max: 350px;
+  --code-output-line-height: 22px;
+  --code-copy-duration: 120ms;
 
   --brand: #e6a63e;
   --brand-fg: #1b1300;
@@ -208,8 +213,6 @@
   --ok: #1f883d;
   --warn: #9a6700;
   --danger: #cf222e;
-  --diff-add: rgba(31, 136, 61, 0.12);
-  --diff-del: rgba(207, 34, 46, 0.1);
   --brand: #b7791f;
   --brand-fg: #ffffff;
   --agent-devin: #2f6fe0;
@@ -346,6 +349,8 @@
   --text-3--line-height: var(--text-3-lh);
   --text-mono: var(--text-mono);
   --text-mono--line-height: var(--text-mono-lh);
+  --leading-code-output: var(--code-output-line-height);
+  --leading-gap: var(--gap);
 
   --radius-*: initial;
   --radius-xs: var(--r-xs);
@@ -377,6 +382,13 @@
   --spacing-pad-y: var(--pad-y);
   --spacing-page: var(--page);
   --spacing-gap: var(--gap);
+  --spacing-gap-half: calc(var(--gap) / 2);
+  --spacing-code-output: var(--code-output-max);
+  --spacing-code-line: var(--code-output-line-height);
+  --spacing-diff-number: var(--diff-number-width);
+  --spacing-diff-sign: var(--diff-sign-width);
+  --spacing-diff-gutter: calc(var(--diff-number-width) + var(--diff-sign-width));
+  --spacing-diff-hunk: calc(var(--gap) * 1.25);
   --spacing-msg: var(--msg-gap);
   --spacing-hdr: var(--hdr);
   --spacing-thumb: var(--thumb);

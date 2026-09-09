@@ -108,12 +108,21 @@ export type ToolStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'c
 
 export type ToolContent =
   | { type: 'text'; text: string }
-  | { type: 'diff'; lines: DiffLine[] }
+  | { type: 'diff'; lines: DiffLine[]; source?: DiffSource }
   | { type: 'list'; items: string[] };
+
+export interface DiffSource {
+  path: string;
+  oldText: string;
+  newText: string;
+}
 
 export interface DiffLine {
   kind: 'hunk' | 'add' | 'del' | 'ctx';
   text: string;
+  // Source positions are captured before unchanged context is collapsed.
+  oldLine?: number;
+  newLine?: number;
 }
 
 export interface ToolCallBlock {
